@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { FormEvent, useEffect, useState } from 'react';
 import { AdminedTournament, RendererTournament } from '../common/types';
+import ErrorDialog from './ErrorDialog';
 
 export default function Tournament() {
   const [adminedTournaments, setAdminedTournaments] = useState<
@@ -44,13 +45,17 @@ export default function Tournament() {
 
   const [open, setOpen] = useState(false);
   const [settingTournament, setSettingTournament] = useState(false);
+  const [error, setError] = useState('');
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const set = async (slug: string) => {
     setSettingTournament(true);
     try {
       await window.electron.setTournament(slug);
       setOpen(false);
-    } catch {
-      console.error('not found');
+    } catch (e: any) {
+      const message = e instanceof Error ? e.message : e;
+      setError(message);
+      setErrorDialogOpen(true);
     } finally {
       setSettingTournament(false);
     }
@@ -148,6 +153,13 @@ export default function Tournament() {
           ))}
         </List>
       )}
+      <ErrorDialog
+        open={errorDialogOpen}
+        error={error}
+        close={() => {
+          setErrorDialogOpen(false);
+        }}
+      />
     </Box>
   );
 }
