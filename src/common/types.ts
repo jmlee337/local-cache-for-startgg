@@ -13,3 +13,15 @@ export type RendererTournament = {
   name: string;
   events: RendererEvent[];
 };
+
+export type DbEvent = {
+  id: number;
+  tournamentId: number;
+  name: string;
+};
+
+export type DbTournament = {
+  id: number;
+  name: string;
+  slug: string;
+};

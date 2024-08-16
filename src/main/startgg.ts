@@ -1,10 +1,5 @@
-import { BrowserWindow } from 'electron';
-import { AdminedTournament, RendererTournament } from '../common/types';
-
-let mainWindow: BrowserWindow | undefined;
-export function setMainWindow(newMainWindow: BrowserWindow) {
-  mainWindow = newMainWindow;
-}
+import { AdminedTournament, DbEvent, DbTournament } from '../common/types';
+import { upsertTournament } from './db';
 
 async function wrappedFetch(
   input: URL | RequestInfo,
@@ -65,22 +60,27 @@ export async function setTournament(apiKey: string, slug: string) {
     `https://api.smash.gg/tournament/${slug}?expand[]=event`,
   );
   const json = await response.json();
-  const tournament: RendererTournament = {
-    slug,
+
+  const { id } = json.entities.tournament;
+  const tournament: DbTournament = {
+    id,
     name: json.entities.tournament.name,
-    events: (json.entities.event as any[])
-      .filter((event) => {
-        const isMelee = event.videogameId === 1;
-        const isSinglesOrDoubles =
-          event.teamRosterSize === null ||
-          (event.teamRosterSize.minPlayers === 2 &&
-            event.teamRosterSize.maxPlayers === 2);
-        return isMelee && isSinglesOrDoubles;
-      })
-      .map((event) => ({
-        id: event.id,
-        name: event.name,
-      })),
+    slug,
   };
-  mainWindow!.webContents.send('tournament', tournament);
+  const events: DbEvent[] = (json.entities.event as any[])
+    .filter((event) => {
+      const isMelee = event.videogameId === 1;
+      const isSinglesOrDoubles =
+        event.teamRosterSize === null ||
+        (event.teamRosterSize.minPlayers === 2 &&
+          event.teamRosterSize.maxPlayers === 2);
+      return isMelee && isSinglesOrDoubles;
+    })
+    .map((event) => ({
+      id: event.id,
+      tournamentId: id,
+      name: event.name,
+    }));
+  upsertTournament(tournament, events);
+  return id;
 }

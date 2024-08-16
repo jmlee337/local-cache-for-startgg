@@ -6,9 +6,12 @@ import {
   IpcMainInvokeEvent,
 } from 'electron';
 import Store from 'electron-store';
-import { getAdminedTournaments, setMainWindow, setTournament } from './startgg';
+import { getAdminedTournaments, setTournament } from './startgg';
+import { dbInit, getTournament } from './db';
 
+let tournamentId = 0;
 export default function setupIPCs(mainWindow: BrowserWindow) {
+  dbInit();
   const store = new Store();
 
   let apiKey = store.has('apiKey') ? (store.get('apiKey') as string) : '';
@@ -24,7 +27,6 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
-  setMainWindow(mainWindow);
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
     if (!apiKey) {
@@ -40,7 +42,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       if (!apiKey) {
         throw new Error('Please set API key.');
       }
-      await setTournament(apiKey, slug);
+      tournamentId = await setTournament(apiKey, slug);
+      mainWindow.webContents.send('tournament', getTournament(tournamentId));
     },
   );
 
