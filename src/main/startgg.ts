@@ -1,5 +1,11 @@
-import { AdminedTournament, DbEvent, DbTournament } from '../common/types';
-import { upsertTournament } from './db';
+import {
+  AdminedTournament,
+  DbEvent,
+  DbPhase,
+  DbPool,
+  DbTournament,
+} from '../common/types';
+import { updateEvent, upsertTournament } from './db';
 
 async function wrappedFetch(
   input: URL | RequestInfo,
@@ -55,7 +61,7 @@ export async function getAdminedTournaments(
   }));
 }
 
-export async function setTournament(apiKey: string, slug: string) {
+export async function setTournament(slug: string) {
   const response = await wrappedFetch(
     `https://api.smash.gg/tournament/${slug}?expand[]=event`,
   );
@@ -80,7 +86,117 @@ export async function setTournament(apiKey: string, slug: string) {
       id: event.id,
       tournamentId: id,
       name: event.name,
+      isOnline: event.isOnline ? 1 : 0,
     }));
   upsertTournament(tournament, events);
   return id;
+}
+
+const EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY = `
+  query EventPhaseGroupsQuery($eventId: ID) {
+    event(id: $eventId) {
+      name
+      isOnline
+      phases {
+        id
+        name
+        phaseGroups(query: {page: 1, perPage: 500}) {
+          nodes {
+            id
+            bracketType
+            displayIdentifier
+            sets(page: 1, perPage: 1, filters: {hideEmpty: false, showByes: false}) {
+              nodes {
+                id
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+export async function loadEvent(
+  apiKey: string,
+  tournamentId: number,
+  eventId: number,
+) {
+  const data = await fetchGql(
+    apiKey,
+    EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY,
+    { eventId },
+  );
+  const { event } = data;
+  const { isOnline } = event;
+  const dbEvent: DbEvent = {
+    id: event.id,
+    name: event.name,
+    isOnline: isOnline ? 1 : 0,
+    tournamentId,
+  };
+  const dbPhases: DbPhase[] = [];
+  const dbPools: DbPool[] = [];
+  const poolIdsToLoad: number[] = [];
+  const previewSetIds: string[] = [];
+  const { phases } = event;
+  if (Array.isArray(phases)) {
+    phases.forEach((phase) => {
+      dbPhases.push({
+        id: phase.id,
+        eventId,
+        tournamentId,
+        name: phase.name,
+      });
+      const pools = phase.phaseGroups.nodes;
+      if (Array.isArray(pools)) {
+        pools.forEach((pool) => {
+          dbPools.push({
+            id: pool.id,
+            phaseId: phase.id,
+            eventId,
+            tournamentId,
+            name: pool.displayIdentifier,
+            bracketType: pool.bracketType,
+          });
+          const sets = pool.sets.nodes;
+          if (Array.isArray(sets) && sets.length > 0) {
+            const setId = sets[0].id;
+            if (!isOnline) {
+              poolIdsToLoad.push(pool.id);
+              if (typeof setId === 'string' && setId.startsWith('preview')) {
+                previewSetIds.push(setId);
+              }
+            } else if (isOnline && typeof setId === 'number') {
+              poolIdsToLoad.push(pool.id);
+            }
+          }
+        });
+      }
+    });
+  }
+  updateEvent(dbEvent, dbPhases, dbPools);
+
+  if (previewSetIds.length > 0) {
+    const inner = previewSetIds
+      .map(
+        (previewSetId) => `
+          ${previewSetId}: reportBracketSet(setId: "${previewSetId}") {
+            id
+          }`,
+      )
+      .join('');
+    const query = `mutation StartPhaseGroups {${inner}\n}`;
+    try {
+      await fetchGql(apiKey, query, {});
+    } catch (e: any) {
+      if (
+        !(e instanceof Error) ||
+        !e.message.startsWith('Your query complexity is too high.')
+      ) {
+        throw e;
+      }
+    }
+  }
+
+  console.log(poolIdsToLoad);
 }

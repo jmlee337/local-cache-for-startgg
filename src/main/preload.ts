@@ -7,8 +7,21 @@ const electronHandler = {
     ipcRenderer.invoke('setApiKey', apiKey),
   getAdminedTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getAdminedTournaments'),
+  getCurrentTournament: (): Promise<RendererTournament | undefined> =>
+    ipcRenderer.invoke('getCurrentTournament'),
   setTournament: (slug: string): Promise<boolean> =>
     ipcRenderer.invoke('setTournament', slug),
+  loadEvent: (eventId: number): Promise<void> =>
+    ipcRenderer.invoke('loadEvent', eventId),
+  onAdminedTournaments: (
+    callback: (
+      event: IpcRendererEvent,
+      adminedTournaments: AdminedTournament[],
+    ) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('adminedTournaments');
+    ipcRenderer.on('adminedTournaments', callback);
+  },
   onTournament: (
     callback: (event: IpcRendererEvent, tournament: RendererTournament) => void,
   ) => {

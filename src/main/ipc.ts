@@ -6,7 +6,7 @@ import {
   IpcMainInvokeEvent,
 } from 'electron';
 import Store from 'electron-store';
-import { getAdminedTournaments, setTournament } from './startgg';
+import { getAdminedTournaments, loadEvent, setTournament } from './startgg';
 import { dbInit, getTournament } from './db';
 
 let tournamentId = 0;
@@ -22,17 +22,33 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'setApiKey',
     (event: IpcMainInvokeEvent, newApiKey: string) => {
+      const apiKeyChanged = apiKey !== newApiKey;
       store.set('apiKey', newApiKey);
       apiKey = newApiKey;
+
+      if (apiKeyChanged) {
+        mainWindow.webContents.send(
+          'adminedTournaments',
+          getAdminedTournaments(apiKey),
+        );
+      }
     },
   );
 
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
     if (!apiKey) {
-      throw new Error('Please set API key.');
+      return [];
     }
     return getAdminedTournaments(apiKey);
+  });
+
+  ipcMain.removeHandler('getCurrentTournament');
+  ipcMain.handle('getCurrentTournament', () => {
+    if (!tournamentId) {
+      return undefined;
+    }
+    return getTournament(tournamentId);
   });
 
   ipcMain.removeHandler('setTournament');
@@ -42,7 +58,19 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       if (!apiKey) {
         throw new Error('Please set API key.');
       }
-      tournamentId = await setTournament(apiKey, slug);
+      tournamentId = await setTournament(slug);
+      mainWindow.webContents.send('tournament', getTournament(tournamentId));
+    },
+  );
+
+  ipcMain.removeHandler('loadEvent');
+  ipcMain.handle(
+    'loadEvent',
+    async (event: IpcMainInvokeEvent, eventId: number) => {
+      if (!apiKey) {
+        throw new Error('Please set API key.');
+      }
+      await loadEvent(apiKey, tournamentId, eventId);
       mainWindow.webContents.send('tournament', getTournament(tournamentId));
     },
   );
