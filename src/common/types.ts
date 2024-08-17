@@ -3,32 +3,15 @@ export type AdminedTournament = {
   name: string;
 };
 
-export type RendererParticipant = {
-  id: number;
-  gamerTag: string;
-  prefix: string;
-  pronouns: string;
-  userSlug: string;
-};
-
-export type RendererEntrant = {
-  id: number;
-  participants: RendererParticipant[];
-};
-
 export type RendererSet = {
   id: number;
-  callOrder: number;
   fullRoundText: string;
   identifier: string;
   state: number;
-  winnerId: number | null;
-  entrant1: RendererEntrant | null;
-  entrant1PrereqType: string;
+  entrant1Name: string | null;
   entrant1PrereqStr: string | null;
   entrant1Score: number | null;
-  entrant2: RendererEntrant | null;
-  entrant2PrereqType: string;
+  entrant2Name: string | null;
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
 };
@@ -68,6 +51,7 @@ export type DbPlayer = {
 export type DbEntrant = {
   id: number;
   eventId: number;
+  name: string;
   participant1Id: number;
   participant1GamerTag: string;
   participant1Prefix: string;

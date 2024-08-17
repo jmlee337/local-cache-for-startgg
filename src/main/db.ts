@@ -11,8 +11,6 @@ import {
   DbSeed,
   DbSet,
   DbTournament,
-  RendererEntrant,
-  RendererParticipant,
   RendererSet,
   RendererTournament,
 } from '../common/types';
@@ -82,6 +80,7 @@ export function dbInit() {
     `CREATE TABLE IF NOT EXISTS entrants(
       id INTEGER PRIMARY KEY,
       eventId INTEGER,
+      name TEXT,
       participant1Id INTEGER,
       participant1GamerTag TEXT,
       participant1Prefix TEXT,
@@ -173,6 +172,7 @@ const POOL_UPDATE_SQL =
 const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
   id,
   eventId,
+  name,
   participant1Id,
   participant1GamerTag,
   participant1Prefix,
@@ -188,6 +188,7 @@ const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
 ) values (
   @id,
   @eventId,
+  @name,
   @participant1Id,
   @participant1GamerTag,
   @participant1Prefix,
@@ -302,7 +303,7 @@ export function updatePool(
   });
 }
 
-function getEntrant(id: number): RendererEntrant | null {
+function getEntrantName(id: number): string | null {
   const maybeEntrant = db!
     .prepare('SELECT * FROM entrants WHERE id = @id')
     .get({ id }) as DbEntrant | undefined;
@@ -310,28 +311,9 @@ function getEntrant(id: number): RendererEntrant | null {
     return null;
   }
 
-  const participants: RendererParticipant[] = [
-    {
-      id: maybeEntrant.participant1Id,
-      gamerTag: maybeEntrant.participant1GamerTag,
-      prefix: maybeEntrant.participant1Prefix,
-      pronouns: maybeEntrant.participant1Pronouns ?? '',
-      userSlug: maybeEntrant.participant1UserSlug ?? '',
-    },
-  ];
-  if (maybeEntrant.participant2Id) {
-    participants.push({
-      id: maybeEntrant.participant2Id,
-      gamerTag: maybeEntrant.participant2GamerTag!,
-      prefix: maybeEntrant.participant2Prefix!,
-      pronouns: maybeEntrant.participant2Pronouns ?? '',
-      userSlug: maybeEntrant.participant2UserSlug ?? '',
-    });
-  }
-  return {
-    id: maybeEntrant.id,
-    participants,
-  };
+  return maybeEntrant.participant2Id
+    ? maybeEntrant.name
+    : maybeEntrant.participant1GamerTag;
 }
 
 export function getTournament(id: number): RendererTournament {
@@ -348,9 +330,16 @@ export function getTournament(id: number): RendererTournament {
   const dbPhases = db
     .prepare('SELECT * FROM phases WHERE tournamentId = @id')
     .all({ id }) as DbPhase[];
-  const dbPools = db
-    .prepare('SELECT * FROM pools WHERE tournamentId = @id')
-    .all({ id }) as DbPool[];
+  const dbPools = (
+    db
+      .prepare('SELECT * FROM pools WHERE tournamentId = @id')
+      .all({ id }) as DbPool[]
+  ).sort((a, b) => {
+    if (a.name.length === b.name.length) {
+      return a.name.localeCompare(b.name);
+    }
+    return a.name.length - b.name.length;
+  });
   return {
     id: dbTournament.id,
     slug: dbTournament.slug,
@@ -366,33 +355,29 @@ export function getTournament(id: number): RendererTournament {
           pools: dbPools
             .filter((dbPool) => dbPool.phaseId === dbPhase.id)
             .map((dbPool) => {
-              const sets: RendererSet[] = (
+              const sets = (
                 db!
                   .prepare(
                     'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY callOrder, id',
                   )
                   .all({ id: dbPool.id }) as DbSet[]
-              ).map((dbSet) => {
-                const entrant1 = dbSet.entrant1Id
-                  ? getEntrant(dbSet.entrant1Id)
+              ).map((dbSet): RendererSet => {
+                const entrant1Name = dbSet.entrant1Id
+                  ? getEntrantName(dbSet.entrant1Id)
                   : null;
-                const entrant2 = dbSet.entrant2Id
-                  ? getEntrant(dbSet.entrant2Id)
+                const entrant2Name = dbSet.entrant2Id
+                  ? getEntrantName(dbSet.entrant2Id)
                   : null;
                 return {
                   id: dbSet.id,
-                  callOrder: dbSet.callOrder,
                   fullRoundText: dbSet.fullRoundText,
                   identifier: dbSet.identifier,
                   state: dbSet.state,
-                  winnerId: dbSet.winnerId,
-                  entrant1,
+                  entrant1Name,
                   entrant1PrereqStr: dbSet.entrant1PrereqStr,
-                  entrant1PrereqType: dbSet.entrant1PrereqType,
                   entrant1Score: dbSet.entrant1Score,
-                  entrant2,
+                  entrant2Name,
                   entrant2PrereqStr: dbSet.entrant2PrereqStr,
-                  entrant2PrereqType: dbSet.entrant2PrereqType,
                   entrant2Score: dbSet.entrant2Score,
                 };
               });

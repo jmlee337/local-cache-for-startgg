@@ -360,6 +360,7 @@ export async function loadEvent(
           const newEntrant: DbEntrant = {
             id: entrant.id,
             eventId: entrant.eventId,
+            name: entrant.name,
             participant1Id: participants[0].id,
             participant1GamerTag: participants[0].gamerTag,
             participant1Prefix: participants[0].prefix,

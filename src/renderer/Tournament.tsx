@@ -21,7 +21,6 @@ import {
 import { FormEvent, useEffect, useState } from 'react';
 import {
   AdminedTournament,
-  RendererEntrant,
   RendererEvent,
   RendererTournament,
 } from '../common/types';
@@ -29,18 +28,16 @@ import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
 
 function SetEntrant({
-  entrant,
+  entrantName,
   prereqStr,
 }: {
-  entrant: RendererEntrant | null;
+  entrantName: string | null;
   prereqStr: string | null;
 }) {
   let secondary = false;
   let text = '\u00A0';
-  if (entrant) {
-    text = entrant.participants
-      .map((participant) => participant.gamerTag)
-      .join(' / ');
+  if (entrantName) {
+    text = entrantName;
   } else if (prereqStr) {
     secondary = true;
     text = prereqStr;
@@ -144,11 +141,11 @@ function EventListItem({
                           >
                             <Stack>
                               <SetEntrant
-                                entrant={set.entrant1}
+                                entrantName={set.entrant1Name}
                                 prereqStr={set.entrant1PrereqStr}
                               />
                               <SetEntrant
-                                entrant={set.entrant2}
+                                entrantName={set.entrant2Name}
                                 prereqStr={set.entrant2PrereqStr}
                               />
                             </Stack>
