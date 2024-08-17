@@ -1,11 +1,20 @@
 import {
   AdminedTournament,
+  DbEntrant,
   DbEvent,
   DbPhase,
+  DbPlayer,
   DbPool,
   DbTournament,
 } from '../common/types';
-import { updateEvent, upsertTournament } from './db';
+import {
+  getPlayer,
+  updateEvent,
+  updatePool,
+  upsertPlayer,
+  upsertPlayers,
+  upsertTournament,
+} from './db';
 
 async function wrappedFetch(
   input: URL | RequestInfo,
@@ -61,7 +70,27 @@ export async function getAdminedTournaments(
   }));
 }
 
-export async function setTournament(slug: string) {
+const TOURNAMENT_PLAYERS_QUERY = `
+  query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
+    tournament(slug: $slug) {
+      participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
+        pageInfo {
+          totalPages
+        }
+        nodes {
+          player {
+            id
+            user {
+              genderPronoun
+              slug
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+export async function setTournament(apiKey: string, slug: string) {
   const response = await wrappedFetch(
     `https://api.smash.gg/tournament/${slug}?expand[]=event`,
   );
@@ -89,6 +118,30 @@ export async function setTournament(slug: string) {
       isOnline: event.isOnline ? 1 : 0,
     }));
   upsertTournament(tournament, events);
+
+  let nextData;
+  let page = 1;
+  do {
+    // eslint-disable-next-line no-await-in-loop
+    nextData = await fetchGql(apiKey, TOURNAMENT_PLAYERS_QUERY, {
+      page,
+      slug,
+      eventIds: events.map((event) => event.id),
+    });
+    const { nodes } = nextData.tournament.participants;
+    if (Array.isArray(nodes)) {
+      upsertPlayers(
+        nodes.map(
+          (participant): DbPlayer => ({
+            id: participant.player.id,
+            pronouns: participant.player.user?.genderPronoun || null,
+            userSlug: participant.player.user?.slug.slice(5) || null,
+          }),
+        ),
+      );
+    }
+    page += 1;
+  } while (page <= nextData.tournament.participants.pageInfo.totalPages);
   return id;
 }
 
@@ -179,8 +232,8 @@ export async function loadEvent(
   if (previewSetIds.length > 0) {
     const inner = previewSetIds
       .map(
-        (previewSetId) => `
-          ${previewSetId}: reportBracketSet(setId: "${previewSetId}") {
+        (previewSetId, i) => `
+          m${i}: reportBracketSet(setId: "${previewSetId}") {
             id
           }`,
       )
@@ -198,5 +251,146 @@ export async function loadEvent(
     }
   }
 
-  console.log(poolIdsToLoad);
+  await Promise.all(
+    poolIdsToLoad.map(async (id) => {
+      const response = await wrappedFetch(
+        `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
+      );
+      const json = await response.json();
+      const pool: DbPool = {
+        id,
+        phaseId: json.entities.groups.phaseId,
+        eventId,
+        tournamentId,
+        name: json.entities.groups.displayIdentifier,
+        bracketType: json.entities.groups.groupTypeId,
+      };
+
+      // entrants first pass
+      const entrants: DbEntrant[] = [];
+      const entrantsToUpdate = new Map<number, DbEntrant>();
+      const missingPlayerIds: {
+        playerId: number;
+        playerNum: 1 | 2;
+        entrantId: number;
+      }[] = [];
+      if (Array.isArray(json.entities.entrants)) {
+        (json.entities.entrants as any[]).forEach((entrant) => {
+          const participants = Object.values(
+            entrant.mutations.participants,
+          ) as any[];
+          let skip = false;
+          const players = [getPlayer(participants[0].playerId)];
+          if (!players[0]) {
+            missingPlayerIds.push({
+              playerId: participants[0].playerId,
+              playerNum: 1,
+              entrantId: entrant.id,
+            });
+            skip = true;
+          }
+          if (participants[1]) {
+            players.push(getPlayer(participants[1].playerId));
+            if (!players[1]) {
+              missingPlayerIds.push({
+                playerId: participants[1].playerId,
+                playerNum: 2,
+                entrantId: entrant.id,
+              });
+              skip = true;
+            }
+          }
+          const newEntrant: DbEntrant = {
+            id: entrant.id,
+            eventId: entrant.eventId,
+            participant1Id: participants[0].id,
+            participant1GamerTag: participants[0].gamerTag,
+            participant1Prefix: participants[0].prefix,
+            participant1PlayerId: participants[0].playerId,
+            participant1Pronouns: players[0]?.pronouns || null,
+            participant1UserSlug: players[0]?.userSlug || null,
+            participant2Id: participants[1]?.id || null,
+            participant2GamerTag: participants[1]?.gamerTag || null,
+            participant2Prefix: participants[1]?.prefix || null,
+            participant2PlayerId: participants[1]?.playerId || null,
+            participant2Pronouns: players[1]?.pronouns || null,
+            participant2UserSlug: players[1]?.userSlug || null,
+          };
+          if (skip) {
+            entrantsToUpdate.set(newEntrant.id, newEntrant);
+          }
+          entrants.push(newEntrant);
+        });
+
+        // pick up missing players for entrants
+        if (missingPlayerIds.length > 0) {
+          do {
+            const queryPlayerParticipants = missingPlayerIds.slice(0, 500);
+            const inner = queryPlayerParticipants.map(
+              ({ playerId }) => `
+                playerId${playerId}: player(id: ${playerId}) {
+                  user {
+                    genderPronoun
+                    slug
+                  }
+                }`,
+            );
+            const query = `query PlayersQuery {${inner}\n}`;
+            // eslint-disable-next-line no-await-in-loop
+            const playerData = await fetchGql(apiKey, query, {});
+            queryPlayerParticipants.forEach(
+              ({ playerId, playerNum, entrantId }) => {
+                const player = playerData[`playerId${playerId}`];
+                const pronouns = player.user?.genderPronoun || null;
+                const userSlug = player.user?.slug.slice(5) || null;
+                const entrant = entrantsToUpdate.get(entrantId)!;
+                if (playerNum === 1) {
+                  entrant.participant1Pronouns = pronouns;
+                  entrant.participant1UserSlug = userSlug;
+                } else {
+                  entrant.participant2Pronouns = pronouns;
+                  entrant.participant2UserSlug = userSlug;
+                }
+                upsertPlayer({ id: playerId, pronouns, userSlug });
+              },
+            );
+            missingPlayerIds.splice(0, 500);
+          } while (missingPlayerIds.length > 0);
+        }
+      }
+
+      // fill in fields that may be missing
+      const sets = (json.entities.sets as any[])
+        .filter((set) => !set.unreachable)
+        .map((set) => {
+          if (set.entrant1PrereqStr === undefined) {
+            set.entrant1PrereqStr = null;
+          }
+          if (set.entrant2PrereqStr === undefined) {
+            set.entrant2PrereqStr = null;
+          }
+          if (set.wProgressingPhaseGroupId === undefined) {
+            set.wProgressingPhaseGroupId = null;
+          }
+          if (set.wProgressingPhaseId === undefined) {
+            set.wProgressingPhaseId = null;
+          }
+          if (set.wProgressingName === undefined) {
+            set.wProgressingName = null;
+          }
+          if (set.lProgressingPhaseGroupId === undefined) {
+            set.lProgressingPhaseGroupId = null;
+          }
+          if (set.lProgressingPhaseId === undefined) {
+            set.lProgressingPhaseId = null;
+          }
+          if (set.lProgressingName === undefined) {
+            set.lProgressingName = null;
+          }
+          return set;
+        });
+
+      updatePool(pool, entrants, json.entities.seeds, sets);
+    }),
+  );
 }

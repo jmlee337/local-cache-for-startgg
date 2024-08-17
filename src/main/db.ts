@@ -3,10 +3,17 @@ import path from 'path';
 import { app } from 'electron';
 import { mkdirSync } from 'fs';
 import {
+  DbEntrant,
   DbEvent,
   DbPhase,
+  DbPlayer,
   DbPool,
+  DbSeed,
+  DbSet,
   DbTournament,
+  RendererEntrant,
+  RendererParticipant,
+  RendererSet,
   RendererTournament,
 } from '../common/types';
 
@@ -28,6 +35,70 @@ export function dbInit() {
   db.prepare(
     'CREATE TABLE IF NOT EXISTS pools (id INTEGER PRIMARY KEY, phaseId INTEGER, eventId INTEGER, tournamentId INTEGER, name TEXT, bracketType INTEGER)',
   ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS sets (
+      id INTEGER PRIMARY KEY,
+      phaseGroupId INTEGER,
+      phaseId INTEGER,
+      eventId INTEGER,
+      callOrder REAL,
+      fullRoundText TEXT,
+      identifier TEXT,
+      round INTEGER,
+      state INTEGER,
+      streamId INTEGER,
+      entrant1Id INTEGER,
+      entrant1Score INTEGER,
+      entrant1PrereqType TEXT,
+      entrant1PrereqId INTEGER,
+      entrant1PrereqCondition TEXT,
+      entrant1PrereqStr TEXT,
+      entrant2Id INTEGER,
+      entrant2Score INTEGER,
+      entrant2PrereqType TEXT,
+      entrant2PrereqId INTEGER,
+      entrant2PrereqCondition TEXT,
+      entrant2PrereqStr TEXT,
+      winnerId INTEGER,
+      wProgressionSeedId INTEGER,
+      wProgressingPhaseGroupId INTEGER,
+      wProgressingPhaseId INTEGER,
+      wProgressingName TEXT,
+      loserId INTEGER,
+      lProgressionSeedId INTEGER,
+      lProgressingPhaseGroupId INTEGER,
+      lProgressingPhaseId INTEGER,
+      lProgressingName TEXT,
+      createdAt INTEGER,
+      startedAt INTEGER,
+      completedAt INTEGER,
+      updatedAt INTEGER
+    )`,
+  ).run();
+  db.prepare(
+    'CREATE TABLE IF NOT EXISTS seeds (id INTEGER PRIMARY KEY, phaseGroupId INTEGER, entrantId INTEGER, seedNum INTEGER, groupSeedNum INTEGER)',
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS entrants(
+      id INTEGER PRIMARY KEY,
+      eventId INTEGER,
+      participant1Id INTEGER,
+      participant1GamerTag TEXT,
+      participant1Prefix TEXT,
+      participant1Pronouns TEXT,
+      participant1PlayerId INTEGER,
+      participant1UserSlug TEXT,
+      participant2Id INTEGER,
+      participant2GamerTag TEXT,
+      participant2Prefix TEXT,
+      participant2Pronouns TEXT,
+      participant2PlayerId INTEGER,
+      participant2UserSlug TEXT
+    )`,
+  ).run();
+  db.prepare(
+    'CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, pronouns TEXT, userSlug TEXT)',
+  ).run();
 }
 
 const TOURNAMENT_UPSERT_SQL =
@@ -39,12 +110,10 @@ export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
     throw new Error('not init');
   }
 
-  db.transaction(() => {
-    db!.prepare(TOURNAMENT_UPSERT_SQL).run(tournament);
-    events.forEach((event) => {
-      db!.prepare(EVENT_UPSERT_SQL).run(event);
-    });
-  })();
+  db!.prepare(TOURNAMENT_UPSERT_SQL).run(tournament);
+  events.forEach((event) => {
+    db!.prepare(EVENT_UPSERT_SQL).run(event);
+  });
 }
 
 const EVENT_UPDATE_SQL = 'UPDATE events SET name = @name WHERE id = @id';
@@ -61,15 +130,208 @@ export function updateEvent(
     throw new Error('not init');
   }
 
-  db.transaction(() => {
-    db!.prepare(EVENT_UPDATE_SQL).run(event);
-    phases.forEach((phase) => {
-      db!.prepare(PHASE_UPSERT_SQL).run(phase);
+  db!.prepare(EVENT_UPDATE_SQL).run(event);
+  phases.forEach((phase) => {
+    db!.prepare(PHASE_UPSERT_SQL).run(phase);
+  });
+  pools.forEach((pool) => {
+    db!.prepare(POOL_UPSERT_SQL).run(pool);
+  });
+}
+
+const PLAYER_UPSERT_SQL =
+  'REPLACE INTO players (id, pronouns, userSlug) VALUES (@id, @pronouns, @userSlug)';
+export function upsertPlayer(player: DbPlayer) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db!.prepare(PLAYER_UPSERT_SQL).run(player);
+}
+
+export function upsertPlayers(players: DbPlayer[]) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  players.forEach((player) => {
+    db!.prepare(PLAYER_UPSERT_SQL).run(player);
+  });
+}
+
+const PLAYER_GET_SQL = 'SELECT * FROM players WHERE id = @id';
+export function getPlayer(id: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  return db!.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
+}
+
+const POOL_UPDATE_SQL =
+  'UPDATE pools SET bracketType = @bracketType, name = @name WHERE id = @id';
+const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
+  id,
+  eventId,
+  participant1Id,
+  participant1GamerTag,
+  participant1Prefix,
+  participant1Pronouns,
+  participant1PlayerId,
+  participant1UserSlug,
+  participant2Id,
+  participant2GamerTag,
+  participant2Prefix,
+  participant2Pronouns,
+  participant2PlayerId,
+  participant2UserSlug
+) values (
+  @id,
+  @eventId,
+  @participant1Id,
+  @participant1GamerTag,
+  @participant1Prefix,
+  @participant1Pronouns,
+  @participant1PlayerId,
+  @participant1UserSlug,
+  @participant2Id,
+  @participant2GamerTag,
+  @participant2Prefix,
+  @participant2Pronouns,
+  @participant2PlayerId,
+  @participant2UserSlug
+)`;
+const SEED_UPSERT_SQL = `REPLACE INTO seeds (
+  id, phaseGroupId, entrantId, seedNum, groupSeedNum
+) values (
+  @id, @phaseGroupId, @entrantId, @seedNum, @groupSeedNum
+)`;
+const SET_UPSERT_SQL = `REPLACE INTO sets (
+  id,
+  phaseGroupId,
+  phaseId,
+  eventId,
+  callOrder,
+  fullRoundText,
+  identifier,
+  round,
+  state,
+  streamId,
+  entrant1Id,
+  entrant1Score,
+  entrant1PrereqType,
+  entrant1PrereqId,
+  entrant1PrereqCondition,
+  entrant1PrereqStr,
+  entrant2Id,
+  entrant2Score,
+  entrant2PrereqType,
+  entrant2PrereqId,
+  entrant2PrereqCondition,
+  entrant2PrereqStr,
+  winnerId,
+  wProgressionSeedId,
+  wProgressingPhaseGroupId,
+  wProgressingPhaseId,
+  wProgressingName,
+  loserId,
+  lProgressionSeedId,
+  lProgressingPhaseGroupId,
+  lProgressingPhaseId,
+  lProgressingName,
+  createdAt,
+  startedAt,
+  completedAt,
+  updatedAt
+) values (
+  @id,
+  @phaseGroupId,
+  @phaseId,
+  @eventId,
+  @callOrder,
+  @fullRoundText,
+  @identifier,
+  @round,
+  @state,
+  @streamId,
+  @entrant1Id,
+  @entrant1Score,
+  @entrant1PrereqType,
+  @entrant1PrereqId,
+  @entrant1PrereqCondition,
+  @entrant1PrereqStr,
+  @entrant2Id,
+  @entrant2Score,
+  @entrant2PrereqType,
+  @entrant2PrereqId,
+  @entrant2PrereqCondition,
+  @entrant2PrereqStr,
+  @winnerId,
+  @wProgressionSeedId,
+  @wProgressingPhaseGroupId,
+  @wProgressingPhaseId,
+  @wProgressingName,
+  @loserId,
+  @lProgressionSeedId,
+  @lProgressingPhaseGroupId,
+  @lProgressingPhaseId,
+  @lProgressingName,
+  @createdAt,
+  @startedAt,
+  @completedAt,
+  @updatedAt
+)`;
+export function updatePool(
+  pool: DbPool,
+  entrants: DbEntrant[],
+  seeds: DbSeed[],
+  sets: DbSet[],
+) {
+  if (!db) {
+    throw new Error('not init');
+  }
+  db!.prepare(POOL_UPDATE_SQL).run(pool);
+  entrants.forEach((entrant) => {
+    db!.prepare(ENTRANT_UPSERT_SQL).run(entrant);
+  });
+  seeds.forEach((seed) => {
+    db!.prepare(SEED_UPSERT_SQL).run(seed);
+  });
+  sets.forEach((set) => {
+    db!.prepare(SET_UPSERT_SQL).run(set);
+  });
+}
+
+function getEntrant(id: number): RendererEntrant | null {
+  const maybeEntrant = db!
+    .prepare('SELECT * FROM entrants WHERE id = @id')
+    .get({ id }) as DbEntrant | undefined;
+  if (!maybeEntrant) {
+    return null;
+  }
+
+  const participants: RendererParticipant[] = [
+    {
+      id: maybeEntrant.participant1Id,
+      gamerTag: maybeEntrant.participant1GamerTag,
+      prefix: maybeEntrant.participant1Prefix,
+      pronouns: maybeEntrant.participant1Pronouns ?? '',
+      userSlug: maybeEntrant.participant1UserSlug ?? '',
+    },
+  ];
+  if (maybeEntrant.participant2Id) {
+    participants.push({
+      id: maybeEntrant.participant2Id,
+      gamerTag: maybeEntrant.participant2GamerTag!,
+      prefix: maybeEntrant.participant2Prefix!,
+      pronouns: maybeEntrant.participant2Pronouns ?? '',
+      userSlug: maybeEntrant.participant2UserSlug ?? '',
     });
-    pools.forEach((pool) => {
-      db!.prepare(POOL_UPSERT_SQL).run(pool);
-    });
-  })();
+  }
+  return {
+    id: maybeEntrant.id,
+    participants,
+  };
 }
 
 export function getTournament(id: number): RendererTournament {
@@ -103,11 +365,44 @@ export function getTournament(id: number): RendererTournament {
           name: dbPhase.name,
           pools: dbPools
             .filter((dbPool) => dbPool.phaseId === dbPhase.id)
-            .map((dbPool) => ({
-              id: dbPool.id,
-              name: dbPool.name,
-              bracketType: dbPool.bracketType,
-            })),
+            .map((dbPool) => {
+              const sets: RendererSet[] = (
+                db!
+                  .prepare(
+                    "SELECT * FROM sets WHERE phaseGroupId = @id AND NOT (entrant1PrereqType == 'bye' AND entrant2PrereqType == 'bye') ORDER BY callOrder, id",
+                  )
+                  .all({ id: dbPool.id }) as DbSet[]
+              ).map((dbSet) => {
+                const entrant1 = dbSet.entrant1Id
+                  ? getEntrant(dbSet.entrant1Id)
+                  : null;
+                const entrant2 = dbSet.entrant2Id
+                  ? getEntrant(dbSet.entrant2Id)
+                  : null;
+                return {
+                  id: dbSet.id,
+                  callOrder: dbSet.callOrder,
+                  fullRoundText: dbSet.fullRoundText,
+                  identifier: dbSet.identifier,
+                  state: dbSet.state,
+                  winnerId: dbSet.winnerId,
+                  entrant1,
+                  entrant1PrereqStr: dbSet.entrant1PrereqStr,
+                  entrant1PrereqType: dbSet.entrant1PrereqType,
+                  entrant1Score: dbSet.entrant1Score,
+                  entrant2,
+                  entrant2PrereqStr: dbSet.entrant2PrereqStr,
+                  entrant2PrereqType: dbSet.entrant2PrereqType,
+                  entrant2Score: dbSet.entrant2Score,
+                };
+              });
+              return {
+                id: dbPool.id,
+                name: dbPool.name,
+                bracketType: dbPool.bracketType,
+                sets,
+              };
+            }),
         })),
     })),
   };

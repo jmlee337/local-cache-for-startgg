@@ -58,7 +58,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       if (!apiKey) {
         throw new Error('Please set API key.');
       }
-      tournamentId = await setTournament(slug);
+      tournamentId = await setTournament(apiKey, slug);
       mainWindow.webContents.send('tournament', getTournament(tournamentId));
     },
   );

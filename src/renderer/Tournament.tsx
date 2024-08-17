@@ -21,11 +21,47 @@ import {
 import { FormEvent, useEffect, useState } from 'react';
 import {
   AdminedTournament,
+  RendererEntrant,
   RendererEvent,
   RendererTournament,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
+
+function SetEntrant({
+  entrant,
+  prereqType,
+  prereqStr,
+}: {
+  entrant: RendererEntrant | null;
+  prereqType: string;
+  prereqStr: string | null;
+}) {
+  let secondary = false;
+  let text = '\u00A0';
+  if (entrant) {
+    text = entrant.participants
+      .map((participant) => participant.gamerTag)
+      .join(' / ');
+  } else if (prereqType === 'bye') {
+    secondary = true;
+    text = 'bye';
+  } else if (prereqStr) {
+    secondary = true;
+    text = prereqStr;
+  }
+  return (
+    <Box
+      overflow="hidden"
+      textOverflow="ellipsis"
+      whiteSpace="nowrap"
+      width="144px"
+      fontWeight={secondary ? undefined : 500}
+    >
+      {text}
+    </Box>
+  );
+}
 
 function EventListItem({
   event,
@@ -92,6 +128,63 @@ function EventListItem({
                       <Typography variant="caption">({pool.id})</Typography>
                     </ListItemText>
                   </ListItem>
+                  {pool.sets.length > 0 && (
+                    <Stack
+                      direction="row"
+                      flexWrap="wrap"
+                      gap="16px"
+                      marginLeft="32px"
+                    >
+                      {pool.sets.map((set) => (
+                        <Stack
+                          key={set.id}
+                          alignItems="center"
+                          style={{
+                            opacity:
+                              set.entrant1PrereqType === 'bye' ||
+                              set.entrant2PrereqType === 'bye'
+                                ? '50%'
+                                : undefined,
+                          }}
+                        >
+                          <Typography variant="caption">
+                            {set.fullRoundText} ({set.identifier})
+                          </Typography>
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            gap="8px"
+                            typography="body2"
+                          >
+                            <Stack>
+                              <SetEntrant
+                                entrant={set.entrant1}
+                                prereqType={set.entrant1PrereqType}
+                                prereqStr={set.entrant1PrereqStr}
+                              />
+                              <SetEntrant
+                                entrant={set.entrant2}
+                                prereqType={set.entrant2PrereqType}
+                                prereqStr={set.entrant2PrereqStr}
+                              />
+                            </Stack>
+                            <Stack>
+                              <Box textAlign="end" width="16px">
+                                {set.entrant1Score ||
+                                  (set.state === 3 && '0') ||
+                                  '\u00A0'}
+                              </Box>
+                              <Box textAlign="end" width="16px">
+                                {set.entrant2Score ||
+                                  (set.state === 3 && '0') ||
+                                  '\u00A0'}
+                              </Box>
+                            </Stack>
+                          </Stack>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  )}
                 </Box>
               ))}
           </Box>
