@@ -5,6 +5,7 @@ import {
   DbPhase,
   DbPlayer,
   DbPool,
+  DbSet,
   DbTournament,
 } from '../common/types';
 import {
@@ -143,6 +144,62 @@ export async function setTournament(apiKey: string, slug: string) {
     page += 1;
   } while (page <= nextData.tournament.participants.pageInfo.totalPages);
   return id;
+}
+
+function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
+  if (set.entrant1PrereqType === 'bye') {
+    if (set.entrant2PrereqType === 'seed') {
+      return {
+        prereqType: set.entrant2PrereqType,
+        prereqId: set.entrant2PrereqId,
+        prereqCondition: set.entrant2PrereqCondition,
+        prereqStr: set.entrant2PrereqStr,
+      };
+    }
+    if (set.entrant2PrereqType === 'set') {
+      const prereqSet = idToSet.get(set.entrant2PrereqId)!;
+      if (
+        prereqSet.entrant1PrereqType !== 'bye' &&
+        prereqSet.entrant2PrereqType !== 'bye'
+      ) {
+        return {
+          prereqType: set.entrant2PrereqType,
+          prereqId: set.entrant2PrereqId,
+          prereqCondition: set.entrant2PrereqCondition,
+          prereqStr: set.entrant2PrereqStr,
+        };
+      }
+      return coalescePrereq(prereqSet, idToSet);
+    }
+  }
+  if (set.entrant2PrereqType === 'bye') {
+    if (set.entrant1PrereqType === 'seed') {
+      return {
+        prereqType: set.entrant1PrereqType,
+        prereqId: set.entrant1PrereqId,
+        prereqCondition: set.entrant1PrereqCondition,
+        prereqStr: set.entrant1PrereqStr,
+      };
+    }
+    if (set.entrant1PrereqType === 'set') {
+      const prereqSet = idToSet.get(set.entrant1PrereqId)!;
+      if (
+        prereqSet.entrant1PrereqType !== 'bye' &&
+        prereqSet.entrant2PrereqType !== 'bye'
+      ) {
+        return {
+          prereqType: set.entrant1PrereqType,
+          prereqId: set.entrant1PrereqId,
+          prereqCondition: set.entrant1PrereqCondition,
+          prereqStr: set.entrant1PrereqStr,
+        };
+      }
+      return coalescePrereq(prereqSet, idToSet);
+    }
+  }
+  throw new Error(
+    `coalescePrereq: ${set.entrant1PrereqType}, ${set.entrant2PrereqType}`,
+  );
 }
 
 const EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY = `
@@ -358,11 +415,24 @@ export async function loadEvent(
           } while (missingPlayerIds.length > 0);
         }
       }
-
-      // fill in fields that may be missing
-      const sets = (json.entities.sets as any[])
-        .filter((set) => !set.unreachable)
-        .map((set) => {
+      const idToSet = new Map<number, DbSet>();
+      (json.entities.sets as any[])
+        .filter(
+          (set) =>
+            !set.unreachable &&
+            !(
+              set.entrant1PrereqType === 'bye' &&
+              set.entrant2PrereqType === 'bye'
+            ),
+        )
+        .map((set): DbSet => {
+          // fill in fields that may be missing
+          if (!Number.isInteger(set.entrant1Id)) {
+            set.entrant1Id = null;
+          }
+          if (!Number.isInteger(set.entrant2Id)) {
+            set.entrant2Id = null;
+          }
           if (set.entrant1PrereqStr === undefined) {
             set.entrant1PrereqStr = null;
           }
@@ -388,7 +458,50 @@ export async function loadEvent(
             set.lProgressingName = null;
           }
           return set;
+        })
+        .forEach((set) => {
+          idToSet.set(set.id, set);
         });
+
+      // coalesce byes
+      const sets: DbSet[] = [];
+      Array.from(idToSet.values()).forEach((dbSet) => {
+        if (
+          dbSet.entrant1PrereqType === 'bye' ||
+          dbSet.entrant2PrereqType === 'bye'
+        ) {
+          return;
+        }
+        if (dbSet.entrant1PrereqType === 'set' && dbSet.entrant1Id === null) {
+          const prereqSet1 = idToSet.get(dbSet.entrant1PrereqId)!;
+          if (
+            prereqSet1.entrant1PrereqType === 'bye' ||
+            prereqSet1.entrant2PrereqType === 'bye'
+          ) {
+            const { prereqType, prereqId, prereqCondition, prereqStr } =
+              coalescePrereq(prereqSet1, idToSet);
+            dbSet.entrant1PrereqType = prereqType;
+            dbSet.entrant1PrereqId = prereqId;
+            dbSet.entrant1PrereqCondition = prereqCondition;
+            dbSet.entrant1PrereqStr = prereqStr;
+          }
+        }
+        if (dbSet.entrant2PrereqType === 'set' && dbSet.entrant2Id === null) {
+          const prereqSet2 = idToSet.get(dbSet.entrant2PrereqId)!;
+          if (
+            prereqSet2.entrant1PrereqType === 'bye' ||
+            prereqSet2.entrant2PrereqType === 'bye'
+          ) {
+            const { prereqType, prereqId, prereqCondition, prereqStr } =
+              coalescePrereq(prereqSet2, idToSet);
+            dbSet.entrant2PrereqType = prereqType;
+            dbSet.entrant2PrereqId = prereqId;
+            dbSet.entrant2PrereqCondition = prereqCondition;
+            dbSet.entrant2PrereqStr = prereqStr;
+          }
+        }
+        sets.push(dbSet);
+      });
 
       updatePool(pool, entrants, json.entities.seeds, sets);
     }),

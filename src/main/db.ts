@@ -369,7 +369,7 @@ export function getTournament(id: number): RendererTournament {
               const sets: RendererSet[] = (
                 db!
                   .prepare(
-                    "SELECT * FROM sets WHERE phaseGroupId = @id AND NOT (entrant1PrereqType == 'bye' AND entrant2PrereqType == 'bye') ORDER BY callOrder, id",
+                    'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY callOrder, id',
                   )
                   .all({ id: dbPool.id }) as DbSet[]
               ).map((dbSet) => {

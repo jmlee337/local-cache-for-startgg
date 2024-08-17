@@ -30,11 +30,9 @@ import Settings from './Settings';
 
 function SetEntrant({
   entrant,
-  prereqType,
   prereqStr,
 }: {
   entrant: RendererEntrant | null;
-  prereqType: string;
   prereqStr: string | null;
 }) {
   let secondary = false;
@@ -43,9 +41,6 @@ function SetEntrant({
     text = entrant.participants
       .map((participant) => participant.gamerTag)
       .join(' / ');
-  } else if (prereqType === 'bye') {
-    secondary = true;
-    text = 'bye';
   } else if (prereqStr) {
     secondary = true;
     text = prereqStr;
@@ -56,6 +51,7 @@ function SetEntrant({
       textOverflow="ellipsis"
       whiteSpace="nowrap"
       width="144px"
+      color={secondary ? '#757575' : undefined}
       fontWeight={secondary ? undefined : 500}
     >
       {text}
@@ -136,17 +132,7 @@ function EventListItem({
                       marginLeft="32px"
                     >
                       {pool.sets.map((set) => (
-                        <Stack
-                          key={set.id}
-                          alignItems="center"
-                          style={{
-                            opacity:
-                              set.entrant1PrereqType === 'bye' ||
-                              set.entrant2PrereqType === 'bye'
-                                ? '50%'
-                                : undefined,
-                          }}
-                        >
+                        <Stack key={set.id} alignItems="center">
                           <Typography variant="caption">
                             {set.fullRoundText} ({set.identifier})
                           </Typography>
@@ -159,12 +145,10 @@ function EventListItem({
                             <Stack>
                               <SetEntrant
                                 entrant={set.entrant1}
-                                prereqType={set.entrant1PrereqType}
                                 prereqStr={set.entrant1PrereqStr}
                               />
                               <SetEntrant
                                 entrant={set.entrant2}
-                                prereqType={set.entrant2PrereqType}
                                 prereqStr={set.entrant2PrereqStr}
                               />
                             </Stack>

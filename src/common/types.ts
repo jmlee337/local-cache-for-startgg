@@ -105,13 +105,13 @@ export type DbSet = {
   entrant1Score: number | null;
   entrant1PrereqType: string;
   entrant1PrereqId: number;
-  entrant1PrereqCondition: string;
+  entrant1PrereqCondition: string | null;
   entrant1PrereqStr: string | null;
   entrant2Id: number | null;
   entrant2Score: number | null;
   entrant2PrereqType: string;
   entrant2PrereqId: number;
-  entrant2PrereqCondition: string;
+  entrant2PrereqCondition: string | null;
   entrant2PrereqStr: string | null;
   winnerId: number | null;
   wProgressionSeedId: number | null;
