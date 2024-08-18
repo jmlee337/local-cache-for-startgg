@@ -64,7 +64,7 @@ export default function Settings() {
         >
           <DialogTitle>Settings</DialogTitle>
           <Typography variant="caption">
-            Replay Manager for Slippi version {appVersion}
+            Local Cache for start.gg version {appVersion}
           </Typography>
         </Stack>
         <DialogContent>
