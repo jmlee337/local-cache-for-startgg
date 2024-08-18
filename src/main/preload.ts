@@ -5,6 +5,9 @@ const electronHandler = {
   getApiKey: (): Promise<string> => ipcRenderer.invoke('getApiKey'),
   setApiKey: (apiKey: string): Promise<void> =>
     ipcRenderer.invoke('setApiKey', apiKey),
+  getAutoSync: (): Promise<boolean> => ipcRenderer.invoke('getAutoSync'),
+  setAutoSync: (autoSync: boolean) =>
+    ipcRenderer.invoke('setAutoSync', autoSync),
   getAdminedTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getAdminedTournaments'),
   getCurrentTournament: (): Promise<RendererTournament | undefined> =>

@@ -165,3 +165,55 @@ export type DbTournament = {
   name: string;
   slug: string;
 };
+
+export type DbSelections = {
+  transactionNumber: number;
+  gameNum: number;
+  entrantId: number;
+  characterId: number;
+};
+
+export type DbGameData = {
+  transactionNum: number;
+  gameNum: number;
+  winnerId: number;
+  stageId: number | null;
+};
+
+export type DbTransaction = {
+  transactionNum: number;
+  setId: number;
+  isReport: 0 | 1;
+  winnerId: number | null;
+  isDQ: 0 | 1;
+};
+
+export type ApiGameData = {
+  gameNum: number;
+  winnerId: number;
+  stageId?: number;
+  selections: {
+    entrantId: number;
+    characterId: number;
+  }[];
+};
+
+export type ApiTransaction = {
+  transactionNum: number;
+  setId: number;
+  isReport: boolean;
+  winnerId?: number;
+  isDQ: boolean;
+  gameData: ApiGameData[];
+};
+
+export type ApiSetUpdate = {
+  id: number;
+  state: number;
+  entrant1Id: number | null;
+  entrant1Score: number | null;
+  entrant2Id: number | null;
+  entrant2Score: number | null;
+  winnerId: number | null;
+  updatedAt: number;
+};

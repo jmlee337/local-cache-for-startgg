@@ -3,20 +3,24 @@ import path from 'path';
 import { app } from 'electron';
 import { mkdirSync } from 'fs';
 import {
+  ApiSetUpdate,
+  ApiTransaction,
   DbEntrant,
   DbEvent,
+  DbGameData,
   DbPhase,
   DbPlayer,
   DbPool,
+  DbSelections,
   DbSet,
   DbSetMutation,
   DbTournament,
+  DbTransaction,
   RendererSet,
   RendererTournament,
 } from '../common/types';
 
 let db: Database | undefined;
-let transactionNum = 1;
 export function dbInit() {
   const docsPath = path.join(app.getPath('documents'), 'LocalCacheForStartgg');
   mkdirSync(docsPath, { recursive: true });
@@ -113,12 +117,39 @@ export function dbInit() {
   db.prepare(
     'CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, pronouns TEXT, userSlug TEXT)',
   ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS transactions (
+      transactionNum INTEGER PRIMARY KEY,
+      setId INTEGER NOT NULL,
+      isReport INTEGER NOT NULL,
+      winnerId INTEGER,
+      isDQ INTEGER
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS gameData (
+      transactionNum INTEGER,
+      gameNum INTEGER,
+      winnerId INTEGER NOT NULL,
+      stageId INTEGER,
+      PRIMARY KEY (transactionNum, gameNum)
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS selections (
+      transactionNum INTEGER,
+      gameNum INTEGER,
+      entrantId INTEGER,
+      characterId INTEGER NOT NULL,
+      PRIMARY KEY (transactionNum, gameNum, entrantId)
+    )`,
+  ).run();
   const init = db
-    .prepare('SELECT transactionNum FROM setMutations ORDER BY id DESC LIMIT 1')
+    .prepare(
+      'SELECT transactionNum FROM transactions ORDER BY transactionNum DESC LIMIT 1',
+    )
     .get() as { transactionNum: number } | undefined;
-  if (init) {
-    transactionNum = init.transactionNum + 1;
-  }
+  return init ? init.transactionNum + 1 : 1;
 }
 
 const TOURNAMENT_UPSERT_SQL =
@@ -334,6 +365,7 @@ export function reportSet(
   loserId: number,
   entrant1Score: number | null,
   entrant2Score: number | null,
+  transactionNum: number,
 ) {
   if (!db) {
     throw new Error('not init');
@@ -597,7 +629,163 @@ export function reportSet(
           entrantId: lProgressionSet.entrantId,
         });
     }
-    transactionNum += 1;
+  })();
+}
+
+export function insertTransaction(apiTransaction: ApiTransaction) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db!.transaction(() => {
+    db!
+      .prepare(
+        `INSERT INTO transactions (
+          transactionNum, setId, isReport, winnerId, isDQ
+        ) VALUES (
+          @transactionNum, @setId, @isReport, @winnerId, @isDQ
+        )`,
+      )
+      .run({
+        transactionNum: apiTransaction.transactionNum,
+        setId: apiTransaction.setId,
+        isReport: apiTransaction.isReport ? 1 : 0,
+        winnerId: apiTransaction.winnerId ?? null,
+        isDQ: apiTransaction.isDQ ? 1 : 0,
+      });
+    apiTransaction.gameData.forEach((gameData) => {
+      db!
+        .prepare(
+          `INSERT INTO gameData (
+            transactionNum, gameNum, winnerId, stageId
+          ) VALUES (
+           @transactionNum, @gameNum, @winnerId, @stageId
+          )`,
+        )
+        .run({
+          transactionNum: apiTransaction.transactionNum,
+          gameNum: gameData.gameNum,
+          winnerId: gameData.winnerId,
+          stageId: gameData.stageId ?? null,
+        });
+      gameData.selections.forEach((selection) => {
+        db!
+          .prepare(
+            `INSERT INTO selections (
+              transactionNum, gameNum, entrantId, characterId
+            ) VALUES (
+              @transactionNum, @gameNum, @entrantId, @characterId
+            )`,
+          )
+          .run({
+            transactionNum: apiTransaction.transactionNum,
+            gameNum: gameData.gameNum,
+            entrantId: selection.entrantId,
+            characterId: selection.characterId,
+          });
+      });
+    });
+  })();
+}
+
+export function getTransaction(transactionNum: number): ApiTransaction {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbTransaction = db!
+    .prepare(
+      'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
+    )
+    .get({ transactionNum }) as DbTransaction | undefined;
+  if (!dbTransaction) {
+    throw new Error('no such transaction');
+  }
+  const gameDatas = db!
+    .prepare('SELECT * FROM gameData WHERE transactionNum = @transactionNum')
+    .all({ transactionNum }) as DbGameData[];
+  const gameNumToSelections = new Map<
+    number,
+    { entrantId: number; characterId: number }[]
+  >();
+  (
+    db!
+      .prepare(
+        'SELECT * FROM selections WHERE transactionNum = @transactionNum',
+      )
+      .all({ transactionNum }) as DbSelections[]
+  ).forEach((dbSelection) => {
+    const selection = {
+      entrantId: dbSelection.entrantId,
+      characterId: dbSelection.characterId,
+    };
+    if (gameNumToSelections.has(dbSelection.gameNum)) {
+      gameNumToSelections.get(dbSelection.gameNum)!.push(selection);
+    } else {
+      gameNumToSelections.set(dbSelection.gameNum, [selection]);
+    }
+  });
+  return {
+    transactionNum: dbTransaction.transactionNum,
+    setId: dbTransaction.setId,
+    isReport: dbTransaction.isReport === 1,
+    winnerId: dbTransaction.winnerId ?? undefined,
+    isDQ: dbTransaction.isDQ === 1,
+    gameData: gameDatas.map((gameData) => ({
+      gameNum: gameData.gameNum,
+      winnerId: gameData.winnerId,
+      stageId: gameData.stageId ?? undefined,
+      selections: gameNumToSelections.get(gameData.gameNum) || [],
+    })),
+  };
+}
+
+export function deleteTransaction(
+  transactionNums: number[],
+  updates: ApiSetUpdate[],
+) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db!.transaction(() => {
+    transactionNums.forEach((transactionNum) => {
+      db!
+        .prepare(
+          'DELETE FROM transactions WHERE transactionNum = @transactionNum',
+        )
+        .run({ transactionNum });
+      db!
+        .prepare('DELETE FROM gameData WHERE transactionNum = @transactionNum')
+        .run({ transactionNum });
+      db!
+        .prepare(
+          'DELETE FROM selections WHERE transactionNum = @transactionNum',
+        )
+        .run({ transactionNum });
+      db!
+        .prepare(
+          'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
+        )
+        .run({ transactionNum });
+    });
+    updates.forEach((update) => {
+      db!
+        .prepare(
+          `UPDATE sets
+            SET
+              state = @state,
+              entrant1Id = @entrant1Id,
+              entrant1Score = @entrant1Score,
+              entrant2Id = @entrant2Id,
+              entrant2Score = @entrant2Score,
+              winnerId = @winnerId,
+              updatedAt = @updatedAt,
+              isLocal = 0
+            WHERE id = @id`,
+        )
+        .run(update);
+    });
   })();
 }
 

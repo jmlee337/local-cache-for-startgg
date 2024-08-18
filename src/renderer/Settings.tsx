@@ -4,7 +4,9 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  FormControlLabel,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -13,16 +15,19 @@ import { ContentCopy, Settings as SettingsIcon } from '@mui/icons-material';
 
 export default function Settings() {
   const [apiKey, setApiKey] = useState('');
+  const [autoSync, setAutoSync] = useState(true);
   const [appVersion, setAppVersion] = useState('');
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     const inner = async () => {
       const apiKeyPromise = window.electron.getApiKey();
+      const autoSyncPromise = window.electron.getAutoSync();
       const appVersionPromise = window.electron.getAppVersion();
 
       const initApiKey = await apiKeyPromise;
       setApiKey(initApiKey);
+      setAutoSync(await autoSyncPromise);
       setAppVersion(await appVersionPromise);
 
       if (!initApiKey) {
@@ -102,6 +107,23 @@ export default function Settings() {
               {copied ? 'Copied!' : 'Copy'}
             </Button>
           </Stack>
+          <FormControlLabel
+            label={
+              autoSync
+                ? 'Auto sync (will sync with start.gg when possible)'
+                : 'Manual sync (will sync with start.gg only when asked)'
+            }
+            control={
+              <Switch
+                checked={autoSync}
+                onChange={async (event) => {
+                  const newAutoSync = event.target.checked;
+                  await window.electron.setAutoSync(newAutoSync);
+                  setAutoSync(newAutoSync);
+                }}
+              />
+            }
+          />
         </DialogContent>
       </Dialog>
     </>

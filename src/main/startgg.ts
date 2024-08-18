@@ -1,5 +1,9 @@
+import EventEmitter from 'events';
 import {
   AdminedTournament,
+  ApiGameData,
+  ApiSetUpdate,
+  ApiTransaction,
   DbEntrant,
   DbEvent,
   DbPhase,
@@ -17,6 +21,28 @@ import {
   upsertTournament,
 } from './db';
 
+class ApiError extends Error {
+  public status: number | undefined;
+
+  public gqlErrors: { message: string }[];
+
+  constructor(e: {
+    message?: string;
+    options?: ErrorOptions;
+    status?: number;
+    gqlErrors?: { message: string }[];
+  }) {
+    super(e.message, e.options);
+    this.status = e.status;
+    this.gqlErrors = e.gqlErrors ?? [];
+  }
+}
+
+let apiKey = '';
+export function setApiKey(newApiKey: string) {
+  apiKey = newApiKey;
+}
+
 async function wrappedFetch(
   input: URL | RequestInfo,
   init?: RequestInit | undefined,
@@ -27,7 +53,10 @@ async function wrappedFetch(
       response.status === 400
         ? ' ***start.gg API key invalid or expired!***'
         : '';
-    throw new Error(`${response.status} - ${response.statusText}.${keyErr}`);
+    throw new ApiError({
+      message: keyErr || response.statusText,
+      status: response.status,
+    });
   }
   return response;
 }
@@ -43,7 +72,7 @@ async function fetchGql(key: string, query: string, variables: any) {
   });
   const json = await response.json();
   if (json.errors) {
-    throw new Error(json.errors[0].message);
+    throw new ApiError({ gqlErrors: json.errors });
   }
 
   return json.data;
@@ -61,9 +90,11 @@ const GET_ADMINED_TOURNAMENTS_QUERY = `
     }
   }
 `;
-export async function getAdminedTournaments(
-  apiKey: string,
-): Promise<AdminedTournament[]> {
+export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
+  if (!apiKey) {
+    return [];
+  }
+
   const data = await fetchGql(apiKey, GET_ADMINED_TOURNAMENTS_QUERY, {});
   return data.currentUser.tournaments.nodes.map((tournament: any) => ({
     slug: tournament.slug.slice(11),
@@ -91,7 +122,11 @@ const TOURNAMENT_PLAYERS_QUERY = `
     }
   }
 `;
-export async function setTournament(apiKey: string, slug: string) {
+export async function setTournament(slug: string) {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
   const response = await wrappedFetch(
     `https://api.smash.gg/tournament/${slug}?expand[]=event`,
   );
@@ -226,11 +261,11 @@ const EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY = `
     }
   }
 `;
-export async function loadEvent(
-  apiKey: string,
-  tournamentId: number,
-  eventId: number,
-) {
+export async function loadEvent(tournamentId: number, eventId: number) {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
   const data = await fetchGql(
     apiKey,
     EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY,
@@ -300,8 +335,8 @@ export async function loadEvent(
       await fetchGql(apiKey, query, {});
     } catch (e: any) {
       if (
-        !(e instanceof Error) ||
-        !e.message.startsWith('Your query complexity is too high.')
+        !(e instanceof ApiError) ||
+        !e.gqlErrors[0].message.startsWith('Your query complexity is too high.')
       ) {
         throw e;
       }
@@ -509,4 +544,150 @@ export async function loadEvent(
       updatePool(pool, entrants, sets);
     }),
   );
+}
+
+const UPDATE_SET_INNER = `
+      id
+      state
+      slots {
+        entrant {
+          id
+        }
+        standing {
+          stats {
+            score {
+              value
+            }
+          }
+        }
+      }
+      winnerId
+`;
+const START_SET_MUTATION = `
+  mutation startSet($setId: ID!) {
+    markSetCalled(setId: $setId) {${UPDATE_SET_INNER}}
+  }
+`;
+async function startSet(setId: number): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const updatedAt = Date.now() / 1000;
+  const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
+  return {
+    id: data.markSetInProgress.id,
+    state: data.markSetInProgress.state,
+    entrant1Id: data.markSetInProgress.slots[0].entrant.id,
+    entrant1Score: data.markSetInProgress.slots[0].standing.stats.score.value,
+    entrant2Id: data.markSetInProgress.slots[1].entrant.id,
+    entrant2Score: data.markSetInProgress.slots[1].standing.stats.score.values,
+    winnerId: data.markSetInProgress.winnerId,
+    updatedAt,
+  };
+}
+
+const REPORT_SET_MUTATION = `
+  mutation reportSet($setId: ID!, $winnerId: ID, $isDQ: Boolean, $gameData: [BracketSetGameDataInput]) {
+    reportBracketSet(
+      setId: $setId
+      winnerId: $winnerId
+      isDQ: $isDQ
+      gameData: $gameData
+    ) {${UPDATE_SET_INNER}}
+  }
+`;
+async function reportSet(
+  setId: number,
+  winnerId: number,
+  isDQ: boolean,
+  gameData: ApiGameData[],
+) {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const updatedAt = Date.now() / 1000;
+  const data = await fetchGql(apiKey, REPORT_SET_MUTATION, {
+    setId,
+    winnerId,
+    isDQ,
+    gameData,
+  });
+  return (data.reportBracketSet as any[]).map((set): ApiSetUpdate => {
+    const entrant1 = set.slots[0].entrant;
+    const standing1 = set.slots[0].standing;
+    const entrant2 = set.slots[1].entrant;
+    const standing2 = set.slots[1].standing;
+    return {
+      id: set.id,
+      state: set.state,
+      entrant1Id: entrant1 ? entrant1.id : null,
+      entrant1Score: standing1 ? standing1.stats.score.value : null,
+      entrant2Id: entrant2 ? entrant2.id : null,
+      entrant2Score: standing2 ? standing2.stats.score.value : null,
+      winnerId: set.winnerId,
+      updatedAt,
+    };
+  });
+}
+
+let emitter: EventEmitter | undefined;
+export function onTransaction(
+  callback: (transactionNum: number, updates: ApiSetUpdate[]) => void,
+) {
+  if (emitter) {
+    emitter.removeAllListeners();
+  }
+
+  emitter = new EventEmitter();
+  emitter.addListener('transaction', callback);
+}
+
+const queue: ApiTransaction[] = [];
+async function tryNextTransaction() {
+  if (queue.length === 0) {
+    return;
+  }
+
+  const transaction = queue[0];
+  try {
+    if (transaction.isReport) {
+      const updates = await reportSet(
+        transaction.setId,
+        transaction.winnerId!,
+        transaction.isDQ,
+        transaction.gameData,
+      );
+      emitter!.emit('transaction', transaction.transactionNum, updates);
+    } else {
+      const update = await startSet(transaction.setId);
+      emitter!.emit('transaction', transaction.transactionNum, [update]);
+    }
+    queue.shift();
+  } catch (e: any) {
+    if (
+      e instanceof ApiError &&
+      e.status !== undefined &&
+      (e.status === 500 ||
+        e.status === 502 ||
+        e.status === 503 ||
+        e.status === 504)
+    ) {
+      console.log(
+        `retryable error (${e.status}) when attempting ${JSON.stringify(
+          transaction,
+        )}`,
+      );
+      // TODO actually retry
+    } else {
+      throw e;
+    }
+  }
+}
+export function queueTransaction(transaction: ApiTransaction) {
+  queue.push(transaction);
+  if (queue.length === 1) {
+    tryNextTransaction();
+  }
 }

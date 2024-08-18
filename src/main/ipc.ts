@@ -6,15 +6,37 @@ import {
   IpcMainInvokeEvent,
 } from 'electron';
 import Store from 'electron-store';
-import { getAdminedTournaments, loadEvent, setTournament } from './startgg';
-import { dbInit, getTournament, reportSet } from './db';
+import {
+  getAdminedTournaments,
+  loadEvent,
+  onTransaction,
+  queueTransaction,
+  setApiKey,
+  setTournament,
+} from './startgg';
+import {
+  dbInit,
+  deleteTransaction,
+  getTournament,
+  insertTransaction,
+  reportSet,
+} from './db';
+import { ApiTransaction } from '../common/types';
 
 let tournamentId = 0;
 export default function setupIPCs(mainWindow: BrowserWindow) {
-  dbInit();
-  const store = new Store();
+  const updateClients = () => {
+    mainWindow.webContents.send('tournament', getTournament(tournamentId));
+  };
+  let transactionNum = dbInit();
+  onTransaction((completedTransactionNum, updates) => {
+    deleteTransaction([completedTransactionNum], updates);
+    updateClients();
+  });
 
+  const store = new Store();
   let apiKey = store.has('apiKey') ? (store.get('apiKey') as string) : '';
+  setApiKey(apiKey);
   ipcMain.removeHandler('getApiKey');
   ipcMain.handle('getApiKey', () => apiKey);
 
@@ -24,23 +46,36 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     (event: IpcMainInvokeEvent, newApiKey: string) => {
       const apiKeyChanged = apiKey !== newApiKey;
       store.set('apiKey', newApiKey);
+      setApiKey(apiKey);
       apiKey = newApiKey;
 
       if (apiKeyChanged) {
         mainWindow.webContents.send(
           'adminedTournaments',
-          getAdminedTournaments(apiKey),
+          getAdminedTournaments(),
         );
       }
     },
   );
 
+  let autoSync = store.has('autoSync')
+    ? (store.get('autoSync') as boolean)
+    : true;
+  ipcMain.removeHandler('getAutoSync');
+  ipcMain.handle('getAutoSync', () => autoSync);
+
+  ipcMain.removeHandler('setAutoSync');
+  ipcMain.handle(
+    'setAutoSync',
+    (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
+      store.set('autoSync', newAutoSync);
+      autoSync = newAutoSync;
+    },
+  );
+
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
-    if (!apiKey) {
-      return [];
-    }
-    return getAdminedTournaments(apiKey);
+    return getAdminedTournaments();
   });
 
   ipcMain.removeHandler('getCurrentTournament');
@@ -55,11 +90,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'setTournament',
     async (event: IpcMainInvokeEvent, slug: string) => {
-      if (!apiKey) {
-        throw new Error('Please set API key.');
-      }
-      tournamentId = await setTournament(apiKey, slug);
-      mainWindow.webContents.send('tournament', getTournament(tournamentId));
+      tournamentId = await setTournament(slug);
+      updateClients();
     },
   );
 
@@ -67,11 +99,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'loadEvent',
     async (event: IpcMainInvokeEvent, eventId: number) => {
-      if (!apiKey) {
-        throw new Error('Please set API key.');
-      }
-      await loadEvent(apiKey, tournamentId, eventId);
-      mainWindow.webContents.send('tournament', getTournament(tournamentId));
+      await loadEvent(tournamentId, eventId);
+      updateClients();
     },
   );
 
@@ -86,8 +115,29 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       entrant1Score: number | null,
       entrant2Score: number | null,
     ) => {
-      reportSet(id, winnerId, loserId, entrant1Score, entrant2Score);
-      mainWindow.webContents.send('tournament', getTournament(tournamentId));
+      const currentTransactionNum = transactionNum;
+      transactionNum += 1;
+      reportSet(
+        id,
+        winnerId,
+        loserId,
+        entrant1Score,
+        entrant2Score,
+        currentTransactionNum,
+      );
+      const apiTransaction: ApiTransaction = {
+        setId: id,
+        isReport: true,
+        winnerId,
+        isDQ: entrant1Score === -1 || entrant2Score === -1,
+        gameData: [],
+        transactionNum: currentTransactionNum,
+      };
+      insertTransaction(apiTransaction);
+      if (autoSync) {
+        queueTransaction(apiTransaction);
+      }
+      updateClients();
     },
   );
 
