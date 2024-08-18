@@ -427,13 +427,15 @@ export async function loadEvent(
             ),
         )
         .map((set): DbSet => {
-          // fill in fields that may be missing
+          set.isLocal = 0;
+          // correct placeholder entrantIds
           if (!Number.isInteger(set.entrant1Id)) {
             set.entrant1Id = null;
           }
           if (!Number.isInteger(set.entrant2Id)) {
             set.entrant2Id = null;
           }
+          // fill in fields that may be missing
           if (set.entrant1PrereqStr === undefined) {
             set.entrant1PrereqStr = null;
           }

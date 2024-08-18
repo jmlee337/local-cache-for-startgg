@@ -17,6 +17,7 @@ export type RendererSet = {
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
   winnerId: number | null;
+  isLocal: 0 | 1;
 };
 
 export type RendererPool = {
@@ -77,11 +78,35 @@ export type DbSeed = {
   groupSeedNum: number;
 };
 
+export type DbSetMutation = {
+  id: number;
+  setId: number;
+  phaseGroupId: number;
+  phaseId: number;
+  eventId: number;
+  isLocal: 1;
+
+  // locally mutable
+  state: number | null;
+  entrant1Id: number | null;
+  entrant1Score: number | null;
+  entrant2Id: number | null;
+  entrant2Score: number | null;
+  winnerId: number | null;
+  loserId: number | null;
+
+  // hopefully locally mutable
+  streamId: number | null;
+};
+
 export type DbSet = {
+  // ids
   id: number;
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
+
+  // locally immutable
   callOrder: number;
   fullRoundText: string;
   identifier: string;
@@ -102,7 +127,7 @@ export type DbSet = {
   lProgressingPhaseGroupId: number | null;
   lProgressingPhaseId: number | null;
   lProgressingName: string | null;
-  createdAt: number;
+  updatedAt: number;
 
   // locally mutable
   state: number;
@@ -112,12 +137,12 @@ export type DbSet = {
   entrant2Score: number | null;
   winnerId: number | null;
   loserId: number | null;
-  startedAt: number | null;
-  completedAt: number | null;
-  updatedAt: number;
 
   // hopefully locally mutable
   streamId: number | null;
+
+  // mutable but not really...
+  isLocal: 0 | 1;
 };
 
 export type DbPool = {

@@ -1,4 +1,12 @@
-import { Download, Group, Router } from '@mui/icons-material';
+import {
+  CloudDone,
+  CloudOff,
+  Download,
+  Group,
+  HourglassTop,
+  NotificationsActive,
+  Router,
+} from '@mui/icons-material';
 import {
   Box,
   Button,
@@ -49,12 +57,96 @@ function SetEntrant({
       overflow="hidden"
       textOverflow="ellipsis"
       whiteSpace="nowrap"
-      width="144px"
+      width="176px"
       color={secondary ? '#757575' : undefined}
       fontWeight={secondary ? undefined : 500}
     >
       {text}
     </Box>
+  );
+}
+
+function SetListItemButton({
+  set,
+  reportSet,
+}: {
+  set: RendererSet;
+  reportSet: (set: RendererSet) => void;
+}) {
+  let titleEnd = <Box width="20px" />;
+  if (set.state === 2) {
+    titleEnd = <HourglassTop fontSize="small" />;
+  } else if (set.state === 6) {
+    titleEnd = <NotificationsActive fontSize="small" />;
+  }
+
+  let entrant1Score: number | string = '\u00A0';
+  if (set.state === 3) {
+    if (set.entrant1Score !== null) {
+      entrant1Score = set.entrant1Score;
+    } else {
+      entrant1Score = set.winnerId === set.entrant1Id ? 'W' : 'L';
+    }
+  }
+
+  let entrant2Score: number | string = '\u00A0';
+  if (set.state === 3) {
+    if (set.entrant2Score !== null) {
+      entrant2Score = set.entrant2Score;
+    } else {
+      entrant2Score = set.winnerId === set.entrant2Id ? 'W' : 'L';
+    }
+  }
+  return (
+    <ListItemButton
+      disabled={set.state === 3 || !set.entrant1Name || !set.entrant2Name}
+      style={{
+        flexGrow: 0,
+        opacity: '100%',
+      }}
+      onClick={() => {
+        reportSet(set);
+      }}
+    >
+      <Stack alignItems="stretch">
+        <Stack direction="row" alignItems="center" gap="4px">
+          {set.isLocal ? (
+            <CloudOff fontSize="small" />
+          ) : (
+            <CloudDone fontSize="small" />
+          )}
+          <Typography flexGrow={1} textAlign="center" variant="caption">
+            {set.fullRoundText} ({set.identifier})
+          </Typography>
+          {titleEnd}
+        </Stack>
+        <Stack
+          direction="row"
+          alignItems="center"
+          gap="8px"
+          sx={{ typography: (theme) => theme.typography.body2 }}
+        >
+          <Stack>
+            <SetEntrant
+              entrantName={set.entrant1Name}
+              prereqStr={set.entrant1PrereqStr}
+            />
+            <SetEntrant
+              entrantName={set.entrant2Name}
+              prereqStr={set.entrant2PrereqStr}
+            />
+          </Stack>
+          <Stack>
+            <Box textAlign="end" width="16px">
+              {entrant1Score}
+            </Box>
+            <Box textAlign="end" width="16px">
+              {entrant2Score}
+            </Box>
+          </Stack>
+        </Stack>
+      </Stack>
+    </ListItemButton>
   );
 }
 
@@ -133,62 +225,11 @@ function EventListItem({
                       marginLeft="32px"
                     >
                       {pool.sets.map((set) => (
-                        <ListItemButton
+                        <SetListItemButton
                           key={set.id}
-                          disabled={
-                            set.state === 3 ||
-                            !set.entrant1Name ||
-                            !set.entrant2Name
-                          }
-                          style={{
-                            flexGrow: 0,
-                            opacity: '100%',
-                          }}
-                          onClick={() => {
-                            reportSet(set);
-                          }}
-                        >
-                          <Stack alignItems="center">
-                            <Typography variant="caption">
-                              {set.fullRoundText} ({set.identifier})
-                            </Typography>
-                            <Stack
-                              direction="row"
-                              alignItems="center"
-                              gap="8px"
-                              typography="body2"
-                            >
-                              <Stack>
-                                <SetEntrant
-                                  entrantName={set.entrant1Name}
-                                  prereqStr={set.entrant1PrereqStr}
-                                />
-                                <SetEntrant
-                                  entrantName={set.entrant2Name}
-                                  prereqStr={set.entrant2PrereqStr}
-                                />
-                              </Stack>
-                              <Stack>
-                                <Box textAlign="end" width="16px">
-                                  {(set.entrant1Score ??
-                                    (set.state === 3 &&
-                                      (set.winnerId === set.entrant1Id
-                                        ? 'W'
-                                        : 'L'))) ||
-                                    '\u00A0'}
-                                </Box>
-                                <Box textAlign="end" width="16px">
-                                  {(set.entrant2Score ??
-                                    (set.state === 3 &&
-                                      (set.winnerId === set.entrant2Id
-                                        ? 'W'
-                                        : 'L'))) ||
-                                    '\u00A0'}
-                                </Box>
-                              </Stack>
-                            </Stack>
-                          </Stack>
-                        </ListItemButton>
+                          set={set}
+                          reportSet={reportSet}
+                        />
                       ))}
                     </Stack>
                   )}
@@ -349,6 +390,9 @@ export default function Tournament() {
               key={event.id}
               event={event}
               reportSet={(newReportSet: RendererSet) => {
+                setReportWinnerId(0);
+                setReportLoserId(0);
+                setReportIsDq(false);
                 setReportSet(newReportSet);
                 setReportDialogOpen(true);
               }}
@@ -358,23 +402,25 @@ export default function Tournament() {
         </List>
       )}
       <Dialog
-        fullWidth
         open={reportDialogOpen}
         onClose={() => {
           setReportDialogOpen(false);
         }}
       >
+        <DialogTitle>
+          {reportSet?.fullRoundText} ({reportSet?.identifier})
+        </DialogTitle>
         <DialogContent>
-          <Stack alignItems="center" typography="body2">
-            <Box>
-              {reportSet?.fullRoundText} ({reportSet?.identifier})
-            </Box>
+          <Stack
+            alignItems="center"
+            sx={{ typography: (theme) => theme.typography.body2 }}
+          >
             <Stack direction="row" alignItems="center">
               <Box
                 overflow="hidden"
                 textOverflow="ellipsis"
                 whiteSpace="nowrap"
-                width="288px"
+                width="176px"
               >
                 {reportSet?.entrant1Name}
               </Box>
@@ -382,7 +428,7 @@ export default function Tournament() {
                 variant={
                   reportIsDq && reportLoserId === reportSet?.entrant1Id
                     ? 'contained'
-                    : 'outlined'
+                    : 'text'
                 }
                 onClick={() => {
                   setReportLoserId(reportSet!.entrant1Id!);
@@ -396,7 +442,7 @@ export default function Tournament() {
                 variant={
                   !reportIsDq && reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
-                    : 'outlined'
+                    : 'text'
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant1Id!);
@@ -412,7 +458,7 @@ export default function Tournament() {
                 overflow="hidden"
                 textOverflow="ellipsis"
                 whiteSpace="nowrap"
-                width="288px"
+                width="176px"
               >
                 {reportSet?.entrant2Name}
               </Box>
@@ -420,7 +466,7 @@ export default function Tournament() {
                 variant={
                   reportIsDq && reportLoserId === reportSet?.entrant2Id
                     ? 'contained'
-                    : 'outlined'
+                    : 'text'
                 }
                 onClick={() => {
                   setReportLoserId(reportSet!.entrant2Id!);
@@ -434,7 +480,7 @@ export default function Tournament() {
                 variant={
                   !reportIsDq && reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
-                    : 'outlined'
+                    : 'text'
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant2Id!);
@@ -450,7 +496,7 @@ export default function Tournament() {
         <DialogActions>
           <Button
             variant="contained"
-            disabled={reporting}
+            disabled={reporting || !reportWinnerId || !reportLoserId}
             endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
             onClick={async () => {
               setReporting(true);

@@ -87,6 +87,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       entrant2Score: number | null,
     ) => {
       reportSet(id, winnerId, loserId, entrant1Score, entrant2Score);
+      mainWindow.webContents.send('tournament', getTournament(tournamentId));
     },
   );
 
