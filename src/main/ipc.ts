@@ -7,7 +7,7 @@ import {
 } from 'electron';
 import Store from 'electron-store';
 import { getAdminedTournaments, loadEvent, setTournament } from './startgg';
-import { dbInit, getTournament } from './db';
+import { dbInit, getTournament, reportSet } from './db';
 
 let tournamentId = 0;
 export default function setupIPCs(mainWindow: BrowserWindow) {
@@ -72,6 +72,21 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       }
       await loadEvent(apiKey, tournamentId, eventId);
       mainWindow.webContents.send('tournament', getTournament(tournamentId));
+    },
+  );
+
+  ipcMain.removeHandler('reportSet');
+  ipcMain.handle(
+    'reportSet',
+    (
+      event: IpcMainInvokeEvent,
+      id: number,
+      winnerId: number,
+      loserId: number,
+      entrant1Score: number | null,
+      entrant2Score: number | null,
+    ) => {
+      reportSet(id, winnerId, loserId, entrant1Score, entrant2Score);
     },
   );
 

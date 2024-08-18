@@ -4,6 +4,7 @@ import {
   Button,
   CircularProgress,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
@@ -22,6 +23,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import {
   AdminedTournament,
   RendererEvent,
+  RendererSet,
   RendererTournament,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
@@ -58,9 +60,11 @@ function SetEntrant({
 
 function EventListItem({
   event,
+  reportSet,
   showError,
 }: {
   event: RendererEvent;
+  reportSet: (set: RendererSet) => void;
   showError: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -129,40 +133,62 @@ function EventListItem({
                       marginLeft="32px"
                     >
                       {pool.sets.map((set) => (
-                        <Stack key={set.id} alignItems="center">
-                          <Typography variant="caption">
-                            {set.fullRoundText} ({set.identifier})
-                          </Typography>
-                          <Stack
-                            direction="row"
-                            alignItems="center"
-                            gap="8px"
-                            typography="body2"
-                          >
-                            <Stack>
-                              <SetEntrant
-                                entrantName={set.entrant1Name}
-                                prereqStr={set.entrant1PrereqStr}
-                              />
-                              <SetEntrant
-                                entrantName={set.entrant2Name}
-                                prereqStr={set.entrant2PrereqStr}
-                              />
-                            </Stack>
-                            <Stack>
-                              <Box textAlign="end" width="16px">
-                                {set.entrant1Score ||
-                                  (set.state === 3 && '0') ||
-                                  '\u00A0'}
-                              </Box>
-                              <Box textAlign="end" width="16px">
-                                {set.entrant2Score ||
-                                  (set.state === 3 && '0') ||
-                                  '\u00A0'}
-                              </Box>
+                        <ListItemButton
+                          key={set.id}
+                          disabled={
+                            set.state === 3 ||
+                            !set.entrant1Name ||
+                            !set.entrant2Name
+                          }
+                          style={{
+                            flexGrow: 0,
+                            opacity: '100%',
+                          }}
+                          onClick={() => {
+                            reportSet(set);
+                          }}
+                        >
+                          <Stack alignItems="center">
+                            <Typography variant="caption">
+                              {set.fullRoundText} ({set.identifier})
+                            </Typography>
+                            <Stack
+                              direction="row"
+                              alignItems="center"
+                              gap="8px"
+                              typography="body2"
+                            >
+                              <Stack>
+                                <SetEntrant
+                                  entrantName={set.entrant1Name}
+                                  prereqStr={set.entrant1PrereqStr}
+                                />
+                                <SetEntrant
+                                  entrantName={set.entrant2Name}
+                                  prereqStr={set.entrant2PrereqStr}
+                                />
+                              </Stack>
+                              <Stack>
+                                <Box textAlign="end" width="16px">
+                                  {(set.entrant1Score ??
+                                    (set.state === 3 &&
+                                      (set.winnerId === set.entrant1Id
+                                        ? 'W'
+                                        : 'L'))) ||
+                                    '\u00A0'}
+                                </Box>
+                                <Box textAlign="end" width="16px">
+                                  {(set.entrant2Score ??
+                                    (set.state === 3 &&
+                                      (set.winnerId === set.entrant2Id
+                                        ? 'W'
+                                        : 'L'))) ||
+                                    '\u00A0'}
+                                </Box>
+                              </Stack>
                             </Stack>
                           </Stack>
-                        </Stack>
+                        </ListItemButton>
                       ))}
                     </Stack>
                   )}
@@ -222,6 +248,12 @@ export default function Tournament() {
     }
   };
 
+  const [reportSet, setReportSet] = useState<RendererSet | null>(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [reportWinnerId, setReportWinnerId] = useState(0);
+  const [reportLoserId, setReportLoserId] = useState(0);
+  const [reportIsDq, setReportIsDq] = useState(false);
+  const [reporting, setReporting] = useState(false);
   return (
     <Stack>
       <InputBase
@@ -313,10 +345,143 @@ export default function Tournament() {
       {tournament && tournament.events.length > 0 && (
         <List>
           {tournament.events.map((event) => (
-            <EventListItem key={event.id} event={event} showError={showError} />
+            <EventListItem
+              key={event.id}
+              event={event}
+              reportSet={(newReportSet: RendererSet) => {
+                setReportSet(newReportSet);
+                setReportDialogOpen(true);
+              }}
+              showError={showError}
+            />
           ))}
         </List>
       )}
+      <Dialog
+        fullWidth
+        open={reportDialogOpen}
+        onClose={() => {
+          setReportDialogOpen(false);
+        }}
+      >
+        <DialogContent>
+          <Stack alignItems="center" typography="body2">
+            <Box>
+              {reportSet?.fullRoundText} ({reportSet?.identifier})
+            </Box>
+            <Stack direction="row" alignItems="center">
+              <Box
+                overflow="hidden"
+                textOverflow="ellipsis"
+                whiteSpace="nowrap"
+                width="288px"
+              >
+                {reportSet?.entrant1Name}
+              </Box>
+              <Button
+                variant={
+                  reportIsDq && reportLoserId === reportSet?.entrant1Id
+                    ? 'contained'
+                    : 'outlined'
+                }
+                onClick={() => {
+                  setReportLoserId(reportSet!.entrant1Id!);
+                  setReportWinnerId(reportSet!.entrant2Id!);
+                  setReportIsDq(true);
+                }}
+              >
+                DQ
+              </Button>
+              <Button
+                variant={
+                  !reportIsDq && reportWinnerId === reportSet?.entrant1Id
+                    ? 'contained'
+                    : 'outlined'
+                }
+                onClick={() => {
+                  setReportWinnerId(reportSet!.entrant1Id!);
+                  setReportLoserId(reportSet!.entrant2Id!);
+                  setReportIsDq(false);
+                }}
+              >
+                W
+              </Button>
+            </Stack>
+            <Stack direction="row" alignItems="center">
+              <Box
+                overflow="hidden"
+                textOverflow="ellipsis"
+                whiteSpace="nowrap"
+                width="288px"
+              >
+                {reportSet?.entrant2Name}
+              </Box>
+              <Button
+                variant={
+                  reportIsDq && reportLoserId === reportSet?.entrant2Id
+                    ? 'contained'
+                    : 'outlined'
+                }
+                onClick={() => {
+                  setReportLoserId(reportSet!.entrant2Id!);
+                  setReportWinnerId(reportSet!.entrant1Id!);
+                  setReportIsDq(true);
+                }}
+              >
+                DQ
+              </Button>
+              <Button
+                variant={
+                  !reportIsDq && reportWinnerId === reportSet?.entrant2Id
+                    ? 'contained'
+                    : 'outlined'
+                }
+                onClick={() => {
+                  setReportWinnerId(reportSet!.entrant2Id!);
+                  setReportLoserId(reportSet!.entrant1Id!);
+                  setReportIsDq(false);
+                }}
+              >
+                W
+              </Button>
+            </Stack>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            disabled={reporting}
+            endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
+            onClick={async () => {
+              setReporting(true);
+              try {
+                let entrant1Score: number | null = null;
+                let entrant2Score: number | null = null;
+                if (reportIsDq) {
+                  entrant1Score =
+                    reportSet!.entrant1Id === reportWinnerId ? 0 : -1;
+                  entrant2Score =
+                    reportSet!.entrant2Id === reportWinnerId ? 0 : -1;
+                }
+                await window.electron.reportSet(
+                  reportSet!.id,
+                  reportWinnerId,
+                  reportLoserId,
+                  entrant1Score,
+                  entrant2Score,
+                );
+                setReportDialogOpen(false);
+              } catch (e: any) {
+                showError(e instanceof Error ? e.message : e);
+              } finally {
+                setReporting(false);
+              }
+            }}
+          >
+            Report
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ErrorDialog
         open={errorDialogOpen}
         error={error}

@@ -8,12 +8,15 @@ export type RendererSet = {
   fullRoundText: string;
   identifier: string;
   state: number;
+  entrant1Id: number | null;
   entrant1Name: string | null;
   entrant1PrereqStr: string | null;
   entrant1Score: number | null;
+  entrant2Id: number | null;
   entrant2Name: string | null;
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
+  winnerId: number | null;
 };
 
 export type RendererPool = {
@@ -83,34 +86,38 @@ export type DbSet = {
   fullRoundText: string;
   identifier: string;
   round: number;
-  state: number;
-  streamId: number | null;
-  entrant1Id: number | null;
-  entrant1Score: number | null;
   entrant1PrereqType: string;
   entrant1PrereqId: number;
   entrant1PrereqCondition: string | null;
   entrant1PrereqStr: string | null;
-  entrant2Id: number | null;
-  entrant2Score: number | null;
   entrant2PrereqType: string;
   entrant2PrereqId: number;
   entrant2PrereqCondition: string | null;
   entrant2PrereqStr: string | null;
-  winnerId: number | null;
   wProgressionSeedId: number | null;
   wProgressingPhaseGroupId: number | null;
   wProgressingPhaseId: number | null;
   wProgressingName: string | null;
-  loserId: number | null;
   lProgressionSeedId: number | null;
   lProgressingPhaseGroupId: number | null;
   lProgressingPhaseId: number | null;
   lProgressingName: string | null;
   createdAt: number;
+
+  // locally mutable
+  state: number;
+  entrant1Id: number | null;
+  entrant1Score: number | null;
+  entrant2Id: number | null;
+  entrant2Score: number | null;
+  winnerId: number | null;
+  loserId: number | null;
   startedAt: number | null;
   completedAt: number | null;
   updatedAt: number;
+
+  // hopefully locally mutable
+  streamId: number | null;
 };
 
 export type DbPool = {

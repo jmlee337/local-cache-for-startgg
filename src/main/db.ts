@@ -303,6 +303,190 @@ export function updatePool(
   });
 }
 
+type ProgressionSet = {
+  id: number;
+  identifier: string;
+  entrantNum: 1 | 2;
+  entrantId: number;
+  prereqStr: string;
+};
+export function reportSet(
+  id: number,
+  winnerId: number,
+  loserId: number,
+  entrant1Score: number | null,
+  entrant2Score: number | null,
+) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+    | DbSet
+    | undefined;
+  if (!set) {
+    throw new Error(`no such set: ${id}`);
+  }
+  if (!set.entrant1Id || !set.entrant2Id) {
+    throw new Error(
+      `set not reportable: ${id}, entrant1Id ${set.entrant1Id}, entrant2Id ${set.entrant2Id}`,
+    );
+  }
+  if (
+    !(set.entrant1Id === winnerId && set.entrant2Id === loserId) &&
+    !(set.entrant1Id === loserId && set.entrant2Id === winnerId)
+  ) {
+    throw new Error(
+      `wrong ids: entrant1Id: ${set.entrant1Id}, entrant2Id: ${set.entrant2Id}, winnerId: ${winnerId}, loserId: ${loserId}`,
+    );
+  }
+
+  let wProgressionSet: ProgressionSet | undefined;
+  let lProgressionSet: ProgressionSet | undefined;
+  const maybeAssignProgression = (
+    setId: number,
+    identifier: string,
+    entrantNum: 1 | 2,
+    prereqCondition: string | null,
+    prereqStr: string | null,
+  ) => {
+    if (prereqCondition === 'winner') {
+      if (wProgressionSet) {
+        throw new Error(
+          `already have wProgressionSet: ${wProgressionSet.id}, found: ${setId}`,
+        );
+      }
+      wProgressionSet = {
+        id: setId,
+        identifier,
+        entrantNum,
+        entrantId: winnerId,
+        prereqStr: prereqStr!,
+      };
+    }
+    if (prereqCondition === 'loser') {
+      if (lProgressionSet) {
+        throw new Error(
+          `already have lProgressionSet: ${lProgressionSet.id}, found: ${setId}`,
+        );
+      }
+      lProgressionSet = {
+        id: setId,
+        identifier,
+        entrantNum,
+        entrantId: loserId,
+        prereqStr: prereqStr!,
+      };
+    }
+    throw new Error(
+      `prereqCondition was not 'winner' or 'loser': ${prereqCondition}`,
+    );
+  };
+  (
+    db!
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
+      )
+      .all({ id }) as DbSet[]
+  ).forEach((dbSet) => {
+    if (
+      dbSet.entrant1PrereqId === id &&
+      dbSet.entrant2PrereqId === id &&
+      winnerId === set.entrant1Id
+    ) {
+      // no progressions if GF won from winners
+      return;
+    }
+    if (dbSet.entrant1PrereqId === id) {
+      maybeAssignProgression(
+        dbSet.id,
+        dbSet.identifier,
+        1,
+        dbSet.entrant1PrereqCondition,
+        dbSet.entrant1PrereqStr,
+      );
+    }
+    if (dbSet.entrant2PrereqId === id) {
+      maybeAssignProgression(
+        dbSet.id,
+        dbSet.identifier,
+        2,
+        dbSet.entrant2PrereqCondition,
+        dbSet.entrant2PrereqStr,
+      );
+    }
+  });
+  if (set.wProgressionSeedId) {
+    const affectedSet = db!
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+      )
+      .get({ seedId: set.wProgressionSeedId }) as DbSet | undefined;
+    if (affectedSet) {
+      if (wProgressionSet) {
+        throw new Error(
+          `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
+        );
+      }
+      const entrantNum =
+        affectedSet.entrant1PrereqId === set.wProgressionSeedId ? 1 : 2;
+      wProgressionSet = {
+        id: affectedSet.id,
+        identifier: affectedSet.identifier,
+        entrantNum,
+        entrantId: winnerId,
+        prereqStr:
+          entrantNum === 1
+            ? affectedSet.entrant1PrereqStr!
+            : affectedSet.entrant2PrereqStr!,
+      };
+    }
+  }
+  if (set.lProgressionSeedId) {
+    const affectedSet = db!
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+      )
+      .get({ seedId: set.lProgressionSeedId }) as DbSet | undefined;
+    if (affectedSet) {
+      if (lProgressionSet) {
+        throw new Error(
+          `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
+        );
+      }
+      const entrantNum =
+        affectedSet.entrant1PrereqId === set.lProgressionSeedId ? 1 : 2;
+      lProgressionSet = {
+        id: affectedSet.id,
+        identifier: affectedSet.identifier,
+        entrantNum,
+        entrantId: loserId,
+        prereqStr:
+          entrantNum === 1
+            ? affectedSet.entrant1PrereqStr!
+            : affectedSet.entrant2PrereqStr!,
+      };
+    }
+  }
+  console.log(
+    `Reporting ${set.identifier}: ${set.entrant1Id} ${
+      entrant1Score ?? (winnerId === set.entrant1Id ? 'W' : 'L')
+    } - ${entrant2Score ?? (winnerId === set.entrant2Id ? 'W' : 'L')} ${
+      set.entrant2Id
+    }`,
+  );
+  if (wProgressionSet) {
+    console.log(
+      `Winner progresses to ${wProgressionSet.identifier}, entrant${wProgressionSet.entrantNum}: ${wProgressionSet.prereqStr}`,
+    );
+  }
+  if (lProgressionSet) {
+    console.log(
+      `Loser progresses to ${lProgressionSet.identifier}, entrant${lProgressionSet.entrantNum}: ${lProgressionSet.prereqStr}`,
+    );
+  }
+}
+
 function getEntrantName(id: number): string | null {
   const maybeEntrant = db!
     .prepare('SELECT * FROM entrants WHERE id = @id')
@@ -373,12 +557,15 @@ export function getTournament(id: number): RendererTournament {
                   fullRoundText: dbSet.fullRoundText,
                   identifier: dbSet.identifier,
                   state: dbSet.state,
+                  entrant1Id: dbSet.entrant1Id,
                   entrant1Name,
                   entrant1PrereqStr: dbSet.entrant1PrereqStr,
                   entrant1Score: dbSet.entrant1Score,
+                  entrant2Id: dbSet.entrant2Id,
                   entrant2Name,
                   entrant2PrereqStr: dbSet.entrant2PrereqStr,
                   entrant2Score: dbSet.entrant2Score,
+                  winnerId: dbSet.winnerId,
                 };
               });
               return {
