@@ -70,14 +70,6 @@ export type DbEntrant = {
   participant2UserSlug: string | null;
 };
 
-export type DbSeed = {
-  id: number;
-  phaseGroupId: number;
-  entrantId: number;
-  seedNum: number;
-  groupSeedNum: number;
-};
-
 export type DbSetMutation = {
   id: number;
   setId: number;

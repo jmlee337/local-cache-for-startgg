@@ -8,7 +8,6 @@ import {
   DbPhase,
   DbPlayer,
   DbPool,
-  DbSeed,
   DbSet,
   DbSetMutation,
   DbTournament,
@@ -91,9 +90,6 @@ export function dbInit() {
       streamId INTEGER,
       isLocal INTEGER NOT NULL
     )`,
-  ).run();
-  db.prepare(
-    'CREATE TABLE IF NOT EXISTS seeds (id INTEGER PRIMARY KEY, phaseGroupId INTEGER, entrantId INTEGER, seedNum INTEGER, groupSeedNum INTEGER)',
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS entrants(
@@ -227,11 +223,6 @@ const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
   @participant2PlayerId,
   @participant2UserSlug
 )`;
-const SEED_UPSERT_SQL = `REPLACE INTO seeds (
-  id, phaseGroupId, entrantId, seedNum, groupSeedNum
-) values (
-  @id, @phaseGroupId, @entrantId, @seedNum, @groupSeedNum
-)`;
 const SET_UPSERT_SQL = `REPLACE INTO sets (
   id,
   phaseGroupId,
@@ -303,21 +294,13 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @updatedAt,
   @isLocal
 )`;
-export function updatePool(
-  pool: DbPool,
-  entrants: DbEntrant[],
-  seeds: DbSeed[],
-  sets: DbSet[],
-) {
+export function updatePool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
   if (!db) {
     throw new Error('not init');
   }
   db!.prepare(POOL_UPDATE_SQL).run(pool);
   entrants.forEach((entrant) => {
     db!.prepare(ENTRANT_UPSERT_SQL).run(entrant);
-  });
-  seeds.forEach((seed) => {
-    db!.prepare(SEED_UPSERT_SQL).run(seed);
   });
   sets.forEach((set) => {
     db!.prepare(SET_UPSERT_SQL).run(set);

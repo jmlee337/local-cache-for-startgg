@@ -506,7 +506,7 @@ export async function loadEvent(
         sets.push(dbSet);
       });
 
-      updatePool(pool, entrants, json.entities.seeds, sets);
+      updatePool(pool, entrants, sets);
     }),
   );
 }
