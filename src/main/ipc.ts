@@ -29,8 +29,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     mainWindow.webContents.send('tournament', getTournament(tournamentId));
   };
   let transactionNum = dbInit();
-  onTransaction((completedTransactionNum, updates) => {
-    deleteTransaction([completedTransactionNum], updates);
+  onTransaction((completedTransactionNum, updates, updatedAt) => {
+    deleteTransaction([completedTransactionNum], updates, updatedAt);
     updateClients();
   });
 

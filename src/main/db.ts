@@ -772,12 +772,12 @@ export function getTransaction(transactionNum: number): ApiTransaction {
 export function deleteTransaction(
   transactionNums: number[],
   updates: ApiSetUpdate[],
+  updatedAt: number,
 ) {
   if (!db) {
     throw new Error('not init');
   }
 
-  const setIdToUpdate = new Set(updates.map((update) => update.id));
   db!.transaction(() => {
     transactionNums.forEach((transactionNum) => {
       db!
@@ -795,7 +795,8 @@ export function deleteTransaction(
         .run({ transactionNum });
       // start.gg does not return sets affected by reportBracketSet if they are
       // in a different phase/phaseGroup so we have to hack it a little.
-      if (setIdToUpdate.size > 0) {
+      if (updates.length > 0) {
+        const setIdToUpdate = new Set(updates.map((update) => update.id));
         (
           db!
             .prepare(
@@ -834,7 +835,7 @@ export function deleteTransaction(
             exprs.push('updatedAt = @updatedAt');
             db!
               .prepare(`UPDATE sets SET ${exprs.join(', ')} WHERE id = @setId`)
-              .run({ ...dbSetMutation, updatedAt: updates[0].updatedAt });
+              .run({ ...dbSetMutation, updatedAt });
           }
         });
       }
@@ -858,7 +859,7 @@ export function deleteTransaction(
               updatedAt = @updatedAt
             WHERE id = @id`,
         )
-        .run(update);
+        .run({ ...update, updatedAt });
     });
   })();
 }

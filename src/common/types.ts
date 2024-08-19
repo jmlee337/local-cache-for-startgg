@@ -221,5 +221,4 @@ export type ApiSetUpdate = {
   entrant2Id: number | null;
   entrant2Score: number | null;
   winnerId: number | null;
-  updatedAt: number;
 };

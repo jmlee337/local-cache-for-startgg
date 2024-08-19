@@ -572,7 +572,6 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
     throw new Error('Please set API key.');
   }
 
-  const updatedAt = Date.now() / 1000;
   const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
   return {
     id: data.markSetInProgress.id,
@@ -582,7 +581,6 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
     entrant2Id: data.markSetInProgress.slots[1].entrant.id,
     entrant2Score: data.markSetInProgress.slots[1].standing.stats.score.values,
     winnerId: data.markSetInProgress.winnerId,
-    updatedAt,
   };
 }
 
@@ -606,7 +604,6 @@ async function reportSet(
     throw new Error('Please set API key.');
   }
 
-  const updatedAt = Date.now() / 1000;
   const data = await fetchGql(apiKey, REPORT_SET_MUTATION, {
     setId,
     winnerId,
@@ -626,14 +623,17 @@ async function reportSet(
       entrant2Id: entrant2 ? entrant2.id : null,
       entrant2Score: standing2 ? standing2.stats.score.value : null,
       winnerId: set.winnerId,
-      updatedAt,
     };
   });
 }
 
 let emitter: EventEmitter | undefined;
 export function onTransaction(
-  callback: (transactionNum: number, updates: ApiSetUpdate[]) => void,
+  callback: (
+    transactionNum: number,
+    updates: ApiSetUpdate[],
+    updatedAt: number,
+  ) => void,
 ) {
   if (emitter) {
     emitter.removeAllListeners();
@@ -651,6 +651,7 @@ async function tryNextTransaction() {
 
   const transaction = queue[0];
   try {
+    const updatedAt = Date.now() / 1000;
     if (transaction.isReport) {
       const updates = await reportSet(
         transaction.setId,
@@ -658,10 +659,20 @@ async function tryNextTransaction() {
         transaction.isDQ,
         transaction.gameData,
       );
-      emitter!.emit('transaction', transaction.transactionNum, updates);
+      emitter!.emit(
+        'transaction',
+        transaction.transactionNum,
+        updates,
+        updatedAt,
+      );
     } else {
       const update = await startSet(transaction.setId);
-      emitter!.emit('transaction', transaction.transactionNum, [update]);
+      emitter!.emit(
+        'transaction',
+        transaction.transactionNum,
+        [update],
+        updatedAt,
+      );
     }
     queue.shift();
   } catch (e: any) {
