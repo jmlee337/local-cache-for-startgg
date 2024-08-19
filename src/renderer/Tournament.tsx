@@ -2,6 +2,7 @@ import {
   CloudDone,
   CloudOff,
   Download,
+  EmojiEvents,
   Group,
   HourglassTop,
   NotificationsActive,
@@ -75,9 +76,26 @@ function SetListItemButton({
 }) {
   let titleEnd = <Box width="20px" />;
   if (set.state === 2) {
-    titleEnd = <HourglassTop fontSize="small" />;
+    titleEnd = (
+      <HourglassTop
+        fontSize="small"
+        style={{ color: '#388e3c', marginLeft: '5px', marginRight: '-5px' }}
+      />
+    );
+  } else if (set.state === 3) {
+    titleEnd = (
+      <EmojiEvents
+        fontSize="small"
+        style={{ marginLeft: '3px', marginRight: '-3px' }}
+      />
+    );
   } else if (set.state === 6) {
-    titleEnd = <NotificationsActive fontSize="small" />;
+    titleEnd = (
+      <NotificationsActive
+        fontSize="small"
+        style={{ color: '#fbc02d', marginLeft: '2px', marginRight: '-2px' }}
+      />
+    );
   }
 
   let entrant1Score: number | string = '\u00A0';
@@ -101,6 +119,7 @@ function SetListItemButton({
     <ListItemButton
       disabled={set.state === 3 || !set.entrant1Name || !set.entrant2Name}
       style={{
+        backgroundColor: set.state === 3 ? '#eeeeee' : undefined,
         flexGrow: 0,
         opacity: '100%',
       }}
