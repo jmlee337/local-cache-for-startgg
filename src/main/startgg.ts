@@ -462,7 +462,6 @@ export async function loadEvent(tournamentId: number, eventId: number) {
             ),
         )
         .map((set): DbSet => {
-          set.isLocal = 0;
           // correct placeholder entrantIds
           if (!Number.isInteger(set.entrant1Id)) {
             set.entrant1Id = null;

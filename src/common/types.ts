@@ -76,18 +76,25 @@ export type DbSetMutation = {
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
-  isLocal: 1;
+  transactionNum: number;
+  isCrossPhase: 0 | 1;
 
   // locally mutable
+  statePresent: null | 1;
   state: number | null;
+  entrant1IdPresent: null | 1;
   entrant1Id: number | null;
+  entrant1ScorePresent: null | 1;
   entrant1Score: number | null;
+  entrant2IdPresent: null | 1;
   entrant2Id: number | null;
+  entrant2ScorePresent: null | 1;
   entrant2Score: number | null;
+  winnerIdPresent: null | 1;
   winnerId: number | null;
-  loserId: number | null;
 
   // hopefully locally mutable
+  streamIdPresent: null | 1;
   streamId: number | null;
 };
 
@@ -128,12 +135,11 @@ export type DbSet = {
   entrant2Id: number | null;
   entrant2Score: number | null;
   winnerId: number | null;
-  loserId: number | null;
 
   // hopefully locally mutable
   streamId: number | null;
 
-  // mutable but not really...
+  // we only store 0, but we modify after query to 1 via setMutation
   isLocal: 0 | 1;
 };
 

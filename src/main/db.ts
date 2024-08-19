@@ -67,7 +67,6 @@ export function dbInit() {
       wProgressingPhaseGroupId INTEGER,
       wProgressingPhaseId INTEGER,
       wProgressingName TEXT,
-      loserId INTEGER,
       lProgressionSeedId INTEGER,
       lProgressingPhaseGroupId INTEGER,
       lProgressingPhaseId INTEGER,
@@ -84,15 +83,21 @@ export function dbInit() {
       phaseId INTEGER NOT NULL,
       eventId INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL,
+      isCrossPhase INTEGER NOT NULL,
+      statePresent INTEGER,
       state INTEGER,
+      entrant1IdPresent INTEGER,
       entrant1Id INTEGER,
+      entrant1ScorePresent INTEGER,
       entrant1Score INTEGER,
+      entrant2IdPresent INTEGER,
       entrant2Id INTEGER,
+      entrant2ScorePresent INTEGER,
       entrant2Score INTEGER,
+      winnerIdPresent INTEGER,
       winnerId INTEGER,
-      loserId INTEGER,
-      streamId INTEGER,
-      isLocal INTEGER NOT NULL
+      streamIdPresent INTEGER,
+      streamId INTEGER
     )`,
   ).run();
   db.prepare(
@@ -282,7 +287,6 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   wProgressingPhaseGroupId,
   wProgressingPhaseId,
   wProgressingName,
-  loserId,
   lProgressionSeedId,
   lProgressingPhaseGroupId,
   lProgressingPhaseId,
@@ -317,13 +321,12 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @wProgressingPhaseGroupId,
   @wProgressingPhaseId,
   @wProgressingName,
-  @loserId,
   @lProgressionSeedId,
   @lProgressingPhaseGroupId,
   @lProgressingPhaseId,
   @lProgressingName,
   @updatedAt,
-  @isLocal
+  0
 )`;
 export function updatePool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
   if (!db) {
@@ -339,16 +342,28 @@ export function updatePool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
 }
 
 function applyMutation(set: DbSet, setMutation: DbSetMutation) {
-  if (setMutation.state) set.state = setMutation.state;
-  if (setMutation.entrant1Id) set.entrant1Id = setMutation.entrant1Id;
-  if (setMutation.entrant1Score !== null)
+  if (setMutation.statePresent) {
+    set.state = setMutation.state!;
+  }
+  if (setMutation.entrant1IdPresent) {
+    set.entrant1Id = setMutation.entrant1Id;
+  }
+  if (setMutation.entrant1ScorePresent) {
     set.entrant1Score = setMutation.entrant1Score;
-  if (setMutation.entrant2Id) set.entrant2Id = setMutation.entrant2Id;
-  if (setMutation.entrant2Score !== null)
+  }
+  if (setMutation.entrant2IdPresent) {
+    set.entrant2Id = setMutation.entrant2Id;
+  }
+  if (setMutation.entrant2ScorePresent) {
     set.entrant2Score = setMutation.entrant2Score;
-  if (setMutation.winnerId) set.winnerId = setMutation.winnerId;
-  if (setMutation.loserId) set.loserId = setMutation.loserId;
-  set.isLocal = setMutation.isLocal;
+  }
+  if (setMutation.winnerIdPresent) {
+    set.winnerId = setMutation.winnerId;
+  }
+  if (setMutation.streamIdPresent) {
+    set.streamId = setMutation.streamId;
+  }
+  set.isLocal = 1;
 }
 
 type ProgressionSet = {
@@ -356,13 +371,13 @@ type ProgressionSet = {
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
+  isCrossPhase: boolean;
   entrantNum: 1 | 2;
   entrantId: number;
 };
 export function reportSet(
   id: number,
   winnerId: number,
-  loserId: number,
   entrant1Score: number | null,
   entrant2Score: number | null,
   transactionNum: number,
@@ -391,14 +406,12 @@ export function reportSet(
       `set not reportable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
     );
   }
-  if (
-    !(entrant1Id === winnerId && entrant2Id === loserId) &&
-    !(entrant1Id === loserId && entrant2Id === winnerId)
-  ) {
+  if (winnerId !== entrant1Id && winnerId !== entrant2Id) {
     throw new Error(
-      `wrong ids: entrant1Id: ${entrant1Id}, entrant2Id: ${entrant2Id}, winnerId: ${winnerId}, loserId: ${loserId}`,
+      `invalid winnerId: ${winnerId} (${entrant1Id}, ${entrant2Id})`,
     );
   }
+  const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
 
   let wProgressionSet: ProgressionSet | undefined;
   let lProgressionSet: ProgressionSet | undefined;
@@ -427,6 +440,7 @@ export function reportSet(
         phaseGroupId,
         phaseId,
         eventId,
+        isCrossPhase: false,
         entrantNum,
         entrantId: winnerId,
       };
@@ -442,6 +456,7 @@ export function reportSet(
         phaseGroupId,
         phaseId,
         eventId,
+        isCrossPhase: false,
         entrantNum,
         entrantId: loserId,
       };
@@ -501,6 +516,7 @@ export function reportSet(
         phaseGroupId: affectedSet.phaseGroupId,
         phaseId: affectedSet.phaseId,
         eventId: affectedSet.eventId,
+        isCrossPhase: true,
         entrantNum: affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
         entrantId: winnerId,
       };
@@ -523,6 +539,7 @@ export function reportSet(
         phaseGroupId: affectedSet.phaseGroupId,
         phaseId: affectedSet.phaseId,
         eventId: affectedSet.eventId,
+        isCrossPhase: true,
         entrantNum: affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
         entrantId: loserId,
       };
@@ -537,24 +554,30 @@ export function reportSet(
           phaseId,
           eventId,
           transactionNum,
+          isCrossPhase,
+          statePresent,
           state,
+          entrant1ScorePresent,
           entrant1Score,
+          entrant2ScorePresent,
           entrant2Score,
-          winnerId,
-          loserId,
-          isLocal
+          winnerIdPresent,
+          winnerId
         ) VALUES (
           @id,
           @phaseGroupId,
           @phaseId,
           @eventId,
           @transactionNum,
+          @isCrossPhase,
+          1,
           @state,
+          1,
           @entrant1Score,
+          1,
           @entrant2Score,
-          @winnerId,
-          @loserId,
-          1
+          1,
+          @winnerId
         )`,
       )
       .run({
@@ -563,11 +586,11 @@ export function reportSet(
         phaseId: set.phaseId,
         eventId: set.eventId,
         transactionNum,
+        isCrossPhase: 0,
         state: 3,
         entrant1Score,
         entrant2Score,
         winnerId,
-        loserId,
       });
     if (wProgressionSet) {
       db!
@@ -578,16 +601,18 @@ export function reportSet(
             phaseId,
             eventId,
             transactionNum,
-            entrant${wProgressionSet.entrantNum}Id,
-            isLocal
+            isCrossPhase,
+            entrant${wProgressionSet.entrantNum}IdPresent,
+            entrant${wProgressionSet.entrantNum}Id
           ) VALUES (
             @id,
             @phaseGroupId,
             @phaseId,
             @eventId,
             @transactionNum,
-            @entrantId,
-            1
+            @isCrossPhase,
+            1,
+            @entrantId
           )`,
         )
         .run({
@@ -596,6 +621,7 @@ export function reportSet(
           phaseId: wProgressionSet.phaseId,
           eventId: wProgressionSet.eventId,
           transactionNum,
+          isCrossPhase: wProgressionSet.isCrossPhase ? 1 : 0,
           entrantId: wProgressionSet.entrantId,
         });
     }
@@ -608,16 +634,18 @@ export function reportSet(
             phaseId,
             eventId,
             transactionNum,
-            entrant${lProgressionSet.entrantNum}Id,
-            isLocal
+            isCrossPhase,
+            entrant${lProgressionSet.entrantNum}IdPresent,
+            entrant${lProgressionSet.entrantNum}Id
           ) VALUES (
             @id,
             @phaseGroupId,
             @phaseId,
             @eventId,
             @transactionNum,
-            @entrantId,
-            1
+            @isCrossPhase,
+            1,
+            @entrantId
           )`,
         )
         .run({
@@ -626,6 +654,7 @@ export function reportSet(
           phaseId: lProgressionSet.phaseId,
           eventId: lProgressionSet.eventId,
           transactionNum,
+          isCrossPhase: lProgressionSet.isCrossPhase ? 1 : 0,
           entrantId: lProgressionSet.entrantId,
         });
     }
@@ -748,6 +777,7 @@ export function deleteTransaction(
     throw new Error('not init');
   }
 
+  const setIdToUpdate = new Set(updates.map((update) => update.id));
   db!.transaction(() => {
     transactionNums.forEach((transactionNum) => {
       db!
@@ -763,6 +793,51 @@ export function deleteTransaction(
           'DELETE FROM selections WHERE transactionNum = @transactionNum',
         )
         .run({ transactionNum });
+      // start.gg does not return sets affected by reportBracketSet if they are
+      // in a different phase/phaseGroup so we have to hack it a little.
+      if (setIdToUpdate.size > 0) {
+        (
+          db!
+            .prepare(
+              'SELECT * FROM setMutations WHERE transactionNum = @transactionNum AND isCrossPhase = 1',
+            )
+            .all({ transactionNum }) as DbSetMutation[]
+        ).forEach((dbSetMutation) => {
+          if (!setIdToUpdate.has(dbSetMutation.setId)) {
+            const exprs: string[] = [];
+            if (dbSetMutation.statePresent) {
+              exprs.push('state = @state');
+            }
+            if (dbSetMutation.entrant1IdPresent) {
+              exprs.push('entrant1Id = @entrant1Id');
+            }
+            if (dbSetMutation.entrant1ScorePresent) {
+              exprs.push('entrant1Score = @entrant1Score');
+            }
+            if (dbSetMutation.entrant2IdPresent) {
+              exprs.push('entrant2Id = @entrant2Id');
+            }
+            if (dbSetMutation.entrant2ScorePresent) {
+              exprs.push('entrant2Score = @entrant2Score');
+            }
+            if (dbSetMutation.winnerIdPresent) {
+              exprs.push('winnerId = @winnerId');
+            }
+            if (dbSetMutation.streamIdPresent) {
+              exprs.push('streamId = @streamId');
+            }
+            if (exprs.length === 0) {
+              throw new Error(
+                `no mutations in dbSetMutation: ${dbSetMutation.id}, transactionNum: ${dbSetMutation.transactionNum}`,
+              );
+            }
+            exprs.push('updatedAt = @updatedAt');
+            db!
+              .prepare(`UPDATE sets SET ${exprs.join(', ')} WHERE id = @setId`)
+              .run({ ...dbSetMutation, updatedAt: updates[0].updatedAt });
+          }
+        });
+      }
       db!
         .prepare(
           'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
@@ -780,8 +855,7 @@ export function deleteTransaction(
               entrant2Id = @entrant2Id,
               entrant2Score = @entrant2Score,
               winnerId = @winnerId,
-              updatedAt = @updatedAt,
-              isLocal = 0
+              updatedAt = @updatedAt
             WHERE id = @id`,
         )
         .run(update);

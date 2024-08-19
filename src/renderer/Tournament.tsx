@@ -292,7 +292,6 @@ export default function Tournament() {
   const [reportSet, setReportSet] = useState<RendererSet | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportWinnerId, setReportWinnerId] = useState(0);
-  const [reportLoserId, setReportLoserId] = useState(0);
   const [reportIsDq, setReportIsDq] = useState(false);
   const [reporting, setReporting] = useState(false);
   return (
@@ -391,7 +390,6 @@ export default function Tournament() {
               event={event}
               reportSet={(newReportSet: RendererSet) => {
                 setReportWinnerId(0);
-                setReportLoserId(0);
                 setReportIsDq(false);
                 setReportSet(newReportSet);
                 setReportDialogOpen(true);
@@ -426,12 +424,11 @@ export default function Tournament() {
               </Box>
               <Button
                 variant={
-                  reportIsDq && reportLoserId === reportSet?.entrant1Id
+                  reportIsDq && reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
                     : 'text'
                 }
                 onClick={() => {
-                  setReportLoserId(reportSet!.entrant1Id!);
                   setReportWinnerId(reportSet!.entrant2Id!);
                   setReportIsDq(true);
                 }}
@@ -446,7 +443,6 @@ export default function Tournament() {
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant1Id!);
-                  setReportLoserId(reportSet!.entrant2Id!);
                   setReportIsDq(false);
                 }}
               >
@@ -464,12 +460,11 @@ export default function Tournament() {
               </Box>
               <Button
                 variant={
-                  reportIsDq && reportLoserId === reportSet?.entrant2Id
+                  reportIsDq && reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
                     : 'text'
                 }
                 onClick={() => {
-                  setReportLoserId(reportSet!.entrant2Id!);
                   setReportWinnerId(reportSet!.entrant1Id!);
                   setReportIsDq(true);
                 }}
@@ -484,7 +479,6 @@ export default function Tournament() {
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant2Id!);
-                  setReportLoserId(reportSet!.entrant1Id!);
                   setReportIsDq(false);
                 }}
               >
@@ -496,7 +490,7 @@ export default function Tournament() {
         <DialogActions>
           <Button
             variant="contained"
-            disabled={reporting || !reportWinnerId || !reportLoserId}
+            disabled={reporting || !reportWinnerId}
             endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
             onClick={async () => {
               setReporting(true);
@@ -512,7 +506,6 @@ export default function Tournament() {
                 await window.electron.reportSet(
                   reportSet!.id,
                   reportWinnerId,
-                  reportLoserId,
                   entrant1Score,
                   entrant2Score,
                 );

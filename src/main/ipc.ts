@@ -43,16 +43,16 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('setApiKey');
   ipcMain.handle(
     'setApiKey',
-    (event: IpcMainInvokeEvent, newApiKey: string) => {
+    async (event: IpcMainInvokeEvent, newApiKey: string) => {
       const apiKeyChanged = apiKey !== newApiKey;
       store.set('apiKey', newApiKey);
-      setApiKey(apiKey);
+      setApiKey(newApiKey);
       apiKey = newApiKey;
 
       if (apiKeyChanged) {
         mainWindow.webContents.send(
           'adminedTournaments',
-          getAdminedTournaments(),
+          await getAdminedTournaments(),
         );
       }
     },
@@ -111,7 +111,6 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       event: IpcMainInvokeEvent,
       id: number,
       winnerId: number,
-      loserId: number,
       entrant1Score: number | null,
       entrant2Score: number | null,
     ) => {
@@ -120,7 +119,6 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       reportSet(
         id,
         winnerId,
-        loserId,
         entrant1Score,
         entrant2Score,
         currentTransactionNum,
