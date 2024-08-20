@@ -1,6 +1,7 @@
 import EventEmitter from 'events';
 import {
   AdminedTournament,
+  ApiError,
   ApiGameData,
   ApiSetUpdate,
   ApiTransaction,
@@ -20,23 +21,6 @@ import {
   upsertPlayers,
   upsertTournament,
 } from './db';
-
-class ApiError extends Error {
-  public status: number | undefined;
-
-  public gqlErrors: { message: string }[];
-
-  constructor(e: {
-    message?: string;
-    options?: ErrorOptions;
-    status?: number;
-    gqlErrors?: { message: string }[];
-  }) {
-    super(e.message, e.options);
-    this.status = e.status;
-    this.gqlErrors = e.gqlErrors ?? [];
-  }
-}
 
 let apiKey = '';
 export function setApiKey(newApiKey: string) {
@@ -83,8 +67,9 @@ const GET_ADMINED_TOURNAMENTS_QUERY = `
     currentUser {
       tournaments(query: {perPage: 500, filter: {tournamentView: "admin"}}) {
         nodes {
-          name
+          id
           slug
+          name
         }
       }
     }
@@ -96,7 +81,8 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
   }
 
   const data = await fetchGql(apiKey, GET_ADMINED_TOURNAMENTS_QUERY, {});
-  return data.currentUser.tournaments.nodes.map((tournament: any) => ({
+  return (data.currentUser.tournaments.nodes as any[]).map((tournament) => ({
+    id: tournament.id,
     slug: tournament.slug.slice(11),
     name: tournament.name,
   }));
@@ -122,7 +108,7 @@ const TOURNAMENT_PLAYERS_QUERY = `
     }
   }
 `;
-export async function setTournament(slug: string) {
+export async function getApiTournament(slug: string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }

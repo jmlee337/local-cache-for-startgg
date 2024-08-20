@@ -6,9 +6,11 @@ import {
   Group,
   HourglassTop,
   NotificationsActive,
+  Refresh,
   Router,
 } from '@mui/icons-material';
 import {
+  Alert,
   Box,
   Button,
   CircularProgress,
@@ -31,6 +33,7 @@ import {
 import { FormEvent, useEffect, useState } from 'react';
 import {
   AdminedTournament,
+  ApiError,
   RendererEvent,
   RendererSet,
   RendererTournament,
@@ -261,11 +264,50 @@ function EventListItem({
 }
 
 export default function Tournament() {
+  const [gettingAdminedTournaments, setGettingAdminedTournaments] =
+    useState(false);
   const [adminedTournaments, setAdminedTournaments] = useState<
     AdminedTournament[]
   >([]);
-  const [gettingAdminedTournaments, setGettingAdminedTournaments] =
-    useState(true);
+  const [triedAdminedTournaments, setTriedAdminedTournaments] = useState(false);
+  const [adminedTournamentsError, setAdminedTournamentsError] = useState('');
+  const getAdminedTournaments = async () => {
+    setTriedAdminedTournaments(true);
+    setGettingAdminedTournaments(true);
+    try {
+      setAdminedTournaments(await window.electron.getAdminedTournaments());
+      setAdminedTournamentsError('');
+    } catch (e: any) {
+      if (e instanceof ApiError) {
+        if (e.status !== undefined) {
+          if (
+            e.status === 500 ||
+            e.status === 502 ||
+            e.status === 503 ||
+            e.status === 504
+          ) {
+            setAdminedTournamentsError(
+              `Failed to get tournaments from start.gg: ${e.status}. You may retry.`,
+            );
+          } else {
+            setAdminedTournamentsError(
+              `Failed to get tournaments from start.gg: ${e.status}.`,
+            );
+          }
+        }
+      } else {
+        setAdminedTournamentsError(
+          'Failed to get tournaments from start.gg. You may be offline.',
+        );
+      }
+    } finally {
+      setGettingAdminedTournaments(false);
+    }
+  };
+
+  const [localTournaments, setLocalTournaments] = useState<AdminedTournament[]>(
+    [],
+  );
   const [tournament, setTournament] = useState<RendererTournament | null>(null);
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
@@ -275,10 +317,10 @@ export default function Tournament() {
       setTournament(newTournament);
     });
     const inner = async () => {
-      const adminedTournamentsPromise = window.electron.getAdminedTournaments();
+      const localTournamentsPromise = window.electron.getLocalTournaments();
       const currentTournamentPromise = window.electron.getCurrentTournament();
-      setAdminedTournaments(await adminedTournamentsPromise);
-      setGettingAdminedTournaments(false);
+
+      setLocalTournaments(await localTournamentsPromise);
       const currentTournament = await currentTournamentPromise;
       if (currentTournament) {
         setTournament(currentTournament);
@@ -295,10 +337,10 @@ export default function Tournament() {
     setError(message);
     setErrorDialogOpen(true);
   };
-  const set = async (slug: string) => {
+  const get = async (slug: string) => {
     setSettingTournament(true);
     try {
-      await window.electron.setTournament(slug);
+      await window.electron.getTournament(slug);
       setOpen(false);
     } catch (e: any) {
       const message = e instanceof Error ? e.message : e;
@@ -306,6 +348,12 @@ export default function Tournament() {
     } finally {
       setSettingTournament(false);
     }
+  };
+  const set = async (id: number, slug: string) => {
+    setSettingTournament(true);
+    await window.electron.setTournament(id, slug);
+    setOpen(false);
+    setSettingTournament(false);
   };
 
   const [reportSet, setReportSet] = useState<RendererSet | null>(null);
@@ -330,12 +378,16 @@ export default function Tournament() {
           variant="contained"
           onClick={() => {
             setOpen(true);
+            if (!triedAdminedTournaments) {
+              getAdminedTournaments();
+            }
           }}
         >
           Set tournament
         </Button>
         <Settings />
         <Dialog
+          fullWidth
           open={open}
           onClose={() => {
             setOpen(false);
@@ -343,11 +395,31 @@ export default function Tournament() {
         >
           <DialogTitle>Set tournament</DialogTitle>
           <DialogContent>
+            {localTournaments.length > 0 && (
+              <>
+                <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
+                  Local tournaments
+                </Box>
+                {localTournaments.map((localTournament) => (
+                  <ListItemButton
+                    key={localTournament.slug}
+                    onClick={async () => {
+                      await set(localTournament.id, localTournament.slug);
+                    }}
+                  >
+                    <ListItemText>{localTournament.name}</ListItemText>
+                  </ListItemButton>
+                ))}
+              </>
+            )}
+            <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
+              Fetch from start.gg
+            </Box>
             <form
               style={{
                 alignItems: 'center',
                 display: 'flex',
-                marginTop: '8px',
+                margin: '8px 4px',
                 gap: '8px',
               }}
               onSubmit={async (event: FormEvent<HTMLFormElement>) => {
@@ -358,7 +430,7 @@ export default function Tournament() {
                 event.preventDefault();
                 event.stopPropagation();
                 if (newSlug) {
-                  await set(newSlug);
+                  await get(newSlug);
                 }
               }}
             >
@@ -378,25 +450,44 @@ export default function Tournament() {
               >
                 Get!
               </Button>
+              <Button
+                disabled={gettingAdminedTournaments}
+                endIcon={
+                  gettingAdminedTournaments ? (
+                    <CircularProgress size="24px" />
+                  ) : (
+                    <Refresh />
+                  )
+                }
+                onClick={getAdminedTournaments}
+                variant="contained"
+              >
+                Refresh
+              </Button>
             </form>
             {gettingAdminedTournaments ? (
               <Stack direction="row" marginTop="8px" spacing="8px">
                 <CircularProgress size="24px" />
-                <DialogContentText>
-                  Getting admined tournaments...
-                </DialogContentText>
+                <DialogContentText>Getting tournaments...</DialogContentText>
               </Stack>
             ) : (
-              adminedTournaments.map((adminedTournament) => (
-                <ListItemButton
-                  key={adminedTournament.slug}
-                  onClick={async () => {
-                    await set(adminedTournament.slug);
-                  }}
-                >
-                  <ListItemText>{adminedTournament.name}</ListItemText>
-                </ListItemButton>
-              ))
+              <>
+                {adminedTournamentsError.length > 0 && (
+                  <Alert severity="error" style={{ marginTop: '8px' }}>
+                    {adminedTournamentsError}
+                  </Alert>
+                )}
+                {adminedTournaments.map((adminedTournament) => (
+                  <ListItemButton
+                    key={adminedTournament.slug}
+                    onClick={async () => {
+                      await get(adminedTournament.slug);
+                    }}
+                  >
+                    <ListItemText>{adminedTournament.name}</ListItemText>
+                  </ListItemButton>
+                ))}
+              </>
             )}
           </DialogContent>
         </Dialog>

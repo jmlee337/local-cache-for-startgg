@@ -3,6 +3,7 @@ import path from 'path';
 import { app } from 'electron';
 import { mkdirSync } from 'fs';
 import {
+  AdminedTournament,
   ApiSetUpdate,
   ApiTransaction,
   DbEntrant,
@@ -975,4 +976,15 @@ export function getTournament(id: number): RendererTournament {
         })),
     })),
   };
+}
+
+export function getTournaments() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  // todo sort by startAt
+  return db!
+    .prepare('SELECT * FROM tournaments ORDER BY id DESC')
+    .all() as AdminedTournament[];
 }

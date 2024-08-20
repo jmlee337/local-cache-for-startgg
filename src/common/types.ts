@@ -1,4 +1,6 @@
+// TODO field for fully synced
 export type AdminedTournament = {
+  id: number;
   slug: string;
   name: string;
 };
@@ -222,3 +224,20 @@ export type ApiSetUpdate = {
   entrant2Score: number | null;
   winnerId: number | null;
 };
+
+export class ApiError extends Error {
+  public status?: number;
+
+  public gqlErrors: { message: string }[];
+
+  constructor(e: {
+    message?: string;
+    options?: ErrorOptions;
+    status?: number;
+    gqlErrors?: { message: string }[];
+  }) {
+    super(e.message, e.options);
+    this.status = e.status;
+    this.gqlErrors = e.gqlErrors ?? [];
+  }
+}

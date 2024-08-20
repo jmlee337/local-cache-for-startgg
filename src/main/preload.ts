@@ -8,12 +8,16 @@ const electronHandler = {
   getAutoSync: (): Promise<boolean> => ipcRenderer.invoke('getAutoSync'),
   setAutoSync: (autoSync: boolean) =>
     ipcRenderer.invoke('setAutoSync', autoSync),
+  getLocalTournaments: (): Promise<AdminedTournament[]> =>
+    ipcRenderer.invoke('getLocalTournaments'),
   getAdminedTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getAdminedTournaments'),
   getCurrentTournament: (): Promise<RendererTournament | undefined> =>
     ipcRenderer.invoke('getCurrentTournament'),
-  setTournament: (slug: string): Promise<boolean> =>
-    ipcRenderer.invoke('setTournament', slug),
+  getTournament: (slug: string): Promise<void> =>
+    ipcRenderer.invoke('getTournament', slug),
+  setTournament: (id: number, slug: string): Promise<void> =>
+    ipcRenderer.invoke('setTournament', id, slug),
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
   reportSet: (

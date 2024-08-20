@@ -8,16 +8,17 @@ import {
 import Store from 'electron-store';
 import {
   getAdminedTournaments,
+  getApiTournament,
   loadEvent,
   onTransaction,
   queueTransaction,
   setApiKey,
-  setTournament,
 } from './startgg';
 import {
   dbInit,
   deleteTransaction,
   getTournament,
+  getTournaments,
   insertTransaction,
   reportSet,
 } from './db';
@@ -73,6 +74,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
+  ipcMain.removeHandler('getLocalTournaments');
+  ipcMain.handle('getLocalTournaments', getTournaments);
+
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
     return getAdminedTournaments();
@@ -86,11 +90,25 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     return getTournament(tournamentId);
   });
 
+  ipcMain.removeHandler('getTournament');
+  ipcMain.handle(
+    'getTournament',
+    async (event: IpcMainInvokeEvent, slug: string) => {
+      tournamentId = await getApiTournament(slug);
+      updateClients();
+    },
+  );
+
   ipcMain.removeHandler('setTournament');
   ipcMain.handle(
     'setTournament',
-    async (event: IpcMainInvokeEvent, slug: string) => {
-      tournamentId = await setTournament(slug);
+    async (event: IpcMainInvokeEvent, id: number, slug: string) => {
+      try {
+        await getApiTournament(slug);
+      } catch {
+        // ignore
+      }
+      tournamentId = id;
       updateClients();
     },
   );
