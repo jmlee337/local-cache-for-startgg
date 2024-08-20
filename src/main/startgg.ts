@@ -70,6 +70,7 @@ const GET_ADMINED_TOURNAMENTS_QUERY = `
           id
           slug
           name
+          startAt
         }
       }
     }
@@ -85,6 +86,8 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
     id: tournament.id,
     slug: tournament.slug.slice(11),
     name: tournament.name,
+    isSynced: true,
+    startAt: tournament.startAt,
   }));
 }
 
@@ -121,8 +124,9 @@ export async function getApiTournament(slug: string) {
   const { id } = json.entities.tournament;
   const tournament: DbTournament = {
     id,
-    name: json.entities.tournament.name,
     slug,
+    name: json.entities.tournament.name,
+    startAt: json.entities.tournament.startAt,
   };
   const events: DbEvent[] = (json.entities.event as any[])
     .filter((event) => {
@@ -448,6 +452,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
             ),
         )
         .map((set): DbSet => {
+          set.tournamentId = tournamentId;
           // correct placeholder entrantIds
           if (!Number.isInteger(set.entrant1Id)) {
             set.entrant1Id = null;

@@ -28,7 +28,7 @@ export function dbInit() {
   db = new DatabaseContstructor(path.join(docsPath, 'db.sqlite3'));
   db.pragma('journal_mode = WAL');
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS tournaments (id INTEGER PRIMARY KEY, slug TEXT, name TEXT)',
+    'CREATE TABLE IF NOT EXISTS tournaments (id INTEGER PRIMARY KEY, slug TEXT, name TEXT, startAt INTEGER)',
   ).run();
   db.prepare(
     'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, tournamentId INTEGER, name TEXT, isOnline INTEGER)',
@@ -45,6 +45,7 @@ export function dbInit() {
       phaseGroupId INTEGER,
       phaseId INTEGER,
       eventId INTEGER,
+      tournamentId, INTEGER,
       callOrder REAL,
       fullRoundText TEXT,
       identifier TEXT,
@@ -83,6 +84,7 @@ export function dbInit() {
       phaseGroupId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
       eventId INTEGER NOT NULL,
+      tournamentId INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL,
       isCrossPhase INTEGER NOT NULL,
       statePresent INTEGER,
@@ -159,7 +161,7 @@ export function dbInit() {
 }
 
 const TOURNAMENT_UPSERT_SQL =
-  'REPLACE INTO tournaments (id, name, slug) VALUES (@id, @name, @slug)';
+  'REPLACE INTO tournaments (id, name, slug, startAt) VALUES (@id, @name, @slug, @startAt)';
 const EVENT_UPSERT_SQL =
   'REPLACE INTO events (id, tournamentId, name, isOnline) VALUES (@id, @tournamentId, @name, @isOnline)';
 export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
@@ -265,6 +267,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   phaseGroupId,
   phaseId,
   eventId,
+  tournamentId,
   callOrder,
   fullRoundText,
   identifier,
@@ -299,6 +302,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @phaseGroupId,
   @phaseId,
   @eventId,
+  @tournamentId,
   @callOrder,
   @fullRoundText,
   @identifier,
@@ -372,6 +376,7 @@ type ProgressionSet = {
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
+  tournamentId: number;
   isCrossPhase: boolean;
   entrantNum: 1 | 2;
   entrantId: number;
@@ -421,6 +426,7 @@ export function reportSet(
     phaseGroupId: number,
     phaseId: number,
     eventId: number,
+    tournamentId: number,
     entrantNum: 1 | 2,
     prereqCondition: string | null,
   ) => {
@@ -441,6 +447,7 @@ export function reportSet(
         phaseGroupId,
         phaseId,
         eventId,
+        tournamentId,
         isCrossPhase: false,
         entrantNum,
         entrantId: winnerId,
@@ -457,6 +464,7 @@ export function reportSet(
         phaseGroupId,
         phaseId,
         eventId,
+        tournamentId,
         isCrossPhase: false,
         entrantNum,
         entrantId: loserId,
@@ -485,6 +493,7 @@ export function reportSet(
         dbSet.phaseGroupId,
         dbSet.phaseId,
         dbSet.eventId,
+        dbSet.tournamentId,
         1,
         dbSet.entrant1PrereqCondition,
       );
@@ -495,6 +504,7 @@ export function reportSet(
         dbSet.phaseGroupId,
         dbSet.phaseId,
         dbSet.eventId,
+        dbSet.tournamentId,
         2,
         dbSet.entrant2PrereqCondition,
       );
@@ -517,6 +527,7 @@ export function reportSet(
         phaseGroupId: affectedSet.phaseGroupId,
         phaseId: affectedSet.phaseId,
         eventId: affectedSet.eventId,
+        tournamentId: affectedSet.tournamentId,
         isCrossPhase: true,
         entrantNum: affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
         entrantId: winnerId,
@@ -540,6 +551,7 @@ export function reportSet(
         phaseGroupId: affectedSet.phaseGroupId,
         phaseId: affectedSet.phaseId,
         eventId: affectedSet.eventId,
+        tournamentId: affectedSet.tournamentId,
         isCrossPhase: true,
         entrantNum: affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
         entrantId: loserId,
@@ -554,6 +566,7 @@ export function reportSet(
           phaseGroupId,
           phaseId,
           eventId,
+          tournamentId,
           transactionNum,
           isCrossPhase,
           statePresent,
@@ -569,6 +582,7 @@ export function reportSet(
           @phaseGroupId,
           @phaseId,
           @eventId,
+          @tournamentId,
           @transactionNum,
           @isCrossPhase,
           1,
@@ -586,6 +600,7 @@ export function reportSet(
         phaseGroupId: set.phaseGroupId,
         phaseId: set.phaseId,
         eventId: set.eventId,
+        tournamentId: set.tournamentId,
         transactionNum,
         isCrossPhase: 0,
         state: 3,
@@ -601,6 +616,7 @@ export function reportSet(
             phaseGroupId,
             phaseId,
             eventId,
+            tournamentId,
             transactionNum,
             isCrossPhase,
             entrant${wProgressionSet.entrantNum}IdPresent,
@@ -610,6 +626,7 @@ export function reportSet(
             @phaseGroupId,
             @phaseId,
             @eventId,
+            @tournamentId,
             @transactionNum,
             @isCrossPhase,
             1,
@@ -621,6 +638,7 @@ export function reportSet(
           phaseGroupId: wProgressionSet.phaseGroupId,
           phaseId: wProgressionSet.phaseId,
           eventId: wProgressionSet.eventId,
+          tournamentId: wProgressionSet.tournamentId,
           transactionNum,
           isCrossPhase: wProgressionSet.isCrossPhase ? 1 : 0,
           entrantId: wProgressionSet.entrantId,
@@ -634,6 +652,7 @@ export function reportSet(
             phaseGroupId,
             phaseId,
             eventId,
+            tournamentId,
             transactionNum,
             isCrossPhase,
             entrant${lProgressionSet.entrantNum}IdPresent,
@@ -643,6 +662,7 @@ export function reportSet(
             @phaseGroupId,
             @phaseId,
             @eventId,
+            @tournamentId,
             @transactionNum,
             @isCrossPhase,
             1,
@@ -654,6 +674,7 @@ export function reportSet(
           phaseGroupId: lProgressionSet.phaseGroupId,
           phaseId: lProgressionSet.phaseId,
           eventId: lProgressionSet.eventId,
+          tournamentId: lProgressionSet.tournamentId,
           transactionNum,
           isCrossPhase: lProgressionSet.isCrossPhase ? 1 : 0,
           entrantId: lProgressionSet.entrantId,
@@ -983,8 +1004,15 @@ export function getTournaments() {
     throw new Error('not init');
   }
 
-  // todo sort by startAt
-  return db!
-    .prepare('SELECT * FROM tournaments ORDER BY id DESC')
-    .all() as AdminedTournament[];
+  const dbTournaments = db!
+    .prepare('SELECT * FROM tournaments ORDER BY startAt DESC')
+    .all() as DbTournament[];
+  return dbTournaments.map((tournament): AdminedTournament => {
+    const numSetMutations = db!
+      .prepare(
+        'SELECT COUNT(id) FROM setMutations WHERE tournamentId = @tournamentId',
+      )
+      .get({ tournamentId: tournament.id }) as { 'COUNT(id)': number };
+    return { ...tournament, isSynced: numSetMutations['COUNT(id)'] === 0 };
+  });
 }

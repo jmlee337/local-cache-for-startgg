@@ -1,4 +1,5 @@
 import {
+  Close,
   CloudDone,
   CloudOff,
   Download,
@@ -17,7 +18,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  DialogContentText,
   DialogTitle,
   IconButton,
   InputBase,
@@ -269,10 +269,8 @@ export default function Tournament() {
   const [adminedTournaments, setAdminedTournaments] = useState<
     AdminedTournament[]
   >([]);
-  const [triedAdminedTournaments, setTriedAdminedTournaments] = useState(false);
   const [adminedTournamentsError, setAdminedTournamentsError] = useState('');
   const getAdminedTournaments = async () => {
-    setTriedAdminedTournaments(true);
     setGettingAdminedTournaments(true);
     try {
       setAdminedTournaments(await window.electron.getAdminedTournaments());
@@ -304,10 +302,14 @@ export default function Tournament() {
       setGettingAdminedTournaments(false);
     }
   };
-
   const [localTournaments, setLocalTournaments] = useState<AdminedTournament[]>(
     [],
   );
+  const refresh = async () => {
+    setLocalTournaments(await window.electron.getLocalTournaments());
+    getAdminedTournaments();
+  };
+
   const [tournament, setTournament] = useState<RendererTournament | null>(null);
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
@@ -317,11 +319,7 @@ export default function Tournament() {
       setTournament(newTournament);
     });
     const inner = async () => {
-      const localTournamentsPromise = window.electron.getLocalTournaments();
-      const currentTournamentPromise = window.electron.getCurrentTournament();
-
-      setLocalTournaments(await localTournamentsPromise);
-      const currentTournament = await currentTournamentPromise;
+      const currentTournament = await window.electron.getCurrentTournament();
       if (currentTournament) {
         setTournament(currentTournament);
       }
@@ -377,10 +375,8 @@ export default function Tournament() {
         <Button
           variant="contained"
           onClick={() => {
+            refresh();
             setOpen(true);
-            if (!triedAdminedTournaments) {
-              getAdminedTournaments();
-            }
           }}
         >
           Set tournament
@@ -393,7 +389,27 @@ export default function Tournament() {
             setOpen(false);
           }}
         >
-          <DialogTitle>Set tournament</DialogTitle>
+          <DialogTitle
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              paddingRight: '32px',
+            }}
+          >
+            Set tournament
+            <Tooltip title="Refresh">
+              <IconButton
+                disabled={gettingAdminedTournaments}
+                onClick={refresh}
+              >
+                {gettingAdminedTournaments ? (
+                  <CircularProgress size="24px" />
+                ) : (
+                  <Refresh />
+                )}
+              </IconButton>
+            </Tooltip>
+          </DialogTitle>
           <DialogContent>
             {localTournaments.length > 0 && (
               <>
@@ -403,11 +419,30 @@ export default function Tournament() {
                 {localTournaments.map((localTournament) => (
                   <ListItemButton
                     key={localTournament.slug}
+                    style={{ gap: '8px', padding: '4px 8px 4px 16px' }}
                     onClick={async () => {
                       await set(localTournament.id, localTournament.slug);
                     }}
                   >
                     <ListItemText>{localTournament.name}</ListItemText>
+                    {localTournament.isSynced ? (
+                      <Tooltip title="Fully synced">
+                        <CloudDone />
+                      </Tooltip>
+                    ) : (
+                      <Tooltip title="Not fully synced">
+                        <CloudOff />
+                      </Tooltip>
+                    )}
+                    <Tooltip title="Delete">
+                      <IconButton
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                      >
+                        <Close />
+                      </IconButton>
+                    </Tooltip>
                   </ListItemButton>
                 ))}
               </>
@@ -450,45 +485,22 @@ export default function Tournament() {
               >
                 Get!
               </Button>
-              <Button
-                disabled={gettingAdminedTournaments}
-                endIcon={
-                  gettingAdminedTournaments ? (
-                    <CircularProgress size="24px" />
-                  ) : (
-                    <Refresh />
-                  )
-                }
-                onClick={getAdminedTournaments}
-                variant="contained"
-              >
-                Refresh
-              </Button>
             </form>
-            {gettingAdminedTournaments ? (
-              <Stack direction="row" marginTop="8px" spacing="8px">
-                <CircularProgress size="24px" />
-                <DialogContentText>Getting tournaments...</DialogContentText>
-              </Stack>
-            ) : (
-              <>
-                {adminedTournamentsError.length > 0 && (
-                  <Alert severity="error" style={{ marginTop: '8px' }}>
-                    {adminedTournamentsError}
-                  </Alert>
-                )}
-                {adminedTournaments.map((adminedTournament) => (
-                  <ListItemButton
-                    key={adminedTournament.slug}
-                    onClick={async () => {
-                      await get(adminedTournament.slug);
-                    }}
-                  >
-                    <ListItemText>{adminedTournament.name}</ListItemText>
-                  </ListItemButton>
-                ))}
-              </>
+            {adminedTournamentsError.length > 0 && (
+              <Alert severity="error" style={{ marginTop: '8px' }}>
+                {adminedTournamentsError}
+              </Alert>
             )}
+            {adminedTournaments.map((adminedTournament) => (
+              <ListItemButton
+                key={adminedTournament.slug}
+                onClick={async () => {
+                  await get(adminedTournament.slug);
+                }}
+              >
+                <ListItemText>{adminedTournament.name}</ListItemText>
+              </ListItemButton>
+            ))}
           </DialogContent>
         </Dialog>
       </Stack>

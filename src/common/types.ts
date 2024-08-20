@@ -3,6 +3,8 @@ export type AdminedTournament = {
   id: number;
   slug: string;
   name: string;
+  isSynced: boolean;
+  startAt: number;
 };
 
 export type RendererSet = {
@@ -78,6 +80,7 @@ export type DbSetMutation = {
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
+  tournamentId: number;
   transactionNum: number;
   isCrossPhase: 0 | 1;
 
@@ -106,6 +109,7 @@ export type DbSet = {
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
+  tournamentId: number;
 
   // locally immutable
   callOrder: number;
@@ -172,6 +176,7 @@ export type DbTournament = {
   id: number;
   name: string;
   slug: string;
+  startAt: number;
 };
 
 export type DbSelections = {
