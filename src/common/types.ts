@@ -82,7 +82,7 @@ export type DbSetMutation = {
   eventId: number;
   tournamentId: number;
   transactionNum: number;
-  isCrossPhase: 0 | 1;
+  isCrossPhase: null | 1;
 
   // locally mutable
   statePresent: null | 1;
@@ -216,8 +216,8 @@ export type ApiTransaction = {
   setId: number;
   isReport: boolean;
   winnerId?: number;
-  isDQ: boolean;
-  gameData: ApiGameData[];
+  isDQ?: boolean;
+  gameData?: ApiGameData[];
 };
 
 export type ApiSetUpdate = {

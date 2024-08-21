@@ -555,7 +555,7 @@ const UPDATE_SET_INNER = `
 `;
 const START_SET_MUTATION = `
   mutation startSet($setId: ID!) {
-    markSetCalled(setId: $setId) {${UPDATE_SET_INNER}}
+    markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
 async function startSet(setId: number): Promise<ApiSetUpdate> {
@@ -647,8 +647,8 @@ async function tryNextTransaction() {
       const updates = await reportSet(
         transaction.setId,
         transaction.winnerId!,
-        transaction.isDQ,
-        transaction.gameData,
+        transaction.isDQ!,
+        transaction.gameData!,
       );
       emitter!.emit(
         'transaction',

@@ -20,6 +20,7 @@ const electronHandler = {
     ipcRenderer.invoke('setTournament', id, slug),
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
+  startSet: (id: number): Promise<void> => ipcRenderer.invoke('startSet', id),
   reportSet: (
     id: number,
     winnerId: number,

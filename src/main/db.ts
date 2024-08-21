@@ -86,7 +86,7 @@ export function dbInit() {
       eventId INTEGER NOT NULL,
       tournamentId INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL,
-      isCrossPhase INTEGER NOT NULL,
+      isCrossPhase INTEGER,
       statePresent INTEGER,
       state INTEGER,
       entrant1IdPresent INTEGER,
@@ -371,6 +371,67 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   set.isLocal = 1;
 }
 
+export function startSet(id: number, transactionNum: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+    | DbSet
+    | undefined;
+  if (!set) {
+    throw new Error(`no such set: ${id}`);
+  }
+  (
+    db!
+      .prepare('SELECT * FROM setMutations WHERE setId = @id')
+      .all({ id }) as DbSetMutation[]
+  ).forEach((setMutation) => {
+    applyMutation(set, setMutation);
+  });
+  if (set.state === 3) {
+    throw new Error(`set is already completed: ${id}`);
+  }
+  if (set.state === 2) {
+    return;
+  }
+  if (set.state !== 1 && set.state !== 6) {
+    throw new Error(`set: ${id} has unexpected state: ${set.state}`);
+  }
+
+  db!
+    .prepare(
+      `INSERT INTO setMutations (
+        setId,
+        phaseGroupId,
+        phaseId,
+        eventId,
+        tournamentId,
+        transactionNum,
+        statePresent,
+        state
+      ) VALUES (
+        @id,
+        @phaseGroupId,
+        @phaseId,
+        @eventId,
+        @tournamentId,
+        @transactionNum,
+        1,
+        @state
+      )`,
+    )
+    .run({
+      id,
+      phaseGroupId: set.phaseGroupId,
+      phaseId: set.phaseId,
+      eventId: set.eventId,
+      tournamentId: set.tournamentId,
+      transactionNum,
+      state: 2,
+    });
+}
+
 type ProgressionSet = {
   id: number;
   phaseGroupId: number;
@@ -568,7 +629,6 @@ export function reportSet(
           eventId,
           tournamentId,
           transactionNum,
-          isCrossPhase,
           statePresent,
           state,
           entrant1ScorePresent,
@@ -584,7 +644,6 @@ export function reportSet(
           @eventId,
           @tournamentId,
           @transactionNum,
-          @isCrossPhase,
           1,
           @state,
           1,
@@ -602,7 +661,6 @@ export function reportSet(
         eventId: set.eventId,
         tournamentId: set.tournamentId,
         transactionNum,
-        isCrossPhase: 0,
         state: 3,
         entrant1Score,
         entrant2Score,
@@ -640,7 +698,7 @@ export function reportSet(
           eventId: wProgressionSet.eventId,
           tournamentId: wProgressionSet.tournamentId,
           transactionNum,
-          isCrossPhase: wProgressionSet.isCrossPhase ? 1 : 0,
+          isCrossPhase: wProgressionSet.isCrossPhase ? 1 : null,
           entrantId: wProgressionSet.entrantId,
         });
     }
@@ -676,7 +734,7 @@ export function reportSet(
           eventId: lProgressionSet.eventId,
           tournamentId: lProgressionSet.tournamentId,
           transactionNum,
-          isCrossPhase: lProgressionSet.isCrossPhase ? 1 : 0,
+          isCrossPhase: lProgressionSet.isCrossPhase ? 1 : null,
           entrantId: lProgressionSet.entrantId,
         });
     }
@@ -704,7 +762,7 @@ export function insertTransaction(apiTransaction: ApiTransaction) {
         winnerId: apiTransaction.winnerId ?? null,
         isDQ: apiTransaction.isDQ ? 1 : 0,
       });
-    apiTransaction.gameData.forEach((gameData) => {
+    apiTransaction.gameData?.forEach((gameData) => {
       db!
         .prepare(
           `INSERT INTO gameData (

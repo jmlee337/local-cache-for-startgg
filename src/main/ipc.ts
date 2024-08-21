@@ -21,6 +21,7 @@ import {
   getTournaments,
   insertTransaction,
   reportSet,
+  startSet,
 } from './db';
 import { ApiTransaction } from '../common/types';
 
@@ -122,6 +123,23 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
+  ipcMain.removeHandler('startSet');
+  ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {
+    const currentTransactionNum = transactionNum;
+    transactionNum += 1;
+    startSet(id, currentTransactionNum);
+    const apiTransaction: ApiTransaction = {
+      transactionNum: currentTransactionNum,
+      setId: id,
+      isReport: false,
+    };
+    insertTransaction(apiTransaction);
+    if (autoSync) {
+      queueTransaction(apiTransaction);
+    }
+    updateClients();
+  });
+
   ipcMain.removeHandler('reportSet');
   ipcMain.handle(
     'reportSet',
@@ -142,12 +160,12 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         currentTransactionNum,
       );
       const apiTransaction: ApiTransaction = {
+        transactionNum: currentTransactionNum,
         setId: id,
         isReport: true,
         winnerId,
         isDQ: entrant1Score === -1 || entrant2Score === -1,
         gameData: [],
-        transactionNum: currentTransactionNum,
       };
       insertTransaction(apiTransaction);
       if (autoSync) {
