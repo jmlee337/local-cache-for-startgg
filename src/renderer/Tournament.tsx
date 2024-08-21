@@ -1,4 +1,5 @@
 import {
+  BackupOutlined,
   Close,
   CloudDone,
   CloudOff,
@@ -79,6 +80,13 @@ function SetListItemButton({
   set: RendererSet;
   reportSet: (set: RendererSet) => void;
 }) {
+  let titleStart = <CloudOff fontSize="small" />;
+  if (set.syncState === 1) {
+    titleStart = <BackupOutlined fontSize="small" />;
+  } else if (set.syncState === 0) {
+    titleStart = <CloudDone fontSize="small" />;
+  }
+
   let titleEnd = <Box width="20px" />;
   if (set.state === 2) {
     titleEnd = (
@@ -134,11 +142,7 @@ function SetListItemButton({
     >
       <Stack alignItems="stretch">
         <Stack direction="row" alignItems="center" gap="4px">
-          {set.isLocal ? (
-            <CloudOff fontSize="small" />
-          ) : (
-            <CloudDone fontSize="small" />
-          )}
+          {titleStart}
           <Typography flexGrow={1} textAlign="center" variant="caption">
             {set.fullRoundText} ({set.identifier})
           </Typography>

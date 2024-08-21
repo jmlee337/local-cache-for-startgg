@@ -21,7 +21,7 @@ export type RendererSet = {
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
   winnerId: number | null;
-  isLocal: 0 | 1;
+  syncState: 0 | 1 | 2; // 0: synced, 1: queued, 2: local
 };
 
 export type RendererPool = {
@@ -82,6 +82,7 @@ export type DbSetMutation = {
   eventId: number;
   tournamentId: number;
   transactionNum: number;
+  queuedMs: number;
   isCrossPhase: null | 1;
 
   // locally mutable
@@ -145,8 +146,8 @@ export type DbSet = {
   // hopefully locally mutable
   streamId: number | null;
 
-  // we only store 0, but we modify after query to 1 via setMutation
-  isLocal: 0 | 1;
+  // we only store 0, but we modify after query via setMutation
+  syncState: 0 | 1 | 2; // 0: synced, 1: queued, 2: local
 };
 
 export type DbPool = {
@@ -196,7 +197,6 @@ export type DbGameData = {
 export type DbTransaction = {
   transactionNum: number;
   type: 2 | 3; // 2: start, 3: report
-  queuedMs: number;
   setId: number;
   winnerId: number | null;
   isDQ: 0 | 1;
@@ -215,7 +215,6 @@ export type ApiGameData = {
 export type ApiTransaction = {
   transactionNum: number;
   type: 2 | 3; // 2: start, 3: report
-  queuedMs: number;
   setId: number;
   winnerId?: number;
   isDQ?: boolean;

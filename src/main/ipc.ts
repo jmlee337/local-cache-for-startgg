@@ -24,6 +24,7 @@ import {
   getTournament,
   getTournaments,
   insertTransaction,
+  queueAllTransactions,
   reportSet,
   startSet,
 } from './db';
@@ -78,6 +79,10 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
       store.set('autoSync', newAutoSync);
       autoSync = newAutoSync;
+      if (autoSync && tournamentId) {
+        queueTransactions(queueAllTransactions(tournamentId));
+        updateClients();
+      }
     },
   );
 
@@ -135,11 +140,14 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {
     const currentTransactionNum = transactionNum;
     transactionNum += 1;
-    startSet(id, currentTransactionNum);
+    startSet(
+      id,
+      currentTransactionNum,
+      autoSync ? Date.now() : 0, // queuedMs
+    );
     const apiTransaction: ApiTransaction = {
       transactionNum: currentTransactionNum,
       type: 2,
-      queuedMs: autoSync ? Date.now() : 0,
       setId: id,
     };
     insertTransaction(apiTransaction);
@@ -167,11 +175,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         entrant1Score,
         entrant2Score,
         currentTransactionNum,
+        autoSync ? Date.now() : 0, // queuedMs
       );
       const apiTransaction: ApiTransaction = {
         transactionNum: currentTransactionNum,
         type: 3,
-        queuedMs: autoSync ? Date.now() : 0,
         setId: id,
         winnerId,
         isDQ: entrant1Score === -1 || entrant2Score === -1,

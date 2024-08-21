@@ -58,7 +58,10 @@ async function fetchGql(key: string, query: string, variables: any) {
   });
   const json = await response.json();
   if (json.errors) {
-    throw new ApiError({ gqlErrors: json.errors });
+    throw new ApiError({
+      message: json.errors.map((error: any) => error.message).join(', '),
+      gqlErrors: json.errors,
+    });
   }
 
   return json.data;
@@ -666,6 +669,14 @@ async function tryNextTransaction() {
   try {
     const updatedAt = Date.now() / 1000;
     if (transaction.type === 2) {
+      const update = await startSet(transaction.setId);
+      emitter!.emit(
+        'transaction',
+        transaction.transactionNum,
+        [update],
+        updatedAt,
+      );
+    } else if (transaction.type === 3) {
       const updates = await reportSet(
         transaction.setId,
         transaction.winnerId!,
@@ -676,14 +687,6 @@ async function tryNextTransaction() {
         'transaction',
         transaction.transactionNum,
         updates,
-        updatedAt,
-      );
-    } else if (transaction.type === 3) {
-      const update = await startSet(transaction.setId);
-      emitter!.emit(
-        'transaction',
-        transaction.transactionNum,
-        [update],
         updatedAt,
       );
     }

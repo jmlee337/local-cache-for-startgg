@@ -74,7 +74,7 @@ export function dbInit() {
       lProgressingPhaseId INTEGER,
       lProgressingName TEXT,
       updatedAt INTEGER,
-      isLocal INTEGER NOT NULL
+      syncState INTEGER NOT NULL
     )`,
   ).run();
   db.prepare(
@@ -86,6 +86,7 @@ export function dbInit() {
       eventId INTEGER NOT NULL,
       tournamentId INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL,
+      queuedMs INTEGER NOT NULL,
       isCrossPhase INTEGER,
       statePresent INTEGER,
       state INTEGER,
@@ -129,7 +130,6 @@ export function dbInit() {
     `CREATE TABLE IF NOT EXISTS transactions (
       transactionNum INTEGER PRIMARY KEY,
       type INTEGER NOT NULL,
-      queuedMs INTEGER NOT NULL,
       setId INTEGER NOT NULL,
       winnerId INTEGER,
       isDQ INTEGER
@@ -297,7 +297,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   lProgressingPhaseId,
   lProgressingName,
   updatedAt,
-  isLocal
+  syncState
 ) values (
   @id,
   @phaseGroupId,
@@ -369,10 +369,10 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   if (setMutation.streamIdPresent) {
     set.streamId = setMutation.streamId;
   }
-  set.isLocal = 1;
+  set.syncState = setMutation.queuedMs > 0 ? 1 : 2;
 }
 
-export function startSet(id: number, transactionNum: number) {
+export function startSet(id: number, transactionNum: number, queuedMs: number) {
   if (!db) {
     throw new Error('not init');
   }
@@ -409,6 +409,7 @@ export function startSet(id: number, transactionNum: number) {
         eventId,
         tournamentId,
         transactionNum,
+        queuedMs,
         statePresent,
         state
       ) VALUES (
@@ -418,6 +419,7 @@ export function startSet(id: number, transactionNum: number) {
         @eventId,
         @tournamentId,
         @transactionNum,
+        @queuedMs,
         1,
         @state
       )`,
@@ -429,6 +431,7 @@ export function startSet(id: number, transactionNum: number) {
       eventId: set.eventId,
       tournamentId: set.tournamentId,
       transactionNum,
+      queuedMs,
       state: 2,
     });
 }
@@ -449,6 +452,7 @@ export function reportSet(
   entrant1Score: number | null,
   entrant2Score: number | null,
   transactionNum: number,
+  queuedMs: number,
 ) {
   if (!db) {
     throw new Error('not init');
@@ -630,6 +634,7 @@ export function reportSet(
           eventId,
           tournamentId,
           transactionNum,
+          queuedMs,
           statePresent,
           state,
           entrant1ScorePresent,
@@ -645,6 +650,7 @@ export function reportSet(
           @eventId,
           @tournamentId,
           @transactionNum,
+          @queuedMs,
           1,
           @state,
           1,
@@ -662,6 +668,7 @@ export function reportSet(
         eventId: set.eventId,
         tournamentId: set.tournamentId,
         transactionNum,
+        queuedMs,
         state: 3,
         entrant1Score,
         entrant2Score,
@@ -677,6 +684,7 @@ export function reportSet(
             eventId,
             tournamentId,
             transactionNum,
+            queuedMs,
             isCrossPhase,
             entrant${wProgressionSet.entrantNum}IdPresent,
             entrant${wProgressionSet.entrantNum}Id
@@ -687,6 +695,7 @@ export function reportSet(
             @eventId,
             @tournamentId,
             @transactionNum,
+            @queuedMs,
             @isCrossPhase,
             1,
             @entrantId
@@ -699,6 +708,7 @@ export function reportSet(
           eventId: wProgressionSet.eventId,
           tournamentId: wProgressionSet.tournamentId,
           transactionNum,
+          queuedMs,
           isCrossPhase: wProgressionSet.isCrossPhase ? 1 : null,
           entrantId: wProgressionSet.entrantId,
         });
@@ -713,6 +723,7 @@ export function reportSet(
             eventId,
             tournamentId,
             transactionNum,
+            queuedMs,
             isCrossPhase,
             entrant${lProgressionSet.entrantNum}IdPresent,
             entrant${lProgressionSet.entrantNum}Id
@@ -723,6 +734,7 @@ export function reportSet(
             @eventId,
             @tournamentId,
             @transactionNum,
+            @queuedMs,
             @isCrossPhase,
             1,
             @entrantId
@@ -735,6 +747,7 @@ export function reportSet(
           eventId: lProgressionSet.eventId,
           tournamentId: lProgressionSet.tournamentId,
           transactionNum,
+          queuedMs,
           isCrossPhase: lProgressionSet.isCrossPhase ? 1 : null,
           entrantId: lProgressionSet.entrantId,
         });
@@ -751,15 +764,14 @@ export function insertTransaction(apiTransaction: ApiTransaction) {
     db!
       .prepare(
         `INSERT INTO transactions (
-          transactionNum, type, queuedMs, setId, winnerId, isDQ
+          transactionNum, type, setId, winnerId, isDQ
         ) VALUES (
-          @transactionNum, @type, @queuedMs, @setId, @winnerId, @isDQ
+          @transactionNum, @type, @setId, @winnerId, @isDQ
         )`,
       )
       .run({
         transactionNum: apiTransaction.transactionNum,
         type: apiTransaction.type,
-        queuedMs: apiTransaction.queuedMs,
         setId: apiTransaction.setId,
         winnerId: apiTransaction.winnerId ?? null,
         isDQ: apiTransaction.isDQ ? 1 : 0,
@@ -828,7 +840,6 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
   return {
     transactionNum: dbTransaction.transactionNum,
     type: dbTransaction.type,
-    queuedMs: dbTransaction.queuedMs,
     setId: dbTransaction.setId,
     winnerId: dbTransaction.winnerId ?? undefined,
     isDQ: dbTransaction.isDQ === 1,
@@ -851,24 +862,62 @@ export function getQueuedTransactions(tournamentId: number) {
       .prepare(
         `SELECT DISTINCT transactionNum
           FROM setMutations
-          WHERE tournamentId = @tournamentId
-          ORDER BY transactionNum ASC`,
+          WHERE tournamentId = @tournamentId AND queuedMs > 0
+          ORDER BY queuedMs ASC`,
       )
       .all({ tournamentId }) as { transactionNum: number }[]
   ).map(({ transactionNum }) => transactionNum);
 
-  const queuedTransactions: DbTransaction[] = [];
-  transactionNums.forEach((transactionNum) => {
+  return transactionNums.map((transactionNum) => {
     const transaction = db!
       .prepare(
         'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
       )
       .get({ transactionNum }) as DbTransaction | undefined;
-    if (transaction && transaction.queuedMs) {
-      queuedTransactions.push(transaction);
+    if (!transaction) {
+      throw new Error(`transaction not found: ${transactionNum}`);
     }
+    return toApiTransaction(transaction);
   });
-  return queuedTransactions.map(toApiTransaction);
+}
+
+export function queueAllTransactions(tournamentId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const transactionNums = (
+    db!
+      .prepare(
+        `SELECT DISTINCT transactionNum
+          FROM setMutations
+          WHERE tournamentId = @tournamentId AND queuedMs = 0
+          ORDER BY queuedMs ASC`,
+      )
+      .all({ tournamentId }) as { transactionNum: number }[]
+  ).map(({ transactionNum }) => transactionNum);
+
+  const apiTransactions = transactionNums.map((transactionNum) => {
+    const transaction = db!
+      .prepare(
+        'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
+      )
+      .get({ transactionNum }) as DbTransaction | undefined;
+    if (!transaction) {
+      throw new Error(`transaction not found: ${transactionNum}`);
+    }
+    return toApiTransaction(transaction);
+  });
+
+  db!
+    .prepare(
+      `UPDATE setMutations
+        SET queuedMs = @queuedMs
+        WHERE tournamentId = @tournamentId AND queuedMs = 0`,
+    )
+    .run({ queuedMs: Date.now(), tournamentId });
+
+  return apiTransactions;
 }
 
 export function deleteTransaction(
@@ -1064,7 +1113,7 @@ export function getTournament(id: number): RendererTournament {
                   entrant2PrereqStr: dbSet.entrant2PrereqStr,
                   entrant2Score: dbSet.entrant2Score,
                   winnerId: dbSet.winnerId,
-                  isLocal: dbSet.isLocal,
+                  syncState: dbSet.syncState,
                 };
               });
               return {
