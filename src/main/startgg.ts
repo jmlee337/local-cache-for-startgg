@@ -634,6 +634,7 @@ export function onTransaction(
   emitter.addListener('transaction', callback);
 }
 
+let consecutiveErrors = 0;
 const queue: ApiTransaction[] = [];
 async function tryNextTransaction() {
   if (queue.length === 0) {
@@ -665,12 +666,15 @@ async function tryNextTransaction() {
         updatedAt,
       );
     }
+    consecutiveErrors = 0;
     queue.shift();
+    if (queue.length > 0) {
+      setTimeout(tryNextTransaction, 1000);
+    }
   } catch (e: any) {
-    console.log(
-      `error when attempting ${JSON.stringify(transaction)}: ${e.message}`,
-    );
-    // TODO actually retry
+    consecutiveErrors += 1;
+    const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
+    setTimeout(tryNextTransaction, timeoutS * 1000);
   }
 }
 export function queueTransaction(transaction: ApiTransaction) {
