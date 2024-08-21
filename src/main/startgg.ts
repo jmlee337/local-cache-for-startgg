@@ -667,23 +667,10 @@ async function tryNextTransaction() {
     }
     queue.shift();
   } catch (e: any) {
-    if (
-      e instanceof ApiError &&
-      e.status !== undefined &&
-      (e.status === 500 ||
-        e.status === 502 ||
-        e.status === 503 ||
-        e.status === 504)
-    ) {
-      console.log(
-        `retryable error (${e.status}) when attempting ${JSON.stringify(
-          transaction,
-        )}`,
-      );
-      // TODO actually retry
-    } else {
-      throw e;
-    }
+    console.log(
+      `error when attempting ${JSON.stringify(transaction)}: ${e.message}`,
+    );
+    // TODO actually retry
   }
 }
 export function queueTransaction(transaction: ApiTransaction) {
