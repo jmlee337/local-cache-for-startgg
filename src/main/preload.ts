@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
-import { AdminedTournament, RendererTournament } from '../common/types';
+import {
+  AdminedTournament,
+  RendererTournament,
+  SyncResult,
+} from '../common/types';
 
 const electronHandler = {
   getApiKey: (): Promise<string> => ipcRenderer.invoke('getApiKey'),
@@ -28,6 +32,7 @@ const electronHandler = {
     entrant2Score: number | null,
   ): Promise<void> =>
     ipcRenderer.invoke('reportSet', id, winnerId, entrant1Score, entrant2Score),
+  getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
   onAdminedTournaments: (
     callback: (
       event: IpcRendererEvent,
@@ -36,6 +41,12 @@ const electronHandler = {
   ) => {
     ipcRenderer.removeAllListeners('adminedTournaments');
     ipcRenderer.on('adminedTournaments', callback);
+  },
+  onSyncResult: (
+    callback: (event: IpcRendererEvent, syncResult: SyncResult) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('syncResult');
+    ipcRenderer.on('syncResult', callback);
   },
   onTournament: (
     callback: (event: IpcRendererEvent, tournament: RendererTournament) => void,

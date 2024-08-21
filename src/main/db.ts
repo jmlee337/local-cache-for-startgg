@@ -128,8 +128,9 @@ export function dbInit() {
   db.prepare(
     `CREATE TABLE IF NOT EXISTS transactions (
       transactionNum INTEGER PRIMARY KEY,
+      type INTEGER NOT NULL,
+      queuedMs INTEGER NOT NULL,
       setId INTEGER NOT NULL,
-      isReport INTEGER NOT NULL,
       winnerId INTEGER,
       isDQ INTEGER
     )`,
@@ -750,15 +751,16 @@ export function insertTransaction(apiTransaction: ApiTransaction) {
     db!
       .prepare(
         `INSERT INTO transactions (
-          transactionNum, setId, isReport, winnerId, isDQ
+          transactionNum, type, queuedMs, setId, winnerId, isDQ
         ) VALUES (
-          @transactionNum, @setId, @isReport, @winnerId, @isDQ
+          @transactionNum, @type, @queuedMs, @setId, @winnerId, @isDQ
         )`,
       )
       .run({
         transactionNum: apiTransaction.transactionNum,
+        type: apiTransaction.type,
+        queuedMs: apiTransaction.queuedMs,
         setId: apiTransaction.setId,
-        isReport: apiTransaction.isReport ? 1 : 0,
         winnerId: apiTransaction.winnerId ?? null,
         isDQ: apiTransaction.isDQ ? 1 : 0,
       });
@@ -797,19 +799,8 @@ export function insertTransaction(apiTransaction: ApiTransaction) {
   })();
 }
 
-export function getTransaction(transactionNum: number): ApiTransaction {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  const dbTransaction = db!
-    .prepare(
-      'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
-    )
-    .get({ transactionNum }) as DbTransaction | undefined;
-  if (!dbTransaction) {
-    throw new Error('no such transaction');
-  }
+function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
+  const { transactionNum } = dbTransaction;
   const gameDatas = db!
     .prepare('SELECT * FROM gameData WHERE transactionNum = @transactionNum')
     .all({ transactionNum }) as DbGameData[];
@@ -836,8 +827,9 @@ export function getTransaction(transactionNum: number): ApiTransaction {
   });
   return {
     transactionNum: dbTransaction.transactionNum,
+    type: dbTransaction.type,
+    queuedMs: dbTransaction.queuedMs,
     setId: dbTransaction.setId,
-    isReport: dbTransaction.isReport === 1,
     winnerId: dbTransaction.winnerId ?? undefined,
     isDQ: dbTransaction.isDQ === 1,
     gameData: gameDatas.map((gameData) => ({
@@ -847,6 +839,36 @@ export function getTransaction(transactionNum: number): ApiTransaction {
       selections: gameNumToSelections.get(gameData.gameNum) || [],
     })),
   };
+}
+
+export function getQueuedTransactions(tournamentId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const transactionNums = (
+    db!
+      .prepare(
+        `SELECT DISTINCT transactionNum
+          FROM setMutations
+          WHERE tournamentId = @tournamentId
+          ORDER BY transactionNum ASC`,
+      )
+      .all({ tournamentId }) as { transactionNum: number }[]
+  ).map(({ transactionNum }) => transactionNum);
+
+  const queuedTransactions: DbTransaction[] = [];
+  transactionNums.forEach((transactionNum) => {
+    const transaction = db!
+      .prepare(
+        'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
+      )
+      .get({ transactionNum }) as DbTransaction | undefined;
+    if (transaction && transaction.queuedMs) {
+      queuedTransactions.push(transaction);
+    }
+  });
+  return queuedTransactions.map(toApiTransaction);
 }
 
 export function deleteTransaction(

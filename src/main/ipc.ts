@@ -9,14 +9,18 @@ import Store from 'electron-store';
 import {
   getAdminedTournaments,
   getApiTournament,
+  getSyncResult,
   loadEvent,
   onTransaction,
   queueTransaction,
+  queueTransactions,
   setApiKey,
+  startggInit,
 } from './startgg';
 import {
   dbInit,
   deleteTransaction,
+  getQueuedTransactions,
   getTournament,
   getTournaments,
   insertTransaction,
@@ -30,7 +34,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateClients = () => {
     mainWindow.webContents.send('tournament', getTournament(tournamentId));
   };
+
   let transactionNum = dbInit();
+  startggInit(mainWindow);
   onTransaction((completedTransactionNum, updates, updatedAt) => {
     deleteTransaction([completedTransactionNum], updates, updatedAt);
     updateClients();
@@ -96,6 +102,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'getTournament',
     async (event: IpcMainInvokeEvent, slug: string) => {
       tournamentId = await getApiTournament(slug);
+      queueTransactions(getQueuedTransactions(tournamentId));
       updateClients();
     },
   );
@@ -110,6 +117,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         // ignore
       }
       tournamentId = id;
+      queueTransactions(getQueuedTransactions(tournamentId));
       updateClients();
     },
   );
@@ -130,8 +138,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     startSet(id, currentTransactionNum);
     const apiTransaction: ApiTransaction = {
       transactionNum: currentTransactionNum,
+      type: 2,
+      queuedMs: autoSync ? Date.now() : 0,
       setId: id,
-      isReport: false,
     };
     insertTransaction(apiTransaction);
     if (autoSync) {
@@ -161,8 +170,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       );
       const apiTransaction: ApiTransaction = {
         transactionNum: currentTransactionNum,
+        type: 3,
+        queuedMs: autoSync ? Date.now() : 0,
         setId: id,
-        isReport: true,
         winnerId,
         isDQ: entrant1Score === -1 || entrant2Score === -1,
         gameData: [],
@@ -174,6 +184,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       updateClients();
     },
   );
+
+  ipcMain.removeHandler('getSyncResult');
+  ipcMain.handle('getSyncResult', getSyncResult);
 
   ipcMain.removeHandler('getAppVersion');
   ipcMain.handle('getAppVersion', () => app.getVersion());

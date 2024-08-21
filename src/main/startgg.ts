@@ -1,4 +1,5 @@
 import EventEmitter from 'events';
+import { BrowserWindow } from 'electron';
 import {
   AdminedTournament,
   ApiError,
@@ -12,6 +13,7 @@ import {
   DbPool,
   DbSet,
   DbTournament,
+  SyncResult,
 } from '../common/types';
 import {
   getPlayer,
@@ -618,6 +620,11 @@ async function reportSet(
   });
 }
 
+let mainWindow: BrowserWindow | undefined;
+export function startggInit(window: BrowserWindow) {
+  mainWindow = window;
+}
+
 let emitter: EventEmitter | undefined;
 export function onTransaction(
   callback: (
@@ -634,17 +641,31 @@ export function onTransaction(
   emitter.addListener('transaction', callback);
 }
 
+const syncResult: SyncResult = {
+  success: true,
+  errorSinceMs: 0,
+  lastError: '',
+  lastErrorMs: 0,
+  lastSuccessMs: 0,
+};
+export function getSyncResult() {
+  return syncResult;
+}
+
 let consecutiveErrors = 0;
 const queue: ApiTransaction[] = [];
 async function tryNextTransaction() {
   if (queue.length === 0) {
     return;
   }
-
   const transaction = queue[0];
+  if (transaction.type !== 2 && transaction.type !== 3) {
+    throw new Error(`unknown transaciton type: ${transaction.type}`);
+  }
+
   try {
     const updatedAt = Date.now() / 1000;
-    if (transaction.isReport) {
+    if (transaction.type === 2) {
       const updates = await reportSet(
         transaction.setId,
         transaction.winnerId!,
@@ -657,7 +678,7 @@ async function tryNextTransaction() {
         updates,
         updatedAt,
       );
-    } else {
+    } else if (transaction.type === 3) {
       const update = await startSet(transaction.setId);
       emitter!.emit(
         'transaction',
@@ -666,20 +687,42 @@ async function tryNextTransaction() {
         updatedAt,
       );
     }
+    syncResult.success = true;
+    syncResult.lastSuccessMs = Date.now();
+    mainWindow!.webContents.send('syncResult', syncResult);
+
     consecutiveErrors = 0;
     queue.shift();
     if (queue.length > 0) {
       setTimeout(tryNextTransaction, 1000);
     }
   } catch (e: any) {
+    const nowMs = Date.now();
+    syncResult.success = false;
+    syncResult.lastError = (e as Error).message;
+    syncResult.lastErrorMs = nowMs;
+    if (consecutiveErrors === 0) {
+      syncResult.errorSinceMs = nowMs;
+    }
+    mainWindow!.webContents.send('syncResult', syncResult);
+
     consecutiveErrors += 1;
     const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
     setTimeout(tryNextTransaction, timeoutS * 1000);
   }
 }
+
 export function queueTransaction(transaction: ApiTransaction) {
   queue.push(transaction);
   if (queue.length === 1) {
-    tryNextTransaction();
+    setImmediate(tryNextTransaction);
+  }
+}
+
+export function queueTransactions(transactions: ApiTransaction[]) {
+  const shouldTry = queue.length === 0;
+  queue.push(...transactions);
+  if (shouldTry) {
+    setImmediate(tryNextTransaction);
   }
 }

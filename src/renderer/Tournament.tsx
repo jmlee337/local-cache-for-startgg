@@ -3,6 +3,7 @@ import {
   CloudDone,
   CloudOff,
   Download,
+  Edit,
   EmojiEvents,
   Group,
   HourglassTop,
@@ -40,6 +41,7 @@ import {
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
 import IconButton from './IconButton';
+import Sync from './Sync';
 
 function SetEntrant({
   entrantName,
@@ -82,7 +84,7 @@ function SetListItemButton({
     titleEnd = (
       <HourglassTop
         fontSize="small"
-        style={{ color: '#388e3c', marginLeft: '5px', marginRight: '-5px' }}
+        style={{ color: '#0d8225', marginLeft: '5px', marginRight: '-5px' }}
       />
     );
   } else if (set.state === 3) {
@@ -96,7 +98,7 @@ function SetListItemButton({
     titleEnd = (
       <NotificationsActive
         fontSize="small"
-        style={{ color: '#fbc02d', marginLeft: '2px', marginRight: '-2px' }}
+        style={{ color: '#ffd500', marginLeft: '2px', marginRight: '-2px' }}
       />
     );
   }
@@ -362,26 +364,30 @@ export default function Tournament() {
   const [starting, setStarting] = useState(false);
   return (
     <Stack>
-      <InputBase
-        disabled
-        size="small"
-        value={
-          tournament
-            ? `${tournament.slug} (${tournament.id})`
-            : 'Set tournament'
-        }
-        style={{ flexGrow: 1, height: '48px' }}
-      />
+      <Stack direction="row" alignItems="center">
+        <InputBase
+          disabled
+          size="small"
+          value={
+            tournament
+              ? `${tournament.slug} (${tournament.id})`
+              : 'Set tournament'
+          }
+          style={{ flexGrow: 1, height: '48px' }}
+        />
+        <Tooltip placement="left" title="Set tournament">
+          <IconButton
+            onClick={() => {
+              refresh();
+              setOpen(true);
+            }}
+          >
+            <Edit />
+          </IconButton>
+        </Tooltip>
+      </Stack>
       <Stack direction="row" justifyContent="space-between" gap="8px">
-        <Button
-          variant="contained"
-          onClick={() => {
-            refresh();
-            setOpen(true);
-          }}
-        >
-          Set tournament
-        </Button>
+        <Sync />
         <Settings />
         <Dialog
           fullWidth

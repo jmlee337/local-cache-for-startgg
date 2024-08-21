@@ -195,8 +195,9 @@ export type DbGameData = {
 
 export type DbTransaction = {
   transactionNum: number;
+  type: 2 | 3; // 2: start, 3: report
+  queuedMs: number;
   setId: number;
-  isReport: 0 | 1;
   winnerId: number | null;
   isDQ: 0 | 1;
 };
@@ -213,8 +214,9 @@ export type ApiGameData = {
 
 export type ApiTransaction = {
   transactionNum: number;
+  type: 2 | 3; // 2: start, 3: report
+  queuedMs: number;
   setId: number;
-  isReport: boolean;
   winnerId?: number;
   isDQ?: boolean;
   gameData?: ApiGameData[];
@@ -246,3 +248,11 @@ export class ApiError extends Error {
     this.gqlErrors = e.gqlErrors ?? [];
   }
 }
+
+export type SyncResult = {
+  success: boolean;
+  errorSinceMs: number;
+  lastError: string;
+  lastErrorMs: number;
+  lastSuccessMs: number;
+};
