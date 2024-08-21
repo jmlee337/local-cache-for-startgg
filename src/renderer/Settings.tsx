@@ -8,10 +8,12 @@ import {
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { ContentCopy, Settings as SettingsIcon } from '@mui/icons-material';
+import IconButton from './IconButton';
 
 export default function Settings() {
   const [apiKey, setApiKey] = useState('');
@@ -39,15 +41,15 @@ export default function Settings() {
 
   return (
     <>
-      <Button
-        endIcon={<SettingsIcon />}
-        variant="contained"
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        Settings
-      </Button>
+      <Tooltip placement="left" title="Settings">
+        <IconButton
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          <SettingsIcon />
+        </IconButton>
+      </Tooltip>
       <Dialog
         fullWidth
         open={open}

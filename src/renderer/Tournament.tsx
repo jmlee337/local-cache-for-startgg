@@ -19,15 +19,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
-  IconButtonProps,
   InputBase,
   List,
   ListItem,
   ListItemButton,
   ListItemText,
   Stack,
-  styled,
   TextField,
   Tooltip,
   Typography,
@@ -42,10 +39,7 @@ import {
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
-
-const IconButtonPrimary = styled(IconButton)<IconButtonProps>(({ theme }) => ({
-  color: theme.palette.primary.main,
-}));
+import IconButton from './IconButton';
 
 function SetEntrant({
   entrantName,
@@ -209,7 +203,7 @@ function EventListItem({
           <CircularProgress size="24px" style={{ padding: '8px' }} />
         ) : (
           <Tooltip title={`Load event: ${event.name}`} placement="left">
-            <IconButtonPrimary
+            <IconButton
               onClick={async () => {
                 setLoading(true);
                 try {
@@ -223,7 +217,7 @@ function EventListItem({
               }}
             >
               <Download />
-            </IconButtonPrimary>
+            </IconButton>
           </Tooltip>
         )}
       </ListItem>
@@ -405,7 +399,7 @@ export default function Tournament() {
           >
             Set tournament
             <Tooltip title="Refresh">
-              <IconButtonPrimary
+              <IconButton
                 disabled={gettingAdminedTournaments}
                 onClick={refresh}
               >
@@ -414,7 +408,7 @@ export default function Tournament() {
                 ) : (
                   <Refresh />
                 )}
-              </IconButtonPrimary>
+              </IconButton>
             </Tooltip>
           </DialogTitle>
           <DialogContent>
@@ -442,13 +436,13 @@ export default function Tournament() {
                       </Tooltip>
                     )}
                     <Tooltip title="Delete">
-                      <IconButtonPrimary
+                      <IconButton
                         onClick={(e) => {
                           e.stopPropagation();
                         }}
                       >
                         <Close />
-                      </IconButtonPrimary>
+                      </IconButton>
                     </Tooltip>
                   </ListItemButton>
                 ))}
@@ -617,7 +611,7 @@ export default function Tournament() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <IconButtonPrimary
+          <IconButton
             color="primary"
             disabled={
               starting || !(reportSet?.state === 1 || reportSet?.state === 6)
@@ -635,7 +629,7 @@ export default function Tournament() {
             }}
           >
             {starting ? <CircularProgress size="24px" /> : <HourglassTop />}
-          </IconButtonPrimary>
+          </IconButton>
           <Button
             variant="contained"
             disabled={reporting || !reportWinnerId}
