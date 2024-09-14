@@ -86,6 +86,7 @@ export function dbInit() {
       eventId INTEGER NOT NULL,
       tournamentId INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL,
+      isReleased INTEGER,
       queuedMs INTEGER NOT NULL,
       isCrossPhase INTEGER,
       statePresent INTEGER,
@@ -369,7 +370,13 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   if (setMutation.streamIdPresent) {
     set.streamId = setMutation.streamId;
   }
-  set.syncState = setMutation.queuedMs > 0 ? 1 : 2;
+  if (setMutation.queuedMs > 0) {
+    set.syncState = 1;
+  } else if (setMutation.isReleased) {
+    set.syncState = 2;
+  } else {
+    set.syncState = 3;
+  }
 }
 
 export function startSet(id: number, transactionNum: number, queuedMs: number) {
@@ -863,7 +870,7 @@ export function getQueuedTransactions(tournamentId: number) {
         `SELECT DISTINCT transactionNum
           FROM setMutations
           WHERE tournamentId = @tournamentId AND queuedMs > 0
-          ORDER BY queuedMs ASC`,
+          ORDER BY transactionNum ASC`,
       )
       .all({ tournamentId }) as { transactionNum: number }[]
   ).map(({ transactionNum }) => transactionNum);
@@ -892,7 +899,7 @@ export function queueAllTransactions(tournamentId: number) {
         `SELECT DISTINCT transactionNum
           FROM setMutations
           WHERE tournamentId = @tournamentId AND queuedMs = 0
-          ORDER BY queuedMs ASC`,
+          ORDER BY transactionNum ASC`,
       )
       .all({ tournamentId }) as { transactionNum: number }[]
   ).map(({ transactionNum }) => transactionNum);
@@ -918,6 +925,178 @@ export function queueAllTransactions(tournamentId: number) {
     .run({ queuedMs: Date.now(), tournamentId });
 
   return apiTransactions;
+}
+
+const SELECT_PROGRESSION_SET =
+  'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id';
+const SELECT_QUEUEABLE_MUTATIONS =
+  'SELECT * FROM setMutations WHERE setId = @setId AND isReleased = 1 AND queuedMs = 0 ORDER BY transactionNum';
+function releaseSetInner(
+  set: DbSet,
+  setMutations: DbSetMutation[],
+  transactionNums: Set<number>,
+  ignoredPrereqId?: number,
+): void {
+  const prereqSetIdsToCheck: number[] = [];
+  if (set.entrant1PrereqId !== ignoredPrereqId) {
+    if (set.entrant1PrereqType === 'set') {
+      prereqSetIdsToCheck.push(set.entrant1PrereqId);
+    } else if (set.entrant1PrereqType === 'seed') {
+      const prereqSet = db!
+        .prepare(
+          'SELECT * FROM sets WHERE wProgressionSeedId = @seedId OR lProgressionSeedId = @seedId',
+        )
+        .get({ seedId: set.entrant1PrereqId }) as DbSet | undefined;
+      if (prereqSet) {
+        prereqSetIdsToCheck.push(prereqSet.id);
+      }
+    }
+  }
+  if (set.entrant2PrereqId !== ignoredPrereqId) {
+    if (set.entrant2PrereqType === 'set') {
+      prereqSetIdsToCheck.push(set.entrant2PrereqId);
+    } else if (set.entrant2PrereqType === 'seed') {
+      const prereqSet = db!
+        .prepare(
+          'SELECT * FROM sets WHERE wProgressionSeedId = @seedId OR lProgressionSeedId = @seedId',
+        )
+        .get({ seedId: set.entrant2PrereqId }) as DbSet | undefined;
+      if (prereqSet) {
+        prereqSetIdsToCheck.push(prereqSet.id);
+      }
+    }
+  }
+
+  if (
+    prereqSetIdsToCheck.some((setId) => {
+      const mutations = db!
+        .prepare('SELECT * FROM setMutations WHERE setId = @setId')
+        .all({ setId }) as DbSetMutation[];
+      return mutations.some((mutation) => mutation.queuedMs === 0);
+    })
+  ) {
+    // is blocked by prereq sets
+    return;
+  }
+
+  setMutations.forEach((mutation) => {
+    transactionNums.add(mutation.transactionNum);
+  });
+  setMutations.forEach((setMutation) => {
+    db!
+      .prepare('UPDATE setMutations SET queuedMs = @queuedMs WHERE id = @id')
+      .run({ id: setMutation.id, queuedMs: Date.now() });
+  });
+
+  const progressionSetsToCheck: {
+    set: DbSet;
+    setMutations: DbSetMutation[];
+    prereqId: number;
+  }[] = [];
+  (db!.prepare(SELECT_PROGRESSION_SET).all({ id: set.id }) as DbSet[]).forEach(
+    (progressionSet) => {
+      const queueableSetMutations = (
+        db!
+          .prepare(SELECT_QUEUEABLE_MUTATIONS)
+          .all({ setId: progressionSet.id }) as DbSetMutation[]
+      ).filter(
+        (setMutation) => setMutation.isReleased && setMutation.queuedMs === 0,
+      );
+      if (queueableSetMutations.length > 0) {
+        progressionSetsToCheck.push({
+          set: progressionSet,
+          setMutations: queueableSetMutations,
+          prereqId: set.id,
+        });
+      }
+    },
+  );
+
+  if (set.wProgressionSeedId) {
+    const progressionSet = db!
+      .prepare(SELECT_PROGRESSION_SET)
+      .get({ seedId: set.wProgressionSeedId }) as DbSet | undefined;
+    if (progressionSet) {
+      const queueableSetMutations = (
+        db!
+          .prepare(SELECT_QUEUEABLE_MUTATIONS)
+          .all({ id: progressionSet.id }) as DbSetMutation[]
+      ).filter(
+        (setMutation) => setMutation.isReleased && setMutation.queuedMs === 0,
+      );
+      if (queueableSetMutations.length > 0) {
+        progressionSetsToCheck.push({
+          set: progressionSet,
+          setMutations: queueableSetMutations,
+          prereqId: set.wProgressionSeedId,
+        });
+      }
+    }
+  }
+  if (set.lProgressionSeedId) {
+    const progressionSet = db!
+      .prepare(SELECT_PROGRESSION_SET)
+      .get({ seedId: set.lProgressionSeedId }) as DbSet | undefined;
+    if (progressionSet) {
+      const queueableSetMutations = (
+        db!
+          .prepare(SELECT_QUEUEABLE_MUTATIONS)
+          .all({ id: progressionSet.id }) as DbSetMutation[]
+      ).filter(
+        (setMutation) => setMutation.isReleased && setMutation.queuedMs === 0,
+      );
+      if (queueableSetMutations.length > 0) {
+        progressionSetsToCheck.push({
+          set: progressionSet,
+          setMutations: queueableSetMutations,
+          prereqId: set.lProgressionSeedId,
+        });
+      }
+    }
+  }
+
+  progressionSetsToCheck.forEach((setToCheck) => {
+    releaseSetInner(
+      setToCheck.set,
+      setToCheck.setMutations,
+      transactionNums,
+      setToCheck.prereqId,
+    );
+  });
+}
+
+export function releaseSet(id: number): ApiTransaction[] {
+  if (!db) {
+    throw new Error('not init');
+  }
+  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+    | DbSet
+    | undefined;
+  if (!set) {
+    throw new Error(`No set with id: ${id}`);
+  }
+
+  db!
+    .prepare('UPDATE setMutations SET isReleased = 1 WHERE setId = @id')
+    .run({ id });
+  const setMutations = db!
+    .prepare(SELECT_QUEUEABLE_MUTATIONS)
+    .all({ setId: id }) as DbSetMutation[];
+  const transactionNums = new Set<number>();
+  releaseSetInner(set, setMutations, transactionNums);
+  return Array.from(transactionNums.values())
+    .sort()
+    .map((transactionNum) => {
+      const dbTransaction = db!
+        .prepare(
+          'SELECT * FROM transactions WHERE transactionNum = @transactionNum',
+        )
+        .get({ transactionNum }) as DbTransaction | undefined;
+      if (!dbTransaction) {
+        throw new Error(`no transaction with num: ${transactionNum}`);
+      }
+      return toApiTransaction(dbTransaction);
+    });
 }
 
 export function deleteTransaction(
