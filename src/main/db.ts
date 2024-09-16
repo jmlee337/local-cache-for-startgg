@@ -17,6 +17,7 @@ import {
   DbSetMutation,
   DbTournament,
   DbTransaction,
+  RendererEvent,
   RendererSet,
   RendererTournament,
 } from '../common/types';
@@ -160,6 +161,14 @@ export function dbInit() {
     )
     .get() as { transactionNum: number } | undefined;
   return init ? init.transactionNum + 1 : 1;
+}
+
+let currentTournamentId = 0;
+export function getTournamentId() {
+  return currentTournamentId;
+}
+export function setTournamentId(newTournamentId: number) {
+  currentTournamentId = newTournamentId;
 }
 
 const TOURNAMENT_UPSERT_SQL =
@@ -859,7 +868,7 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
   };
 }
 
-export function getQueuedTransactions(tournamentId: number) {
+export function getQueuedTransactions() {
   if (!db) {
     throw new Error('not init');
   }
@@ -869,10 +878,10 @@ export function getQueuedTransactions(tournamentId: number) {
       .prepare(
         `SELECT DISTINCT transactionNum
           FROM setMutations
-          WHERE tournamentId = @tournamentId AND queuedMs > 0
+          WHERE tournamentId = @currentTournamentId AND queuedMs > 0
           ORDER BY transactionNum ASC`,
       )
-      .all({ tournamentId }) as { transactionNum: number }[]
+      .all({ currentTournamentId }) as { transactionNum: number }[]
   ).map(({ transactionNum }) => transactionNum);
 
   return transactionNums.map((transactionNum) => {
@@ -888,7 +897,7 @@ export function getQueuedTransactions(tournamentId: number) {
   });
 }
 
-export function queueAllTransactions(tournamentId: number) {
+export function queueAllTransactions() {
   if (!db) {
     throw new Error('not init');
   }
@@ -898,10 +907,10 @@ export function queueAllTransactions(tournamentId: number) {
       .prepare(
         `SELECT DISTINCT transactionNum
           FROM setMutations
-          WHERE tournamentId = @tournamentId AND queuedMs = 0
+          WHERE tournamentId = @currentTournamentId AND queuedMs = 0
           ORDER BY transactionNum ASC`,
       )
-      .all({ tournamentId }) as { transactionNum: number }[]
+      .all({ currentTournamentId }) as { transactionNum: number }[]
   ).map(({ transactionNum }) => transactionNum);
 
   const apiTransactions = transactionNums.map((transactionNum) => {
@@ -920,9 +929,9 @@ export function queueAllTransactions(tournamentId: number) {
     .prepare(
       `UPDATE setMutations
         SET queuedMs = @queuedMs
-        WHERE tournamentId = @tournamentId AND queuedMs = 0`,
+        WHERE tournamentId = @currentTournamentId AND queuedMs = 0`,
     )
-    .run({ queuedMs: Date.now(), tournamentId });
+    .run({ queuedMs: Date.now(), currentTournamentId });
 
   return apiTransactions;
 }
@@ -1207,31 +1216,46 @@ function getEntrantName(id: number): string | null {
     : maybeEntrant.participant1GamerTag;
 }
 
-export function getTournament(id: number): RendererTournament {
+let lastTournament: RendererTournament | undefined;
+export function getLastTournament() {
+  return lastTournament;
+}
+
+const idToLastEvent = new Map<number, RendererEvent>();
+export function getLastEvent(id: number) {
+  return idToLastEvent.get(id);
+}
+
+export function getTournament(): RendererTournament | undefined {
   if (!db) {
     throw new Error('not init');
   }
 
+  if (!currentTournamentId) {
+    lastTournament = undefined;
+    return lastTournament;
+  }
+
   const dbTournament = db
     .prepare('SELECT * FROM tournaments WHERE id = @id')
-    .get({ id }) as DbTournament;
+    .get({ id: currentTournamentId }) as DbTournament;
   const dbEvents = db
     .prepare('SELECT * FROM events WHERE tournamentId = @id')
-    .all({ id }) as DbEvent[];
+    .all({ id: currentTournamentId }) as DbEvent[];
   const dbPhases = db
     .prepare('SELECT * FROM phases WHERE tournamentId = @id')
-    .all({ id }) as DbPhase[];
+    .all({ id: currentTournamentId }) as DbPhase[];
   const dbPools = (
     db
       .prepare('SELECT * FROM pools WHERE tournamentId = @id')
-      .all({ id }) as DbPool[]
+      .all({ id: currentTournamentId }) as DbPool[]
   ).sort((a, b) => {
     if (a.name.length === b.name.length) {
       return a.name.localeCompare(b.name);
     }
     return a.name.length - b.name.length;
   });
-  return {
+  lastTournament = {
     id: dbTournament.id,
     slug: dbTournament.slug,
     events: dbEvents.map((dbEvent) => ({
@@ -1305,6 +1329,10 @@ export function getTournament(id: number): RendererTournament {
         })),
     })),
   };
+  lastTournament.events.forEach((event) => {
+    idToLastEvent.set(event.id, event);
+  });
+  return lastTournament;
 }
 
 export function getTournaments() {

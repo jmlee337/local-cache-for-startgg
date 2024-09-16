@@ -18,6 +18,7 @@ import IconButton from './IconButton';
 export default function Settings() {
   const [apiKey, setApiKey] = useState('');
   const [autoSync, setAutoSync] = useState(true);
+  const [websocket, setWebsocket] = useState(true);
   const [appVersion, setAppVersion] = useState('');
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -25,11 +26,13 @@ export default function Settings() {
     const inner = async () => {
       const apiKeyPromise = window.electron.getApiKey();
       const autoSyncPromise = window.electron.getAutoSync();
+      const websocketPromise = window.electron.getWebsocket();
       const appVersionPromise = window.electron.getAppVersion();
 
       const initApiKey = await apiKeyPromise;
       setApiKey(initApiKey);
       setAutoSync(await autoSyncPromise);
+      setWebsocket(await websocketPromise);
       setAppVersion(await appVersionPromise);
 
       if (!initApiKey) {
@@ -122,6 +125,23 @@ export default function Settings() {
                   const newAutoSync = event.target.checked;
                   await window.electron.setAutoSync(newAutoSync);
                   setAutoSync(newAutoSync);
+                }}
+              />
+            }
+          />
+          <FormControlLabel
+            label={
+              websocket
+                ? 'Websocket server (enabled)'
+                : 'Websocket server (disabled)'
+            }
+            control={
+              <Switch
+                checked={websocket}
+                onChange={async (event) => {
+                  const newWebsocket = event.target.checked;
+                  await window.electron.setWebsocket(newWebsocket);
+                  setWebsocket(newWebsocket);
                 }}
               />
             }

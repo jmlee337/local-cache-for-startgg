@@ -3,6 +3,7 @@ import {
   AdminedTournament,
   RendererTournament,
   SyncResult,
+  WebsocketStatus,
 } from '../common/types';
 
 const electronHandler = {
@@ -12,6 +13,11 @@ const electronHandler = {
   getAutoSync: (): Promise<boolean> => ipcRenderer.invoke('getAutoSync'),
   setAutoSync: (autoSync: boolean) =>
     ipcRenderer.invoke('setAutoSync', autoSync),
+  getWebsocketStatus: (): Promise<WebsocketStatus> =>
+    ipcRenderer.invoke('getWebsocketStatus'),
+  getWebsocket: (): Promise<boolean> => ipcRenderer.invoke('getWebsocket'),
+  setWebsocket: (websocket: boolean) =>
+    ipcRenderer.invoke('setWebsocket', websocket),
   getLocalTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getLocalTournaments'),
   getAdminedTournaments: (): Promise<AdminedTournament[]> =>
@@ -53,6 +59,15 @@ const electronHandler = {
   ) => {
     ipcRenderer.removeAllListeners('tournament');
     ipcRenderer.on('tournament', callback);
+  },
+  onWebsocketStatus: (
+    callback: (
+      event: IpcRendererEvent,
+      websocketStatus: WebsocketStatus,
+    ) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('websocketStatus');
+    ipcRenderer.on('websocketStatus', callback);
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('getAppVersion'),
   copy: (text: string): Promise<void> => ipcRenderer.invoke('copy', text),

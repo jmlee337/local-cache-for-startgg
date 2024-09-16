@@ -43,6 +43,7 @@ import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
 import IconButton from './IconButton';
 import Sync from './Sync';
+import Websocket from './Websocket';
 
 function SetEntrant({
   entrantName,
@@ -391,7 +392,10 @@ export default function Tournament() {
         </Tooltip>
       </Stack>
       <Stack direction="row" justifyContent="space-between" gap="8px">
-        <Sync />
+        <Stack direction="row">
+          <Sync />
+          <Websocket />
+        </Stack>
         <Settings />
         <Dialog
           fullWidth

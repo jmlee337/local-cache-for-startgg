@@ -256,3 +256,8 @@ export type SyncResult = {
   lastErrorMs: number;
   lastSuccessMs: number;
 };
+
+export type WebsocketStatus = {
+  err: string;
+  port: number;
+};

@@ -22,18 +22,27 @@ import {
   deleteTransaction,
   getQueuedTransactions,
   getTournament,
+  getTournamentId,
   getTournaments,
   insertTransaction,
   queueAllTransactions,
   reportSet,
+  setTournamentId,
   startSet,
 } from './db';
 import { ApiTransaction } from '../common/types';
+import {
+  startWebsocketServer,
+  stopWebsocketServer,
+  updateSubscribers,
+} from './websocket';
 
-let tournamentId = 0;
+const DEFAULT_PORT = 50000;
+
 export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateClients = () => {
-    mainWindow.webContents.send('tournament', getTournament(tournamentId));
+    mainWindow.webContents.send('tournament', getTournament());
+    updateSubscribers();
   };
 
   let transactionNum = dbInit();
@@ -79,9 +88,73 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
       store.set('autoSync', newAutoSync);
       autoSync = newAutoSync;
-      if (autoSync && tournamentId) {
-        queueTransactions(queueAllTransactions(tournamentId));
+      if (autoSync && getTournamentId()) {
+        queueTransactions(queueAllTransactions());
         updateClients();
+      }
+    },
+  );
+
+  let websocketErr = '';
+  let websocketPort = 0;
+  ipcMain.removeHandler('getWebsocketStatus');
+  ipcMain.handle('getWebsocketStatus', () => ({
+    err: websocketErr,
+    port: websocketPort,
+  }));
+
+  const startWebsocket = async () => {
+    let portToTry = DEFAULT_PORT;
+    let ret = await startWebsocketServer(portToTry);
+    if (ret.err === 'Port in use') {
+      do {
+        portToTry += 1;
+        // eslint-disable-next-line no-await-in-loop
+        ret = await startWebsocketServer(portToTry);
+      } while (ret.err === 'Port in use');
+    }
+    if (ret.err) {
+      websocketErr = ret.err;
+    } else {
+      websocketPort = portToTry;
+    }
+    mainWindow.webContents.send('websocketStatus', {
+      err: websocketErr,
+      port: websocketPort,
+    });
+  };
+  const stopWebsocket = () => {
+    stopWebsocketServer();
+    websocketErr = '';
+    websocketPort = 0;
+    mainWindow.webContents.send('websocketStatus', {
+      err: websocketErr,
+      port: websocketPort,
+    });
+  };
+
+  let websocket = store.has('websocket')
+    ? (store.get('websocket') as boolean)
+    : true;
+  if (websocket) {
+    startWebsocket();
+  }
+
+  ipcMain.removeHandler('getWebsocket');
+  ipcMain.handle('getWebsocket', () => websocket);
+
+  ipcMain.removeHandler('setWebsocket');
+  ipcMain.handle(
+    'setWebsocket',
+    (event: IpcMainInvokeEvent, newWebsocket: boolean) => {
+      if (websocket !== newWebsocket) {
+        store.set('websocket', newWebsocket);
+        websocket = newWebsocket;
+        if (websocket) {
+          startWebsocket();
+        } else {
+          stopWebsocket();
+        }
       }
     },
   );
@@ -95,19 +168,14 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   ipcMain.removeHandler('getCurrentTournament');
-  ipcMain.handle('getCurrentTournament', () => {
-    if (!tournamentId) {
-      return undefined;
-    }
-    return getTournament(tournamentId);
-  });
+  ipcMain.handle('getCurrentTournament', getTournament);
 
   ipcMain.removeHandler('getTournament');
   ipcMain.handle(
     'getTournament',
     async (event: IpcMainInvokeEvent, slug: string) => {
-      tournamentId = await getApiTournament(slug);
-      queueTransactions(getQueuedTransactions(tournamentId));
+      setTournamentId(await getApiTournament(slug));
+      queueTransactions(getQueuedTransactions());
       updateClients();
     },
   );
@@ -121,8 +189,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       } catch {
         // ignore
       }
-      tournamentId = id;
-      queueTransactions(getQueuedTransactions(tournamentId));
+      setTournamentId(id);
+      queueTransactions(getQueuedTransactions());
       updateClients();
     },
   );
@@ -131,7 +199,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'loadEvent',
     async (event: IpcMainInvokeEvent, eventId: number) => {
-      await loadEvent(tournamentId, eventId);
+      await loadEvent(getTournamentId(), eventId);
       updateClients();
     },
   );

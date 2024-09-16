@@ -1,4 +1,11 @@
-import { Box, Button, Dialog, DialogContent, DialogTitle } from '@mui/material';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  Stack,
+} from '@mui/material';
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
 import { SyncResult } from '../common/types';
@@ -26,7 +33,11 @@ export default function Sync() {
     syncResult.lastErrorMs - syncResult.errorSinceMs < ERROR_THRESHOLD_MS;
 
   const [open, setOpen] = useState(false);
-  let syncButton = <Button disabled variant="text" />;
+  let syncButton = (
+    <Button style={{ marginLeft: '-8px' }} variant="text">
+      start.gg: ?
+    </Button>
+  );
   if (
     syncResult.lastSuccessMs ||
     syncResult.lastErrorMs - syncResult.errorSinceMs >= ERROR_THRESHOLD_MS
@@ -40,7 +51,7 @@ export default function Sync() {
             setOpen(true);
           }}
         >
-          Connected
+          start.gg: Online
         </Button>
       );
     } else {
@@ -53,14 +64,14 @@ export default function Sync() {
             setOpen(true);
           }}
         >
-          Disconnected
+          start.gg: Offline
         </Button>
       );
     }
   }
 
   return (
-    <>
+    <Stack direction="row" width="160px" alignItems="center">
       {syncButton}
       <Dialog
         open={open}
@@ -99,6 +110,6 @@ export default function Sync() {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </Stack>
   );
 }
