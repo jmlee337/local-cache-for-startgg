@@ -3,6 +3,7 @@ import { AddressInfo } from 'net';
 import type { connection } from 'websocket';
 import websocket from 'websocket';
 import { getLastEvent, getLastTournament, getTournamentId } from './db';
+import { reportSetTransaction, startSetTransaction } from './transaction';
 
 const BRACKET_PROTOCOL = 'bracket-protocol';
 
@@ -86,22 +87,53 @@ export async function startWebsocketServer(port: number) {
               }),
             );
           } else if (json.op === 'subscribe-to-event-request') {
-            const eventId = json.eventId as number;
-            if (Number.isInteger(eventId) && eventId > 0) {
+            const eventId = json.id as number;
+            const event = getLastEvent(eventId);
+            if (event) {
               connectionToSubscription.set(newConnection, {
                 eventId,
               });
               newConnection.sendUTF(
                 JSON.stringify({
                   op: 'subscribe-to-event-response',
-                  event: getLastEvent(eventId),
+                  event,
+                }),
+              );
+            } else {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'subscribe-to-event-response',
+                  err: `event not found: ${eventId}`,
                 }),
               );
             }
           } else if (json.op === 'start-set-request') {
-            // todo
+            try {
+              startSetTransaction(json.id);
+            } catch (e: any) {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'start-set-response',
+                  err: e instanceof Error ? e.message : e,
+                }),
+              );
+            }
           } else if (json.op === 'report-set-request') {
-            // todo
+            try {
+              reportSetTransaction(
+                json.id,
+                json.winnerId,
+                json.isDQ,
+                json.gameData,
+              );
+            } catch (e: any) {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'report-set-response',
+                  err: e instanceof Error ? e.message : e,
+                }),
+              );
+            }
           } else if (json.op === 'reset-set-request') {
             // todo
           }

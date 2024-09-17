@@ -651,19 +651,10 @@ export default function Tournament() {
             onClick={async () => {
               setReporting(true);
               try {
-                let entrant1Score: number | null = null;
-                let entrant2Score: number | null = null;
-                if (reportIsDq) {
-                  entrant1Score =
-                    reportSet!.entrant1Id === reportWinnerId ? 0 : -1;
-                  entrant2Score =
-                    reportSet!.entrant2Id === reportWinnerId ? 0 : -1;
-                }
                 await window.electron.reportSet(
                   reportSet!.id,
                   reportWinnerId,
-                  entrant1Score,
-                  entrant2Score,
+                  reportIsDq,
                 );
                 setReportDialogOpen(false);
               } catch (e: any) {

@@ -465,8 +465,7 @@ type ProgressionSet = {
 export function reportSet(
   id: number,
   winnerId: number,
-  entrant1Score: number | null,
-  entrant2Score: number | null,
+  isDQ: boolean,
   transactionNum: number,
   queuedMs: number,
 ) {
@@ -500,6 +499,12 @@ export function reportSet(
     );
   }
   const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
+  let entrant1Score: number | null = null;
+  let entrant2Score: number | null = null;
+  if (isDQ) {
+    entrant1Score = winnerId === entrant1Id ? 0 : -1;
+    entrant2Score = winnerId === entrant2Id ? 0 : -1;
+  }
 
   let wProgressionSet: ProgressionSet | undefined;
   let lProgressionSet: ProgressionSet | undefined;

@@ -204,6 +204,7 @@ export type DbTransaction = {
 };
 
 export type ApiGameData = {
+  // 1-indexed
   gameNum: number;
   winnerId: number;
   stageId?: number;

@@ -12,7 +12,6 @@ import {
   getSyncResult,
   loadEvent,
   onTransaction,
-  queueTransaction,
   queueTransactions,
   setApiKey,
   startggInit,
@@ -24,18 +23,20 @@ import {
   getTournament,
   getTournamentId,
   getTournaments,
-  insertTransaction,
   queueAllTransactions,
-  reportSet,
   setTournamentId,
-  startSet,
 } from './db';
-import { ApiTransaction } from '../common/types';
 import {
   startWebsocketServer,
   stopWebsocketServer,
   updateSubscribers,
 } from './websocket';
+import {
+  initTransaction,
+  reportSetTransaction,
+  setAutoSyncTransaction,
+  startSetTransaction,
+} from './transaction';
 
 const DEFAULT_PORT = 50000;
 
@@ -45,7 +46,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     updateSubscribers();
   };
 
-  let transactionNum = dbInit();
+  const initTransactionNum = dbInit();
   startggInit(mainWindow);
   onTransaction((completedTransactionNum, updates, updatedAt) => {
     deleteTransaction([completedTransactionNum], updates, updatedAt);
@@ -79,6 +80,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   let autoSync = store.has('autoSync')
     ? (store.get('autoSync') as boolean)
     : true;
+  initTransaction(autoSync, initTransactionNum, updateClients);
   ipcMain.removeHandler('getAutoSync');
   ipcMain.handle('getAutoSync', () => autoSync);
 
@@ -87,6 +89,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'setAutoSync',
     (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
       store.set('autoSync', newAutoSync);
+      setAutoSyncTransaction(newAutoSync);
       autoSync = newAutoSync;
       if (autoSync && getTournamentId()) {
         queueTransactions(queueAllTransactions());
@@ -206,23 +209,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
 
   ipcMain.removeHandler('startSet');
   ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {
-    const currentTransactionNum = transactionNum;
-    transactionNum += 1;
-    startSet(
-      id,
-      currentTransactionNum,
-      autoSync ? Date.now() : 0, // queuedMs
-    );
-    const apiTransaction: ApiTransaction = {
-      transactionNum: currentTransactionNum,
-      type: 2,
-      setId: id,
-    };
-    insertTransaction(apiTransaction);
-    if (autoSync) {
-      queueTransaction(apiTransaction);
-    }
-    updateClients();
+    startSetTransaction(id);
   });
 
   ipcMain.removeHandler('reportSet');
@@ -232,32 +219,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       event: IpcMainInvokeEvent,
       id: number,
       winnerId: number,
-      entrant1Score: number | null,
-      entrant2Score: number | null,
+      isDQ: boolean,
     ) => {
-      const currentTransactionNum = transactionNum;
-      transactionNum += 1;
-      reportSet(
-        id,
-        winnerId,
-        entrant1Score,
-        entrant2Score,
-        currentTransactionNum,
-        autoSync ? Date.now() : 0, // queuedMs
-      );
-      const apiTransaction: ApiTransaction = {
-        transactionNum: currentTransactionNum,
-        type: 3,
-        setId: id,
-        winnerId,
-        isDQ: entrant1Score === -1 || entrant2Score === -1,
-        gameData: [],
-      };
-      insertTransaction(apiTransaction);
-      if (autoSync) {
-        queueTransaction(apiTransaction);
-      }
-      updateClients();
+      reportSetTransaction(id, winnerId, isDQ, []);
     },
   );
 

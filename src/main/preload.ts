@@ -31,13 +31,8 @@ const electronHandler = {
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
   startSet: (id: number): Promise<void> => ipcRenderer.invoke('startSet', id),
-  reportSet: (
-    id: number,
-    winnerId: number,
-    entrant1Score: number | null,
-    entrant2Score: number | null,
-  ): Promise<void> =>
-    ipcRenderer.invoke('reportSet', id, winnerId, entrant1Score, entrant2Score),
+  reportSet: (id: number, winnerId: number, isDQ: boolean): Promise<void> =>
+    ipcRenderer.invoke('reportSet', id, winnerId, isDQ),
   getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
   onAdminedTournaments: (
     callback: (
