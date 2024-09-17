@@ -3,7 +3,11 @@ import { AddressInfo } from 'net';
 import type { connection } from 'websocket';
 import websocket from 'websocket';
 import { getLastEvent, getLastTournament, getTournamentId } from './db';
-import { reportSetTransaction, startSetTransaction } from './transaction';
+import {
+  reportSetTransaction,
+  resetSetTransaction,
+  startSetTransaction,
+} from './transaction';
 
 const BRACKET_PROTOCOL = 'bracket-protocol';
 
@@ -135,7 +139,16 @@ export async function startWebsocketServer(port: number) {
               );
             }
           } else if (json.op === 'reset-set-request') {
-            // todo
+            try {
+              resetSetTransaction(json.id);
+            } catch (e: any) {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'reset-set-response',
+                  err: e instanceof Error ? e.message : e,
+                }),
+              );
+            }
           }
         });
         return;

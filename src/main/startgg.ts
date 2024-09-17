@@ -559,7 +559,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
           ) {
             return;
           }
-          if (dbSet.entrant1PrereqType === 'set' && dbSet.entrant1Id === null) {
+          if (dbSet.entrant1PrereqType === 'set') {
             const prereqSet1 = idToSet.get(dbSet.entrant1PrereqId)!;
             if (
               prereqSet1.entrant1PrereqType === 'bye' ||
@@ -573,7 +573,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
               dbSet.entrant1PrereqStr = prereqStr;
             }
           }
-          if (dbSet.entrant2PrereqType === 'set' && dbSet.entrant2Id === null) {
+          if (dbSet.entrant2PrereqType === 'set') {
             const prereqSet2 = idToSet.get(dbSet.entrant2PrereqId)!;
             if (
               prereqSet2.entrant1PrereqType === 'bye' ||
@@ -617,6 +617,28 @@ const UPDATE_SET_INNER = `
       }
       winnerId
 `;
+const RESET_SET_MUTATION = `
+  mutation resetSet($setId: ID!) {
+    resetSet(setId: $setId) {${UPDATE_SET_INNER}}
+  }
+`;
+async function resetSet(setId: number): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const data = await fetchGql(apiKey, RESET_SET_MUTATION, { setId });
+  return {
+    id: data.resetSet.id,
+    state: data.resetSet.state,
+    entrant1Id: data.resetSet.slots[0].entrant.id,
+    entrant1Score: data.resetSet.slots[0].standing.stats.score.value,
+    entrant2Id: data.resetSet.slots[1].entrant.id,
+    entrant2Score: data.resetSet.slots[1].standing.stats.score.values,
+    winnerId: data.resetSet.winnerId,
+  };
+}
+
 const START_SET_MUTATION = `
   mutation startSet($setId: ID!) {
     markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
@@ -704,13 +726,25 @@ async function tryNextTransaction() {
     return;
   }
   const transaction = queue[0];
-  if (transaction.type !== 2 && transaction.type !== 3) {
+  if (
+    transaction.type !== 1 &&
+    transaction.type !== 2 &&
+    transaction.type !== 3
+  ) {
     throw new Error(`unknown transaciton type: ${transaction.type}`);
   }
 
   try {
     const updatedAt = Date.now() / 1000;
-    if (transaction.type === 2) {
+    if (transaction.type === 1) {
+      const update = await resetSet(transaction.setId);
+      emitter!.emit(
+        'transaction',
+        transaction.transactionNum,
+        [update],
+        updatedAt,
+      );
+    } else if (transaction.type === 2) {
       const update = await startSet(transaction.setId);
       emitter!.emit(
         'transaction',

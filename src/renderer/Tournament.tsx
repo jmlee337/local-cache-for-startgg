@@ -131,7 +131,7 @@ function SetListItemButton({
   }
   return (
     <ListItemButton
-      disabled={set.state === 3 || !set.entrant1Name || !set.entrant2Name}
+      disabled={!set.entrant1Name || !set.entrant2Name}
       style={{
         backgroundColor: set.state === 3 ? '#eeeeee' : undefined,
         flexGrow: 0,
@@ -365,8 +365,10 @@ export default function Tournament() {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportWinnerId, setReportWinnerId] = useState(0);
   const [reportIsDq, setReportIsDq] = useState(false);
-  const [reporting, setReporting] = useState(false);
+
+  const [resetting, setResetting] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [reporting, setReporting] = useState(false);
   return (
     <Stack>
       <Stack direction="row" alignItems="center">
@@ -560,6 +562,7 @@ export default function Tournament() {
                 {reportSet?.entrant1Name}
               </Box>
               <Button
+                disabled={reportSet?.state === 3}
                 variant={
                   reportIsDq && reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
@@ -573,6 +576,7 @@ export default function Tournament() {
                 DQ
               </Button>
               <Button
+                disabled={reportSet?.state === 3}
                 variant={
                   !reportIsDq && reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
@@ -596,6 +600,7 @@ export default function Tournament() {
                 {reportSet?.entrant2Name}
               </Box>
               <Button
+                disabled={reportSet?.state === 3}
                 variant={
                   reportIsDq && reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
@@ -609,6 +614,7 @@ export default function Tournament() {
                 DQ
               </Button>
               <Button
+                disabled={reportSet?.state === 3}
                 variant={
                   !reportIsDq && reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
@@ -625,6 +631,25 @@ export default function Tournament() {
           </Stack>
         </DialogContent>
         <DialogActions>
+          <Button
+            color="error"
+            variant="text"
+            disabled={reportSet?.state === 1 || resetting}
+            endIcon={resetting ? <CircularProgress size="24px" /> : undefined}
+            onClick={async () => {
+              setResetting(true);
+              try {
+                await window.electron.resetSet(reportSet!.id);
+                setReportDialogOpen(false);
+              } catch (e: any) {
+                showError(e instanceof Error ? e.message : e);
+              } finally {
+                setResetting(false);
+              }
+            }}
+          >
+            Reset
+          </Button>
           <IconButton
             color="primary"
             disabled={
@@ -646,7 +671,7 @@ export default function Tournament() {
           </IconButton>
           <Button
             variant="contained"
-            disabled={reporting || !reportWinnerId}
+            disabled={reportSet?.state === 3 || reporting || !reportWinnerId}
             endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
             onClick={async () => {
               setReporting(true);

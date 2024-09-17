@@ -1,5 +1,5 @@
 import { ApiGameData, ApiTransaction } from '../common/types';
-import { insertTransaction, reportSet, startSet } from './db';
+import { insertTransaction, reportSet, resetSet, startSet } from './db';
 import { queueTransaction } from './startgg';
 
 let autoSync = false;
@@ -17,6 +17,26 @@ export function initTransaction(
 
 export function setAutoSyncTransaction(newAutoSync: boolean) {
   autoSync = newAutoSync;
+}
+
+export function resetSetTransaction(id: number) {
+  const currentTransactionNum = transactionNum;
+  transactionNum += 1;
+  resetSet(
+    id,
+    currentTransactionNum,
+    autoSync ? Date.now() : 0, // queuedMs
+  );
+  const apiTransaction: ApiTransaction = {
+    transactionNum: currentTransactionNum,
+    type: 1,
+    setId: id,
+  };
+  insertTransaction(apiTransaction);
+  if (autoSync) {
+    queueTransaction(apiTransaction);
+  }
+  updateClients();
 }
 
 export function startSetTransaction(id: number) {

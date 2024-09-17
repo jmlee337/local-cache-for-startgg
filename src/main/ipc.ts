@@ -34,6 +34,7 @@ import {
 import {
   initTransaction,
   reportSetTransaction,
+  resetSetTransaction,
   setAutoSyncTransaction,
   startSetTransaction,
 } from './transaction';
@@ -206,6 +207,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       updateClients();
     },
   );
+
+  ipcMain.removeHandler('resetSet');
+  ipcMain.handle('resetSet', (event: IpcMainInvokeEvent, id: number) => {
+    resetSetTransaction(id);
+  });
 
   ipcMain.removeHandler('startSet');
   ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {
