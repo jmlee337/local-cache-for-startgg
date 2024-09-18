@@ -70,7 +70,7 @@ export default function Websocket() {
           <Box sx={{ typography: (theme) => theme.typography.body2 }}>
             {websocketStatus.err
               ? websocketStatus.err
-              : `ws://127.0.0.1:${websocketStatus.port}`}
+              : `ws://localhost:${websocketStatus.port}`}
           </Box>
         </DialogContent>
       </Dialog>

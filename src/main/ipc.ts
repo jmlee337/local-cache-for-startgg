@@ -29,6 +29,7 @@ import {
 import {
   startWebsocketServer,
   stopWebsocketServer,
+  tournamentChanged,
   updateSubscribers,
 } from './websocket';
 import {
@@ -42,6 +43,9 @@ import {
 const DEFAULT_PORT = 50000;
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
+  const updateRenderer = () => {
+    mainWindow.webContents.send('tournament', getTournament());
+  };
   const updateClients = () => {
     mainWindow.webContents.send('tournament', getTournament());
     updateSubscribers();
@@ -51,7 +55,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   startggInit(mainWindow);
   onTransaction((completedTransactionNum, updates, updatedAt) => {
     deleteTransaction([completedTransactionNum], updates, updatedAt);
-    updateClients();
+    updateRenderer();
   });
 
   const store = new Store();
@@ -94,7 +98,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       autoSync = newAutoSync;
       if (autoSync && getTournamentId()) {
         queueTransactions(queueAllTransactions());
-        updateClients();
+        updateRenderer();
       }
     },
   );
@@ -178,24 +182,33 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'getTournament',
     async (event: IpcMainInvokeEvent, slug: string) => {
-      setTournamentId(await getApiTournament(slug));
+      const oldId = getTournamentId();
+      const newId = await getApiTournament(slug);
+      setTournamentId(newId);
       queueTransactions(getQueuedTransactions());
-      updateClients();
+      updateRenderer();
+      if (oldId !== newId) {
+        tournamentChanged();
+      }
     },
   );
 
   ipcMain.removeHandler('setTournament');
   ipcMain.handle(
     'setTournament',
-    async (event: IpcMainInvokeEvent, id: number, slug: string) => {
+    async (event: IpcMainInvokeEvent, newId: number, slug: string) => {
+      const oldId = getTournamentId();
       try {
         await getApiTournament(slug);
       } catch {
         // ignore
       }
-      setTournamentId(id);
+      setTournamentId(newId);
       queueTransactions(getQueuedTransactions());
-      updateClients();
+      updateRenderer();
+      if (oldId !== newId) {
+        tournamentChanged();
+      }
     },
   );
 

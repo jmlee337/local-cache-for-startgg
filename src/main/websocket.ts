@@ -2,7 +2,7 @@ import http from 'http';
 import { AddressInfo } from 'net';
 import type { connection } from 'websocket';
 import websocket from 'websocket';
-import { getLastEvent, getLastTournament, getTournamentId } from './db';
+import { getLastEvent, getLastTournament } from './db';
 import {
   reportSetTransaction,
   resetSetTransaction,
@@ -13,6 +13,7 @@ const BRACKET_PROTOCOL = 'bracket-protocol';
 
 let httpServer: http.Server | null;
 let websocketServer: websocket.server | null;
+const connections = new Set<connection>();
 
 type Subscription = {
   eventId?: number;
@@ -56,10 +57,10 @@ export async function startWebsocketServer(port: number) {
   // eslint-disable-next-line new-cap
   websocketServer = new websocket.server({ httpServer });
   websocketServer.on('request', async (request) => {
-    const tournamentFound = getTournamentId() > 0;
-    if (tournamentFound && request.requestedProtocols.length === 1) {
+    if (request.requestedProtocols.length === 1) {
       if (request.requestedProtocols[0] === BRACKET_PROTOCOL) {
         const newConnection = request.accept(BRACKET_PROTOCOL, request.origin);
+        connections.add(newConnection);
         newConnection.on('message', async (data) => {
           if (data.type === 'binary') {
             return;
@@ -151,20 +152,22 @@ export async function startWebsocketServer(port: number) {
             }
           }
         });
+        newConnection.on('close', () => {
+          connections.delete(newConnection);
+          connectionToSubscription.delete(newConnection);
+        });
         return;
       }
     }
     request.reject(
-      tournamentFound ? 400 : 404,
-      tournamentFound
-        ? `invalid requested protocol(s): ${request.requestedProtocols}`
-        : 'Tournament not found',
+      400,
+      `invalid requested protocol(s): ${request.requestedProtocols}`,
     );
   });
   return { success: true };
 }
 
-export async function stopWebsocketServer() {
+export function stopWebsocketServer() {
   if (httpServer && websocketServer) {
     connectionToSubscription.clear();
     websocketServer.shutDown();
@@ -174,7 +177,7 @@ export async function stopWebsocketServer() {
   }
 }
 
-export async function updateSubscribers() {
+export function updateSubscribers() {
   Array.from(connectionToSubscription.entries()).forEach(
     ([connection, subscription]) => {
       if (subscription.eventId) {
@@ -194,4 +197,23 @@ export async function updateSubscribers() {
       }
     },
   );
+}
+
+export function tournamentChanged() {
+  connectionToSubscription.clear();
+  Array.from(connections.keys()).forEach((connection) => {
+    const tournament = getLastTournament();
+    connection.sendUTF(
+      JSON.stringify({
+        op: 'tournament-changed-event',
+        tournament: {
+          slug: tournament!.slug,
+          events: tournament!.events.map((event) => ({
+            id: event.id,
+            name: event.name,
+          })),
+        },
+      }),
+    );
+  });
 }
