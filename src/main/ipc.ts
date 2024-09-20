@@ -13,12 +13,14 @@ import {
   loadEvent,
   onTransaction,
   queueTransactions,
+  refreshEvent,
   setApiKey,
   startggInit,
 } from './startgg';
 import {
   dbInit,
   deleteTransaction,
+  getLastTournament,
   getQueuedTransactions,
   getTournament,
   getTournamentId,
@@ -39,8 +41,10 @@ import {
   setAutoSyncTransaction,
   startSetTransaction,
 } from './transaction';
+import { RendererTournament } from '../common/types';
 
 const DEFAULT_PORT = 50000;
+let refreshEventsTimeout: NodeJS.Timeout | undefined;
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateRenderer = () => {
@@ -178,6 +182,30 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('getCurrentTournament');
   ipcMain.handle('getCurrentTournament', getTournament);
 
+  const loadedEventIds: number[] = [];
+  const resetLoadedEventIds = (rendererTournament: RendererTournament) => {
+    loadedEventIds.length = 0;
+    loadedEventIds.push(
+      ...rendererTournament.events
+        .filter((event) => event.isLoaded)
+        .map((event) => event.id),
+    );
+  };
+  const refreshEvents = async () => {
+    const tournamentId = getTournamentId();
+    await Promise.all(
+      loadedEventIds.map(async (eventId) => {
+        await refreshEvent(tournamentId, eventId);
+      }),
+    );
+    updateClients();
+    refreshEventsTimeout = setTimeout(refreshEvents, 30000);
+  };
+  if (refreshEventsTimeout) {
+    clearTimeout(refreshEventsTimeout);
+  }
+  refreshEvents();
+
   ipcMain.removeHandler('getTournament');
   ipcMain.handle(
     'getTournament',
@@ -188,6 +216,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       queueTransactions(getQueuedTransactions());
       updateRenderer();
       if (oldId !== newId) {
+        resetLoadedEventIds(getLastTournament()!);
         tournamentChanged();
       }
     },
@@ -207,6 +236,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       queueTransactions(getQueuedTransactions());
       updateRenderer();
       if (oldId !== newId) {
+        resetLoadedEventIds(getLastTournament()!);
         tournamentChanged();
       }
     },
@@ -218,6 +248,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     async (event: IpcMainInvokeEvent, eventId: number) => {
       await loadEvent(getTournamentId(), eventId);
       updateClients();
+      loadedEventIds.push(eventId);
     },
   );
 

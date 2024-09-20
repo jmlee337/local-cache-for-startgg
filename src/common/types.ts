@@ -41,6 +41,7 @@ export type RendererEvent = {
   id: number;
   name: string;
   isOnline: boolean;
+  isLoaded: boolean;
   phases: RendererPhase[];
 };
 
@@ -81,10 +82,6 @@ export type DbSetMutation = {
   phaseId: number;
   eventId: number;
   tournamentId: number;
-  transactionNum: number;
-  isReleased: null | 1;
-  queuedMs: number;
-  requiresUpdateHack: null | 1;
 
   // locally mutable
   statePresent: null | 1;
@@ -103,6 +100,12 @@ export type DbSetMutation = {
   // hopefully locally mutable
   streamIdPresent: null | 1;
   streamId: number | null;
+
+  // local only
+  transactionNum: number;
+  isReleased: null | 1;
+  queuedMs: number;
+  requiresUpdateHack: null | 1;
 };
 
 export type DbSet = {
@@ -134,7 +137,6 @@ export type DbSet = {
   lProgressingPhaseGroupId: number | null;
   lProgressingPhaseId: number | null;
   lProgressingName: string | null;
-  updatedAt: number;
 
   // locally mutable
   state: number;
@@ -143,6 +145,7 @@ export type DbSet = {
   entrant2Id: number | null;
   entrant2Score: number | null;
   winnerId: number | null;
+  updatedAt: number;
 
   // hopefully locally mutable
   streamId: number | null;
@@ -165,6 +168,11 @@ export type DbPhase = {
   eventId: number;
   tournamentId: number;
   name: string;
+};
+
+export type DbLoadedEvent = {
+  id: number;
+  tournamentId: number;
 };
 
 export type DbEvent = {

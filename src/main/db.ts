@@ -9,6 +9,7 @@ import {
   DbEntrant,
   DbEvent,
   DbGameData,
+  DbLoadedEvent,
   DbPhase,
   DbPlayer,
   DbPool,
@@ -33,6 +34,9 @@ export function dbInit() {
   ).run();
   db.prepare(
     'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, tournamentId INTEGER, name TEXT, isOnline INTEGER)',
+  ).run();
+  db.prepare(
+    'CREATE TABLE IF NOT EXISTS loadedEvents (id INTEGER PRIMARY KEY, tournamentId INTEGER NOT NULL)',
   ).run();
   db.prepare(
     'CREATE TABLE IF NOT EXISTS phases (id INTEGER PRIMARY KEY, eventId INTEGER, tournamentId INTEGERY, name TEXT)',
@@ -186,12 +190,7 @@ export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
   });
 }
 
-const EVENT_UPDATE_SQL = 'UPDATE events SET name = @name WHERE id = @id';
-const PHASE_UPSERT_SQL =
-  'REPLACE INTO phases (id, eventId, tournamentId, name) VALUES (@id, @eventId, @tournamentId, @name)';
-const POOL_UPSERT_SQL =
-  'REPLACE INTO pools (id, phaseId, eventId, tournamentId, name, bracketType) VALUES (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType)';
-export function updateEvent(
+export function upsertEvent(
   event: DbEvent,
   phases: DbPhase[],
   pools: DbPool[],
@@ -200,12 +199,37 @@ export function updateEvent(
     throw new Error('not init');
   }
 
-  db!.prepare(EVENT_UPDATE_SQL).run(event);
+  db.prepare(
+    `REPLACE INTO
+      events
+        (id, tournamentId, name, isOnline)
+      VALUES
+        (@id, @tournamentId, @name, @isOnline)`,
+  ).run(event);
+  db.prepare(
+    'REPLACE INTO loadedEvents (id, tournamentId) VALUES (@id, @tournamentId)',
+  ).run(event);
   phases.forEach((phase) => {
-    db!.prepare(PHASE_UPSERT_SQL).run(phase);
+    db!
+      .prepare(
+        `REPLACE INTO
+          phases
+            (id, eventId, tournamentId, name)
+          VALUES
+            (@id, @eventId, @tournamentId, @name)`,
+      )
+      .run(phase);
   });
   pools.forEach((pool) => {
-    db!.prepare(POOL_UPSERT_SQL).run(pool);
+    db!
+      .prepare(
+        `REPLACE INTO
+          pools
+            (id, phaseId, eventId, tournamentId, name, bracketType)
+          VALUES
+            (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType)`,
+      )
+      .run(pool);
   });
 }
 
@@ -238,8 +262,6 @@ export function getPlayer(id: number) {
   return db!.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
 }
 
-const POOL_UPDATE_SQL =
-  'UPDATE pools SET bracketType = @bracketType, name = @name WHERE id = @id';
 const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
   id,
   eventId,
@@ -344,16 +366,48 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @updatedAt,
   0
 )`;
-export function updatePool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
+export function upsertPool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
   if (!db) {
     throw new Error('not init');
   }
-  db!.prepare(POOL_UPDATE_SQL).run(pool);
+
+  db.prepare(
+    `REPLACE INTO
+      pools
+        (id, phaseId, eventId, tournamentId, name, bracketType)
+      VALUES
+        (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType)`,
+  ).run(pool);
   entrants.forEach((entrant) => {
     db!.prepare(ENTRANT_UPSERT_SQL).run(entrant);
   });
   sets.forEach((set) => {
     db!.prepare(SET_UPSERT_SQL).run(set);
+    // TODO check for setMutations conflicts
+  });
+}
+
+export function updateSets(sets: DbSet[]) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  sets.forEach((set) => {
+    db!
+      .prepare(
+        `UPDATE sets
+          SET
+            state = @state,
+            entrant1Id = @entrant1Id,
+            entrant1Score = @entrant1Score,
+            entrant2Id = @entrant2Id,
+            entrant2Score = @entrant2Score,
+            winnerId = @winnerId,
+            updatedAt = @updatedAt
+          WHERE id = @id AND updatedAt < @updatedAt`,
+      )
+      .run(set);
+    // TODO check for setMutations conflicts
   });
 }
 
@@ -1522,6 +1576,28 @@ export function deleteTransaction(
   })();
 }
 
+export function getEventPoolIds(id: number): Set<number> {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbPools = db
+    .prepare('SELECT * FROM pools WHERE eventId = @id')
+    .all({ id }) as DbPool[];
+  return new Set(dbPools.map((dbPool) => dbPool.id));
+}
+
+export function getPoolSetIds(id: number): Set<number> {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbSets = db
+    .prepare('SELECT * FROM sets WHERE phaseGroupId = @id')
+    .all({ id }) as DbSet[];
+  return new Set(dbSets.map((dbSet) => dbSet.id));
+}
+
 function getEntrantName(id: number): string | null {
   const maybeEntrant = db!
     .prepare('SELECT * FROM entrants WHERE id = @id')
@@ -1561,6 +1637,13 @@ export function getTournament(): RendererTournament | undefined {
   const dbEvents = db
     .prepare('SELECT * FROM events WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbEvent[];
+  const dbLoadedEventIds = new Set(
+    (
+      db
+        .prepare('SELECT * FROM loadedEvents WHERE tournamentId = @id')
+        .all({ id: currentTournamentId }) as DbLoadedEvent[]
+    ).map((loadedEvent) => loadedEvent.id),
+  );
   const dbPhases = db
     .prepare('SELECT * FROM phases WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbPhase[];
@@ -1581,6 +1664,7 @@ export function getTournament(): RendererTournament | undefined {
       id: dbEvent.id,
       name: dbEvent.name,
       isOnline: dbEvent.isOnline === 1,
+      isLoaded: dbLoadedEventIds.has(dbEvent.id),
       phases: dbPhases
         .filter((dbPhase) => dbPhase.eventId === dbEvent.id)
         .map((dbPhase) => ({

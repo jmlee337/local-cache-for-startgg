@@ -16,12 +16,15 @@ import {
   SyncResult,
 } from '../common/types';
 import {
+  getEventPoolIds,
   getPlayer,
-  updateEvent,
-  updatePool,
+  getPoolSetIds,
+  upsertEvent,
+  upsertPool,
   upsertPlayer,
   upsertPlayers,
   upsertTournament,
+  updateSets,
 } from './db';
 
 let apiKey = '';
@@ -277,9 +280,100 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
   );
 }
 
+function dbSetsFromApiSets(apiSets: any[], tournamentId: number) {
+  const idToSet = new Map<number, DbSet>();
+  apiSets
+    .filter(
+      (set) =>
+        !set.unreachable &&
+        !(set.entrant1PrereqType === 'bye' && set.entrant2PrereqType === 'bye'),
+    )
+    .map((set): DbSet => {
+      set.tournamentId = tournamentId;
+      // correct placeholder entrantIds
+      if (!Number.isInteger(set.entrant1Id)) {
+        set.entrant1Id = null;
+      }
+      if (!Number.isInteger(set.entrant2Id)) {
+        set.entrant2Id = null;
+      }
+      // fill in fields that may be missing
+      if (set.entrant1PrereqStr === undefined) {
+        set.entrant1PrereqStr = null;
+      }
+      if (set.entrant2PrereqStr === undefined) {
+        set.entrant2PrereqStr = null;
+      }
+      if (set.wProgressingPhaseGroupId === undefined) {
+        set.wProgressingPhaseGroupId = null;
+      }
+      if (set.wProgressingPhaseId === undefined) {
+        set.wProgressingPhaseId = null;
+      }
+      if (set.wProgressingName === undefined) {
+        set.wProgressingName = null;
+      }
+      if (set.lProgressingPhaseGroupId === undefined) {
+        set.lProgressingPhaseGroupId = null;
+      }
+      if (set.lProgressingPhaseId === undefined) {
+        set.lProgressingPhaseId = null;
+      }
+      if (set.lProgressingName === undefined) {
+        set.lProgressingName = null;
+      }
+      return set;
+    })
+    .forEach((set) => {
+      idToSet.set(set.id, set);
+    });
+
+  // coalesce byes
+  const sets: DbSet[] = [];
+  Array.from(idToSet.values()).forEach((dbSet) => {
+    if (
+      dbSet.entrant1PrereqType === 'bye' ||
+      dbSet.entrant2PrereqType === 'bye'
+    ) {
+      return;
+    }
+    if (dbSet.entrant1PrereqType === 'set') {
+      const prereqSet1 = idToSet.get(dbSet.entrant1PrereqId)!;
+      if (
+        prereqSet1.entrant1PrereqType === 'bye' ||
+        prereqSet1.entrant2PrereqType === 'bye'
+      ) {
+        const { prereqType, prereqId, prereqCondition, prereqStr } =
+          coalescePrereq(prereqSet1, idToSet);
+        dbSet.entrant1PrereqType = prereqType;
+        dbSet.entrant1PrereqId = prereqId;
+        dbSet.entrant1PrereqCondition = prereqCondition;
+        dbSet.entrant1PrereqStr = prereqStr;
+      }
+    }
+    if (dbSet.entrant2PrereqType === 'set') {
+      const prereqSet2 = idToSet.get(dbSet.entrant2PrereqId)!;
+      if (
+        prereqSet2.entrant1PrereqType === 'bye' ||
+        prereqSet2.entrant2PrereqType === 'bye'
+      ) {
+        const { prereqType, prereqId, prereqCondition, prereqStr } =
+          coalescePrereq(prereqSet2, idToSet);
+        dbSet.entrant2PrereqType = prereqType;
+        dbSet.entrant2PrereqId = prereqId;
+        dbSet.entrant2PrereqCondition = prereqCondition;
+        dbSet.entrant2PrereqStr = prereqStr;
+      }
+    }
+    sets.push(dbSet);
+  });
+  return sets;
+}
+
 const EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY = `
   query EventPhaseGroupsQuery($eventId: ID) {
     event(id: $eventId) {
+      id
       name
       isOnline
       phases {
@@ -360,7 +454,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
         }
       });
     }
-    updateEvent(dbEvent, dbPhases, dbPools);
+    upsertEvent(dbEvent, dbPhases, dbPools);
     updateSyncResultWithSuccess();
   } catch (e: any) {
     updateSyncResultWithError(e as Error);
@@ -500,97 +594,66 @@ export async function loadEvent(tournamentId: number, eventId: number) {
             } while (missingPlayerIds.length > 0);
           }
         }
-        const idToSet = new Map<number, DbSet>();
-        (json.entities.sets as any[])
-          .filter(
-            (set) =>
-              !set.unreachable &&
-              !(
-                set.entrant1PrereqType === 'bye' &&
-                set.entrant2PrereqType === 'bye'
-              ),
-          )
-          .map((set): DbSet => {
-            set.tournamentId = tournamentId;
-            // correct placeholder entrantIds
-            if (!Number.isInteger(set.entrant1Id)) {
-              set.entrant1Id = null;
-            }
-            if (!Number.isInteger(set.entrant2Id)) {
-              set.entrant2Id = null;
-            }
-            // fill in fields that may be missing
-            if (set.entrant1PrereqStr === undefined) {
-              set.entrant1PrereqStr = null;
-            }
-            if (set.entrant2PrereqStr === undefined) {
-              set.entrant2PrereqStr = null;
-            }
-            if (set.wProgressingPhaseGroupId === undefined) {
-              set.wProgressingPhaseGroupId = null;
-            }
-            if (set.wProgressingPhaseId === undefined) {
-              set.wProgressingPhaseId = null;
-            }
-            if (set.wProgressingName === undefined) {
-              set.wProgressingName = null;
-            }
-            if (set.lProgressingPhaseGroupId === undefined) {
-              set.lProgressingPhaseGroupId = null;
-            }
-            if (set.lProgressingPhaseId === undefined) {
-              set.lProgressingPhaseId = null;
-            }
-            if (set.lProgressingName === undefined) {
-              set.lProgressingName = null;
-            }
-            return set;
-          })
-          .forEach((set) => {
-            idToSet.set(set.id, set);
-          });
 
-        // coalesce byes
-        const sets: DbSet[] = [];
-        Array.from(idToSet.values()).forEach((dbSet) => {
-          if (
-            dbSet.entrant1PrereqType === 'bye' ||
-            dbSet.entrant2PrereqType === 'bye'
-          ) {
-            return;
+        const sets = dbSetsFromApiSets(json.entities.sets, tournamentId);
+        upsertPool(pool, entrants, sets);
+      }),
+    );
+    updateSyncResultWithSuccess();
+  } catch (e: any) {
+    updateSyncResultWithError(e as Error);
+    throw e;
+  }
+}
+
+export async function refreshEvent(tournamentId: number, eventId: number) {
+  const expectedPoolIds = getEventPoolIds(eventId);
+  const poolIdsToRefresh: number[] = [];
+  try {
+    const eventResponse = await wrappedFetch(
+      `https://api.smash.gg/event/${eventId}?expand[]=groups`,
+    );
+    const json = await eventResponse.json();
+    json.entities.groups.forEach((group: any) => {
+      if (group.state !== 1) {
+        poolIdsToRefresh.push(group.id);
+      }
+    });
+    updateSyncResultWithSuccess();
+  } catch (e: any) {
+    updateSyncResultWithError(e as Error);
+    throw e;
+  }
+
+  poolIdsToRefresh.forEach((poolId) => {
+    if (!expectedPoolIds.delete(poolId)) {
+      throw new Error(`unexpected poolId: ${poolId}`);
+    }
+  });
+  if (expectedPoolIds.size > 0) {
+    throw new Error(`missing poolIds: ${Array.from(expectedPoolIds.keys())}`);
+  }
+
+  try {
+    await Promise.all(
+      poolIdsToRefresh.map(async (id) => {
+        const expectedSetIds = getPoolSetIds(id);
+        const response = await wrappedFetch(
+          `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
+        );
+        const json = await response.json();
+        const sets = dbSetsFromApiSets(json.entities.sets, tournamentId);
+        sets.forEach((set) => {
+          if (!expectedSetIds.delete(set.id)) {
+            throw new Error(`unexpected setId: ${set.id}`);
           }
-          if (dbSet.entrant1PrereqType === 'set') {
-            const prereqSet1 = idToSet.get(dbSet.entrant1PrereqId)!;
-            if (
-              prereqSet1.entrant1PrereqType === 'bye' ||
-              prereqSet1.entrant2PrereqType === 'bye'
-            ) {
-              const { prereqType, prereqId, prereqCondition, prereqStr } =
-                coalescePrereq(prereqSet1, idToSet);
-              dbSet.entrant1PrereqType = prereqType;
-              dbSet.entrant1PrereqId = prereqId;
-              dbSet.entrant1PrereqCondition = prereqCondition;
-              dbSet.entrant1PrereqStr = prereqStr;
-            }
-          }
-          if (dbSet.entrant2PrereqType === 'set') {
-            const prereqSet2 = idToSet.get(dbSet.entrant2PrereqId)!;
-            if (
-              prereqSet2.entrant1PrereqType === 'bye' ||
-              prereqSet2.entrant2PrereqType === 'bye'
-            ) {
-              const { prereqType, prereqId, prereqCondition, prereqStr } =
-                coalescePrereq(prereqSet2, idToSet);
-              dbSet.entrant2PrereqType = prereqType;
-              dbSet.entrant2PrereqId = prereqId;
-              dbSet.entrant2PrereqCondition = prereqCondition;
-              dbSet.entrant2PrereqStr = prereqStr;
-            }
-          }
-          sets.push(dbSet);
         });
-
-        updatePool(pool, entrants, sets);
+        if (expectedSetIds.size > 0) {
+          throw new Error(
+            `missing setIds: ${Array.from(expectedSetIds.keys())}`,
+          );
+        }
+        updateSets(sets);
       }),
     );
     updateSyncResultWithSuccess();
