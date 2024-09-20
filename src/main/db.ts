@@ -184,7 +184,7 @@ export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
     throw new Error('not init');
   }
 
-  db!.prepare(TOURNAMENT_UPSERT_SQL).run(tournament);
+  db.prepare(TOURNAMENT_UPSERT_SQL).run(tournament);
   events.forEach((event) => {
     db!.prepare(EVENT_UPSERT_SQL).run(event);
   });
@@ -240,7 +240,7 @@ export function upsertPlayer(player: DbPlayer) {
     throw new Error('not init');
   }
 
-  db!.prepare(PLAYER_UPSERT_SQL).run(player);
+  db.prepare(PLAYER_UPSERT_SQL).run(player);
 }
 
 export function upsertPlayers(players: DbPlayer[]) {
@@ -259,7 +259,7 @@ export function getPlayer(id: number) {
     throw new Error('not init');
   }
 
-  return db!.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
+  return db.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
 }
 
 const ENTRANT_UPSERT_SQL = `REPLACE INTO entrants (
@@ -441,6 +441,15 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
     set.syncState = 3;
   }
 }
+function applyMutations(set: DbSet) {
+  (
+    db!
+      .prepare('SELECT * FROM setMutations WHERE setId = @id ORDER BY id ASC')
+      .all({ id: set.id }) as DbSetMutation[]
+  ).forEach((setMutation) => {
+    applyMutation(set, setMutation);
+  });
+}
 
 type ResetProgressionSet = {
   id: number;
@@ -455,19 +464,14 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
     throw new Error('not init');
   }
 
-  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
-  (
-    db!
-      .prepare('SELECT * FROM setMutations WHERE setId = @id')
-      .all({ id }) as DbSetMutation[]
-  ).forEach((setMutation) => {
-    applyMutation(set, setMutation);
-  });
+
+  applyMutations(set);
   if (set.state === 1) {
     return;
   }
@@ -523,7 +527,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
       }
     };
     (
-      db!
+      db
         .prepare(
           'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
         )
@@ -538,13 +542,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
         // no progressions if GF won from winners
         return;
       }
-      (
-        db!
-          .prepare('SELECT * FROM setMutations WHERE setId = @id')
-          .all({ id: dbSet.id }) as DbSetMutation[]
-      ).forEach((setMutation) => {
-        applyMutation(dbSet, setMutation);
-      });
+      applyMutations(dbSet);
       if (dbSet.state !== 1) {
         throw new Error(`Cannot reset due to dependent sets: ${id}`);
       }
@@ -572,7 +570,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
       }
     });
     if (wProgressionSeedId) {
-      const affectedSet = db!
+      const affectedSet = db
         .prepare(
           'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
         )
@@ -583,13 +581,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
             `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
           );
         }
-        (
-          db!
-            .prepare('SELECT * FROM setMutations WHERE setId = @id')
-            .all({ id: affectedSet.id }) as DbSetMutation[]
-        ).forEach((setMutation) => {
-          applyMutation(affectedSet, setMutation);
-        });
+        applyMutations(affectedSet);
         if (affectedSet.state !== 1) {
           throw new Error(`Cannot reset due to dependent sets: ${id}`);
         }
@@ -605,7 +597,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
       }
     }
     if (lProgressionSeedId) {
-      const affectedSet = db!
+      const affectedSet = db
         .prepare(
           'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
         )
@@ -616,13 +608,7 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
             `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
           );
         }
-        (
-          db!
-            .prepare('SELECT * FROM setMutations WHERE setId = @id')
-            .all({ id: affectedSet.id }) as DbSetMutation[]
-        ).forEach((setMutation) => {
-          applyMutation(affectedSet, setMutation);
-        });
+        applyMutations(affectedSet);
         if (affectedSet.state !== 1) {
           throw new Error(`Cannot reset due to dependent sets: ${id}`);
         }
@@ -767,19 +753,14 @@ export function startSet(id: number, transactionNum: number, queuedMs: number) {
     throw new Error('not init');
   }
 
-  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
-  (
-    db!
-      .prepare('SELECT * FROM setMutations WHERE setId = @id')
-      .all({ id }) as DbSetMutation[]
-  ).forEach((setMutation) => {
-    applyMutation(set, setMutation);
-  });
+
+  applyMutations(set);
   if (set.state === 3) {
     throw new Error(`set is already completed: ${id}`);
   }
@@ -790,39 +771,37 @@ export function startSet(id: number, transactionNum: number, queuedMs: number) {
     throw new Error(`set: ${id} has unexpected state: ${set.state}`);
   }
 
-  db!
-    .prepare(
-      `INSERT INTO setMutations (
-        setId,
-        phaseGroupId,
-        phaseId,
-        eventId,
-        tournamentId,
-        transactionNum,
-        queuedMs,
-        statePresent,
-        state
-      ) VALUES (
-        @id,
-        @phaseGroupId,
-        @phaseId,
-        @eventId,
-        @tournamentId,
-        @transactionNum,
-        @queuedMs,
-        1,
-        2
-      )`,
-    )
-    .run({
-      id,
-      phaseGroupId: set.phaseGroupId,
-      phaseId: set.phaseId,
-      eventId: set.eventId,
-      tournamentId: set.tournamentId,
+  db.prepare(
+    `INSERT INTO setMutations (
+      setId,
+      phaseGroupId,
+      phaseId,
+      eventId,
+      tournamentId,
       transactionNum,
       queuedMs,
-    });
+      statePresent,
+      state
+    ) VALUES (
+      @id,
+      @phaseGroupId,
+      @phaseId,
+      @eventId,
+      @tournamentId,
+      @transactionNum,
+      @queuedMs,
+      1,
+      2
+    )`,
+  ).run({
+    id,
+    phaseGroupId: set.phaseGroupId,
+    phaseId: set.phaseId,
+    eventId: set.eventId,
+    tournamentId: set.tournamentId,
+    transactionNum,
+    queuedMs,
+  });
 }
 
 type ReportProgressionSet = ResetProgressionSet & {
@@ -840,19 +819,14 @@ export function reportSet(
     throw new Error('not init');
   }
 
-  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
-  (
-    db!
-      .prepare('SELECT * FROM setMutations WHERE setId = @id')
-      .all({ id }) as DbSetMutation[]
-  ).forEach((setMutation) => {
-    applyMutation(set, setMutation);
-  });
+
+  applyMutations(set);
   const { entrant1Id, entrant2Id, wProgressionSeedId, lProgressionSeedId } =
     set;
   if (!entrant1Id || !entrant2Id) {
@@ -926,7 +900,7 @@ export function reportSet(
     }
   };
   (
-    db!
+    db
       .prepare(
         'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
       )
@@ -965,7 +939,7 @@ export function reportSet(
     }
   });
   if (wProgressionSeedId) {
-    const affectedSet = db!
+    const affectedSet = db
       .prepare(
         'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
       )
@@ -989,7 +963,7 @@ export function reportSet(
     }
   }
   if (lProgressionSeedId) {
-    const affectedSet = db!
+    const affectedSet = db
       .prepare(
         'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
       )
@@ -1012,7 +986,7 @@ export function reportSet(
       };
     }
   }
-  db!.transaction(() => {
+  db.transaction(() => {
     db!
       .prepare(
         `INSERT INTO setMutations (
@@ -1148,7 +1122,7 @@ export function insertTransaction(apiTransaction: ApiTransaction) {
     throw new Error('not init');
   }
 
-  db!.transaction(() => {
+  db.transaction(() => {
     db!
       .prepare(
         `INSERT INTO transactions (
@@ -1246,7 +1220,7 @@ export function getQueuedTransactions() {
   }
 
   const transactionNums = (
-    db!
+    db
       .prepare(
         `SELECT DISTINCT transactionNum
           FROM setMutations
@@ -1275,7 +1249,7 @@ export function queueAllTransactions() {
   }
 
   const transactionNums = (
-    db!
+    db
       .prepare(
         `SELECT DISTINCT transactionNum
           FROM setMutations
@@ -1297,13 +1271,11 @@ export function queueAllTransactions() {
     return toApiTransaction(transaction);
   });
 
-  db!
-    .prepare(
-      `UPDATE setMutations
-        SET queuedMs = @queuedMs
-        WHERE tournamentId = @currentTournamentId AND queuedMs = 0`,
-    )
-    .run({ queuedMs: Date.now(), currentTournamentId });
+  db.prepare(
+    `UPDATE setMutations
+      SET queuedMs = @queuedMs
+      WHERE tournamentId = @currentTournamentId AND queuedMs = 0`,
+  ).run({ queuedMs: Date.now(), currentTournamentId });
 
   return apiTransactions;
 }
@@ -1450,17 +1422,17 @@ export function releaseSet(id: number): ApiTransaction[] {
   if (!db) {
     throw new Error('not init');
   }
-  const set = db!.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`No set with id: ${id}`);
   }
 
-  db!
-    .prepare('UPDATE setMutations SET isReleased = 1 WHERE setId = @id')
-    .run({ id });
-  const setMutations = db!
+  db.prepare('UPDATE setMutations SET isReleased = 1 WHERE setId = @id').run({
+    id,
+  });
+  const setMutations = db
     .prepare(SELECT_QUEUEABLE_MUTATIONS)
     .all({ setId: id }) as DbSetMutation[];
   const transactionNums = new Set<number>();
@@ -1489,7 +1461,7 @@ export function deleteTransaction(
     throw new Error('not init');
   }
 
-  db!.transaction(() => {
+  db.transaction(() => {
     transactionNums.forEach((transactionNum) => {
       db!
         .prepare(
@@ -1688,7 +1660,7 @@ export function getTournament(): RendererTournament | undefined {
               (
                 db!
                   .prepare(
-                    'SELECT * FROM setMutations WHERE phaseGroupId = @id',
+                    'SELECT * FROM setMutations WHERE phaseGroupId = @id ORDER BY id ASC',
                   )
                   .all({ id: dbPool.id }) as DbSetMutation[]
               ).forEach((dbSetMutation) => {
@@ -1743,7 +1715,7 @@ export function getTournaments() {
     throw new Error('not init');
   }
 
-  const dbTournaments = db!
+  const dbTournaments = db
     .prepare('SELECT * FROM tournaments ORDER BY startAt DESC')
     .all() as DbTournament[];
   return dbTournaments.map((tournament): AdminedTournament => {
