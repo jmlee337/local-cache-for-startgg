@@ -405,6 +405,9 @@ export default function Tournament() {
           onClose={() => {
             setOpen(false);
           }}
+          PaperProps={{
+            style: { height: 'calc(100% - 64px)' },
+          }}
         >
           <DialogTitle
             style={{
