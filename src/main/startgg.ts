@@ -24,7 +24,8 @@ import {
   upsertPlayer,
   upsertPlayers,
   upsertTournament,
-  updateSets,
+  updateEventSets,
+  getLastTournament,
 } from './db';
 
 let apiKey = '';
@@ -500,6 +501,10 @@ export async function loadEvent(tournamentId: number, eventId: number) {
           name: json.entities.groups.displayIdentifier,
           bracketType: json.entities.groups.groupTypeId,
         };
+        // MATCHMAKING (ladder) is not supported
+        if (pool.bracketType === 7) {
+          return;
+        }
 
         // entrants first pass
         const entrants: DbEntrant[] = [];
@@ -653,7 +658,7 @@ export async function refreshEvent(tournamentId: number, eventId: number) {
             `missing setIds: ${Array.from(expectedSetIds.keys())}`,
           );
         }
-        updateSets(sets);
+        updateEventSets(eventId, sets);
       }),
     );
     updateSyncResultWithSuccess();
@@ -790,6 +795,7 @@ async function tryNextTransaction() {
   }
   const transaction = queue[0];
   if (
+    transaction.type !== 0 &&
     transaction.type !== 1 &&
     transaction.type !== 2 &&
     transaction.type !== 3
@@ -799,7 +805,14 @@ async function tryNextTransaction() {
 
   try {
     const updatedAt = Date.now() / 1000;
-    if (transaction.type === 1) {
+    if (transaction.type === 0) {
+      const lastTournament = getLastTournament();
+      lastTournament?.events
+        .filter((event) => event.isLoaded)
+        .forEach((event) => {
+          refreshEvent(lastTournament.id, event.id);
+        });
+    } else if (transaction.type === 1) {
       const update = await resetSet(transaction.setId);
       emitter!.emit(
         'transaction',
@@ -839,6 +852,9 @@ async function tryNextTransaction() {
     updateSyncResultWithError(e as Error);
 
     const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
+    if (timeoutS === 64 && queue[0].type !== 0) {
+      queue.unshift({ type: 0, setId: -1, transactionNum: -1 });
+    }
     setTimeout(tryNextTransaction, timeoutS * 1000);
   }
 }

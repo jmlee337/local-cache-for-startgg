@@ -22,7 +22,7 @@ export function setAutoSyncTransaction(newAutoSync: boolean) {
 export function resetSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  resetSet(
+  const eventId = resetSet(
     id,
     currentTransactionNum,
     autoSync ? Date.now() : 0, // queuedMs
@@ -32,7 +32,7 @@ export function resetSetTransaction(id: number) {
     type: 1,
     setId: id,
   };
-  insertTransaction(apiTransaction);
+  insertTransaction(apiTransaction, eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
@@ -42,7 +42,7 @@ export function resetSetTransaction(id: number) {
 export function startSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  startSet(
+  const eventId = startSet(
     id,
     currentTransactionNum,
     autoSync ? Date.now() : 0, // queuedMs
@@ -52,7 +52,7 @@ export function startSetTransaction(id: number) {
     type: 2,
     setId: id,
   };
-  insertTransaction(apiTransaction);
+  insertTransaction(apiTransaction, eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
@@ -102,7 +102,7 @@ export function reportSetTransaction(
 
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  reportSet(
+  const eventId = reportSet(
     id,
     winnerId,
     isDQ,
@@ -117,7 +117,7 @@ export function reportSetTransaction(
     isDQ,
     gameData,
   };
-  insertTransaction(apiTransaction);
+  insertTransaction(apiTransaction, eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }

@@ -205,10 +205,12 @@ export type DbGameData = {
 
 export type DbTransaction = {
   transactionNum: number;
+  eventId: number;
   type: 1 | 2 | 3; // 1: reset, 2: start, 3: report
   setId: number;
   winnerId: number | null;
   isDQ: 0 | 1;
+  isConflict: null | 1;
 };
 
 export type ApiGameData = {
@@ -224,7 +226,7 @@ export type ApiGameData = {
 
 export type ApiTransaction = {
   transactionNum: number;
-  type: 1 | 2 | 3; // 1: reset, 2: start, 3: report
+  type: 0 | 1 | 2 | 3; // 0: update events 1: reset, 2: start, 3: report
   setId: number;
   winnerId?: number;
   isDQ?: boolean;
