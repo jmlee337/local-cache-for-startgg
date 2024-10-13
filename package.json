@@ -175,8 +175,8 @@
     "webpack-merge": "^5.9.0"
   },
   "build": {
-    "productName": "ElectronReact",
-    "appId": "org.erb.ElectronReact",
+    "productName": "LocalCacheForStartgg",
+    "appId": "org.jmlee337.LocalCacheForStartgg",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
     "files": [
@@ -188,10 +188,7 @@
     "mac": {
       "target": {
         "target": "default",
-        "arch": [
-          "arm64",
-          "x64"
-        ]
+        "arch": "universal"
       },
       "type": "distribution",
       "hardenedRuntime": true,
