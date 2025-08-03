@@ -4,6 +4,8 @@ import type { connection } from 'websocket';
 import websocket from 'websocket';
 import { getLastEvent, getLastTournament } from './db';
 import {
+  assignSetStationTransaction,
+  assignSetStreamTransaction,
   reportSetTransaction,
   resetSetTransaction,
   startSetTransaction,
@@ -119,6 +121,28 @@ export async function startWebsocketServer(port: number) {
               newConnection.sendUTF(
                 JSON.stringify({
                   op: 'start-set-response',
+                  err: e instanceof Error ? e.message : e,
+                }),
+              );
+            }
+          } else if (json.op === 'assign-set-station-request') {
+            try {
+              assignSetStationTransaction(json.id, json.stationId);
+            } catch (e: any) {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'assign-set-station-response',
+                  err: e instanceof Error ? e.message : e,
+                }),
+              );
+            }
+          } else if (json.op === 'assign-set-stream-request') {
+            try {
+              assignSetStreamTransaction(json.id, json.streamId);
+            } catch (e: any) {
+              newConnection.sendUTF(
+                JSON.stringify({
+                  op: 'assign-set-stream-response',
                   err: e instanceof Error ? e.message : e,
                 }),
               );

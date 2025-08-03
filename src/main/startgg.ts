@@ -6,6 +6,7 @@ import {
   ApiGameData,
   ApiSetUpdate,
   ApiTransaction,
+  TransactionType,
   DbEntrant,
   DbEvent,
   DbPhase,
@@ -14,6 +15,8 @@ import {
   DbSet,
   DbTournament,
   SyncResult,
+  DbStation,
+  DbStream,
 } from '../common/types';
 import {
   getEventPoolIds,
@@ -26,6 +29,8 @@ import {
   upsertTournament,
   updateEventSets,
   getLastTournament,
+  upsertStations,
+  upsertStreams,
 } from './db';
 
 let apiKey = '';
@@ -160,6 +165,23 @@ const TOURNAMENT_PLAYERS_QUERY = `
     }
   }
 `;
+const TOURNAMENT_STREAMS_AND_STATIONS_QUERY = `
+  query TournamentStreamsAndStationsQuery($slug: String) {
+    tournament(slug: $slug) {
+      stations(page: 1, perPage: 500) {
+        nodes {
+          id
+          number
+        }
+      }
+      streams {
+        id
+        streamSource
+        streamName
+      }
+    }
+  }
+`;
 export async function getApiTournament(slug: string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
@@ -217,6 +239,32 @@ export async function getApiTournament(slug: string) {
       }
       page += 1;
     } while (page <= nextData.tournament.participants.pageInfo.totalPages);
+
+    const streamsAndStationsData = await fetchGql(
+      apiKey,
+      TOURNAMENT_STREAMS_AND_STATIONS_QUERY,
+      { slug },
+    );
+    upsertStations(
+      streamsAndStationsData.tournament.stations.nodes.map(
+        (apiStation: any): DbStation => ({
+          id: apiStation.id,
+          tournamentId: id,
+          number: apiStation.number,
+        }),
+      ),
+    );
+    upsertStreams(
+      streamsAndStationsData.tournament.streams.map(
+        (apiStream: any): DbStream => ({
+          id: apiStream.id,
+          tournamentId: id,
+          streamName: apiStream.streamName,
+          streamSource: apiStream.streamSource,
+        }),
+      ),
+    );
+
     updateSyncResultWithSuccess();
     return id;
   } catch (e: any) {
@@ -683,6 +731,13 @@ const UPDATE_SET_INNER = `
           }
         }
       }
+      station {
+        id
+      }
+      stream {
+        id
+      }
+      updatedAt
       winnerId
 `;
 const RESET_SET_MUTATION = `
@@ -704,6 +759,71 @@ async function resetSet(setId: number): Promise<ApiSetUpdate> {
     entrant2Id: data.resetSet.slots[1].entrant.id,
     entrant2Score: data.resetSet.slots[1].standing.stats.score.values,
     winnerId: data.resetSet.winnerId,
+    updatedAt: data.resetSet.updatedAt,
+    stationId: data.resetSet.station?.id ?? null,
+    streamId: data.resetSet.stream?.id ?? null,
+  };
+}
+
+const ASSIGN_SET_STATION_MUTATION = `
+  mutation assignSetStation($setId: ID!, $stationId: ID!) {
+    assignStation(setId: $setId, stationId: $stationId) {${UPDATE_SET_INNER}}
+  }
+`;
+async function assignSetStation(
+  setId: number,
+  stationId: number,
+): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const data = await fetchGql(apiKey, ASSIGN_SET_STATION_MUTATION, {
+    setId,
+    stationId,
+  });
+  return {
+    id: data.assignStation.id,
+    state: data.assignStation.state,
+    entrant1Id: data.assignStation.slots[0].entrant.id,
+    entrant1Score: data.assignStation.slots[0].standing.stats.score.value,
+    entrant2Id: data.assignStation.slots[1].entrant.id,
+    entrant2Score: data.assignStation.slots[1].standing.stats.score.values,
+    winnerId: data.assignStation.winnerId,
+    updatedAt: data.assignStation.updatedAt,
+    stationId: data.assignStation.station?.id ?? null,
+    streamId: data.assignStation.stream?.id ?? null,
+  };
+}
+
+const ASSIGN_SET_STREAM_MUTATION = `
+  mutation assignSetStream($setId: ID!, $streamId: ID!) {
+    assignStream(setId: $setId, streamId: $streamId) {${UPDATE_SET_INNER}}
+  }
+`;
+async function assignSetStream(
+  setId: number,
+  streamId: number,
+): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const data = await fetchGql(apiKey, ASSIGN_SET_STREAM_MUTATION, {
+    setId,
+    streamId,
+  });
+  return {
+    id: data.assignStream.id,
+    state: data.assignStream.state,
+    entrant1Id: data.assignStream.slots[0].entrant.id,
+    entrant1Score: data.assignStream.slots[0].standing.stats.score.value,
+    entrant2Id: data.assignStream.slots[1].entrant.id,
+    entrant2Score: data.assignStream.slots[1].standing.stats.score.values,
+    winnerId: data.assignStream.winnerId,
+    updatedAt: data.assignStream.updatedAt,
+    stationId: data.assignStream.station?.id ?? null,
+    streamId: data.assignStream.stream?.id ?? null,
   };
 }
 
@@ -726,6 +846,9 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
     entrant2Id: data.markSetInProgress.slots[1].entrant.id,
     entrant2Score: data.markSetInProgress.slots[1].standing.stats.score.values,
     winnerId: data.markSetInProgress.winnerId,
+    updatedAt: data.markSetInProgress.updatedAt,
+    stationId: data.markSetInProgress.station?.id ?? null,
+    streamId: data.markSetInProgress.stream?.id ?? null,
   };
 }
 
@@ -768,23 +891,18 @@ async function reportSet(
       entrant2Id: entrant2 ? entrant2.id : null,
       entrant2Score: standing2 ? standing2.stats.score.value : null,
       winnerId: set.winnerId,
+      updatedAt: set.updatedAt,
+      stationId: set.station?.id ?? null,
+      streamId: set.stream?.id ?? null,
     };
   });
 }
 
-let emitter: EventEmitter | undefined;
+const emitter = new EventEmitter();
 export function onTransaction(
-  callback: (
-    transactionNum: number,
-    updates: ApiSetUpdate[],
-    updatedAt: number,
-  ) => void,
+  callback: (transactionNum: number, updates: ApiSetUpdate[]) => void,
 ) {
-  if (emitter) {
-    emitter.removeAllListeners();
-  }
-
-  emitter = new EventEmitter();
+  emitter.removeAllListeners();
   emitter.addListener('transaction', callback);
 }
 
@@ -794,53 +912,44 @@ async function tryNextTransaction() {
     return;
   }
   const transaction = queue[0];
-  if (
-    transaction.type !== 0 &&
-    transaction.type !== 1 &&
-    transaction.type !== 2 &&
-    transaction.type !== 3
-  ) {
+  if (!Object.values(TransactionType).includes(transaction.type)) {
     throw new Error(`unknown transaciton type: ${transaction.type}`);
   }
 
   try {
-    const updatedAt = Date.now() / 1000;
-    if (transaction.type === 0) {
+    if (transaction.type === TransactionType.UPDATE_EVENTS) {
       const lastTournament = getLastTournament();
       lastTournament?.events
         .filter((event) => event.isLoaded)
         .forEach((event) => {
           refreshEvent(lastTournament.id, event.id);
         });
-    } else if (transaction.type === 1) {
+    } else if (transaction.type === TransactionType.RESET) {
       const update = await resetSet(transaction.setId);
-      emitter!.emit(
-        'transaction',
-        transaction.transactionNum,
-        [update],
-        updatedAt,
+      emitter.emit('transaction', transaction.transactionNum, [update]);
+    } else if (transaction.type === TransactionType.ASSIGN_STATION) {
+      const update = await assignSetStation(
+        transaction.setId,
+        transaction.stationId,
       );
-    } else if (transaction.type === 2) {
+      emitter.emit('transaction', transaction.transactionNum, [update]);
+    } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
+      const update = await assignSetStream(
+        transaction.setId,
+        transaction.streamId,
+      );
+      emitter.emit('transaction', transaction.transactionNum, [update]);
+    } else if (transaction.type === TransactionType.START) {
       const update = await startSet(transaction.setId);
-      emitter!.emit(
-        'transaction',
-        transaction.transactionNum,
-        [update],
-        updatedAt,
-      );
-    } else if (transaction.type === 3) {
+      emitter.emit('transaction', transaction.transactionNum, [update]);
+    } else if (transaction.type === TransactionType.REPORT) {
       const updates = await reportSet(
         transaction.setId,
-        transaction.winnerId!,
-        transaction.isDQ!,
-        transaction.gameData!,
+        transaction.winnerId,
+        transaction.isDQ,
+        transaction.gameData,
       );
-      emitter!.emit(
-        'transaction',
-        transaction.transactionNum,
-        updates,
-        updatedAt,
-      );
+      emitter.emit('transaction', transaction.transactionNum, updates);
     }
     updateSyncResultWithSuccess();
 
@@ -853,7 +962,10 @@ async function tryNextTransaction() {
 
     const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
     if (timeoutS === 64 && queue[0].type !== 0) {
-      queue.unshift({ type: 0, setId: -1, transactionNum: -1 });
+      queue.unshift({
+        type: TransactionType.UPDATE_EVENTS,
+        transactionNum: -1,
+      });
     }
     setTimeout(tryNextTransaction, timeoutS * 1000);
   }

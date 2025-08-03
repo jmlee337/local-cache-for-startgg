@@ -20,7 +20,6 @@ import {
 import {
   dbInit,
   deleteTransaction,
-  getLastTournament,
   getQueuedTransactions,
   getTournament,
   getTournamentId,
@@ -35,6 +34,8 @@ import {
   updateSubscribers,
 } from './websocket';
 import {
+  assignSetStationTransaction,
+  assignSetStreamTransaction,
   initTransaction,
   reportSetTransaction,
   resetSetTransaction,
@@ -56,8 +57,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
 
   const initTransactionNum = dbInit();
   startggInit(mainWindow);
-  onTransaction((completedTransactionNum, updates, updatedAt) => {
-    deleteTransaction(completedTransactionNum, updates, updatedAt);
+  onTransaction((completedTransactionNum, updates) => {
+    deleteTransaction(completedTransactionNum, updates);
     updateRenderer();
   });
 
@@ -86,13 +87,17 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   );
 
   const loadedEventIds: number[] = [];
-  const resetLoadedEventIds = (rendererTournament: RendererTournament) => {
+  const resetLoadedEventIds = (
+    rendererTournament: RendererTournament | undefined,
+  ) => {
     loadedEventIds.length = 0;
-    loadedEventIds.push(
-      ...rendererTournament.events
-        .filter((event) => event.isLoaded)
-        .map((event) => event.id),
-    );
+    if (rendererTournament) {
+      loadedEventIds.push(
+        ...rendererTournament.events
+          .filter((event) => event.isLoaded)
+          .map((event) => event.id),
+      );
+    }
   };
 
   const refreshEvents = async () => {
@@ -209,7 +214,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       const newId = await getApiTournament(slug);
       setTournamentId(newId);
       if (oldId !== newId) {
-        resetLoadedEventIds(getLastTournament()!);
+        resetLoadedEventIds(getTournament());
         refreshEvents();
         tournamentChanged();
       }
@@ -230,7 +235,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       }
       setTournamentId(newId);
       if (oldId !== newId) {
-        resetLoadedEventIds(getLastTournament()!);
+        resetLoadedEventIds(getTournament());
         refreshEvents();
         tournamentChanged();
       }
@@ -253,6 +258,22 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('resetSet', (event: IpcMainInvokeEvent, id: number) => {
     resetSetTransaction(id);
   });
+
+  ipcMain.removeHandler('assignSetStation');
+  ipcMain.handle(
+    'assignSetStation',
+    (event: IpcMainInvokeEvent, id: number, stationId: number) => {
+      assignSetStationTransaction(id, stationId);
+    },
+  );
+
+  ipcMain.removeHandler('assignSetStream');
+  ipcMain.handle(
+    'assignSetStream',
+    (event: IpcMainInvokeEvent, id: number, streamId: number) => {
+      assignSetStreamTransaction(id, streamId);
+    },
+  );
 
   ipcMain.removeHandler('startSet');
   ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {

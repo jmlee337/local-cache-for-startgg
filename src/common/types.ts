@@ -7,6 +7,16 @@ export type AdminedTournament = {
   startAt: number;
 };
 
+export type RendererStation = {
+  id: number;
+  number: number;
+};
+
+export type RendererStream = {
+  id: number;
+  streamName: string;
+};
+
 export type RendererSet = {
   id: number;
   fullRoundText: string;
@@ -21,6 +31,8 @@ export type RendererSet = {
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
   winnerId: number | null;
+  station: RendererStation | null;
+  stream: RendererStream | null;
   syncState: 0 | 1 | 2 | 3; // 0: synced, 1: queued, 2: released, 3: local
 };
 
@@ -49,6 +61,30 @@ export type RendererTournament = {
   id: number;
   slug: string;
   events: RendererEvent[];
+  stations: RendererStation[];
+  streams: RendererStream[];
+};
+
+export enum TransactionType {
+  UPDATE_EVENTS,
+  RESET,
+  START,
+  ASSIGN_STATION,
+  ASSIGN_STREAM,
+  REPORT,
+}
+
+export type DbStation = {
+  id: number;
+  tournamentId: number;
+  number: number;
+};
+
+export type DbStream = {
+  id: number;
+  tournamentId: number;
+  streamName: string;
+  streamSource: string;
 };
 
 export type DbPlayer = {
@@ -96,10 +132,13 @@ export type DbSetMutation = {
   entrant2Score: number | null;
   winnerIdPresent: null | 1;
   winnerId: number | null;
-
-  // hopefully locally mutable
+  stationIdPresent: null | 1;
+  stationId: number | null;
   streamIdPresent: null | 1;
   streamId: number | null;
+
+  // locally mutable and required
+  updatedAt: number;
 
   // local only
   transactionNum: number;
@@ -146,8 +185,7 @@ export type DbSet = {
   entrant2Score: number | null;
   winnerId: number | null;
   updatedAt: number;
-
-  // hopefully locally mutable
+  stationId: number | null;
   streamId: number | null;
 
   // we only store 0, but we modify after query via setMutation
@@ -206,8 +244,10 @@ export type DbGameData = {
 export type DbTransaction = {
   transactionNum: number;
   eventId: number;
-  type: 1 | 2 | 3; // 1: reset, 2: start, 3: report
+  type: TransactionType;
   setId: number;
+  stationId: number | null;
+  streamId: number | null;
   winnerId: number | null;
   isDQ: 0 | 1;
   isConflict: null | 1;
@@ -226,12 +266,32 @@ export type ApiGameData = {
 
 export type ApiTransaction = {
   transactionNum: number;
-  type: 0 | 1 | 2 | 3; // 0: update events 1: reset, 2: start, 3: report
-  setId: number;
-  winnerId?: number;
-  isDQ?: boolean;
-  gameData?: ApiGameData[];
-};
+} & (
+  | {
+      type: TransactionType.UPDATE_EVENTS;
+    }
+  | ({
+      setId: number;
+    } & (
+      | {
+          type: TransactionType.RESET | TransactionType.START;
+        }
+      | {
+          type: TransactionType.ASSIGN_STATION;
+          stationId: number;
+        }
+      | {
+          type: TransactionType.ASSIGN_STREAM;
+          streamId: number;
+        }
+      | {
+          type: TransactionType.REPORT;
+          winnerId: number;
+          isDQ: boolean;
+          gameData: ApiGameData[];
+        }
+    ))
+);
 
 export type ApiSetUpdate = {
   id: number;
@@ -241,6 +301,9 @@ export type ApiSetUpdate = {
   entrant2Id: number | null;
   entrant2Score: number | null;
   winnerId: number | null;
+  updatedAt: number;
+  stationId: number | null;
+  streamId: number | null;
 };
 
 export class ApiError extends Error {

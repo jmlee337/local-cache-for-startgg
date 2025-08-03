@@ -1,5 +1,12 @@
-import { ApiGameData, ApiTransaction } from '../common/types';
-import { insertTransaction, reportSet, resetSet, startSet } from './db';
+import { ApiGameData, ApiTransaction, TransactionType } from '../common/types';
+import {
+  assignSetStation,
+  assignSetStream,
+  insertTransaction,
+  reportSet,
+  resetSet,
+  startSet,
+} from './db';
 import { queueTransaction } from './startgg';
 
 let autoSync = false;
@@ -29,7 +36,7 @@ export function resetSetTransaction(id: number) {
   );
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
-    type: 1,
+    type: TransactionType.RESET,
     setId: id,
   };
   insertTransaction(apiTransaction, eventId);
@@ -49,8 +56,52 @@ export function startSetTransaction(id: number) {
   );
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
-    type: 2,
+    type: TransactionType.START,
     setId: id,
+  };
+  insertTransaction(apiTransaction, eventId);
+  if (autoSync) {
+    queueTransaction(apiTransaction);
+  }
+  updateClients();
+}
+
+export function assignSetStationTransaction(id: number, stationId: number) {
+  const currentTransactionNum = transactionNum;
+  transactionNum += 1;
+  const eventId = assignSetStation(
+    id,
+    stationId,
+    currentTransactionNum,
+    autoSync ? Date.now() : 0, // queuedMs
+  );
+  const apiTransaction: ApiTransaction = {
+    transactionNum: currentTransactionNum,
+    type: TransactionType.ASSIGN_STATION,
+    setId: id,
+    stationId,
+  };
+  insertTransaction(apiTransaction, eventId);
+  if (autoSync) {
+    queueTransaction(apiTransaction);
+  }
+  updateClients();
+}
+
+export function assignSetStreamTransaction(id: number, streamId: number) {
+  const currentTransactionNum = transactionNum;
+  transactionNum += 1;
+  const eventId = assignSetStream(
+    id,
+    streamId,
+    currentTransactionNum,
+    autoSync ? Date.now() : 0, // queuedMs
+  );
+  const apiTransaction: ApiTransaction = {
+    transactionNum: currentTransactionNum,
+    type: TransactionType.ASSIGN_STREAM,
+    setId: id,
+    streamId,
   };
   insertTransaction(apiTransaction, eventId);
   if (autoSync) {
@@ -111,7 +162,7 @@ export function reportSetTransaction(
   );
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
-    type: 3,
+    type: TransactionType.REPORT,
     setId: id,
     winnerId,
     isDQ,

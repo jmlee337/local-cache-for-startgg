@@ -31,6 +31,10 @@ const electronHandler = {
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
   resetSet: (id: number): Promise<void> => ipcRenderer.invoke('resetSet', id),
+  assignSetStation: (id: number, stationId: number): Promise<void> =>
+    ipcRenderer.invoke('assignSetStation', id, stationId),
+  assignSetStream: (id: number, streamId: number): Promise<void> =>
+    ipcRenderer.invoke('assignSetStream', id, streamId),
   startSet: (id: number): Promise<void> => ipcRenderer.invoke('startSet', id),
   reportSet: (id: number, winnerId: number, isDQ: boolean): Promise<void> =>
     ipcRenderer.invoke('reportSet', id, winnerId, isDQ),

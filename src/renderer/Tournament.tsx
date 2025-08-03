@@ -10,7 +10,9 @@ import {
   HourglassTop,
   NotificationsActive,
   Refresh,
+  RestartAlt,
   Router,
+  Tv,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -361,14 +363,18 @@ export default function Tournament() {
     setSettingTournament(false);
   };
 
+  const [stationStreamDialogOpen, setStationStreamDialogOpen] = useState(false);
+  const [choosing, setChoosing] = useState(false);
+
+  const [resetting, setResetting] = useState(false);
+  const [starting, setStarting] = useState(false);
+
   const [reportSet, setReportSet] = useState<RendererSet | null>(null);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportWinnerId, setReportWinnerId] = useState(0);
   const [reportIsDq, setReportIsDq] = useState(false);
-
-  const [resetting, setResetting] = useState(false);
-  const [starting, setStarting] = useState(false);
   const [reporting, setReporting] = useState(false);
+
   return (
     <Stack>
       <Stack direction="row" alignItems="center">
@@ -634,11 +640,19 @@ export default function Tournament() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button
+          <IconButton
+            color="primary"
+            disabled={choosing}
+            size="small"
+            onClick={async () => {
+              setStationStreamDialogOpen(true);
+            }}
+          >
+            {choosing ? <CircularProgress size="24px" /> : <Tv />}
+          </IconButton>
+          <IconButton
             color="error"
-            variant="text"
             disabled={reportSet?.state === 1 || resetting}
-            endIcon={resetting ? <CircularProgress size="24px" /> : undefined}
             onClick={async () => {
               setResetting(true);
               try {
@@ -651,8 +665,8 @@ export default function Tournament() {
               }
             }}
           >
-            Reset
-          </Button>
+            {resetting ? <CircularProgress size="24px" /> : <RestartAlt />}
+          </IconButton>
           <IconButton
             color="primary"
             disabled={
@@ -695,6 +709,114 @@ export default function Tournament() {
             Report
           </Button>
         </DialogActions>
+      </Dialog>
+      <Dialog
+        open={stationStreamDialogOpen}
+        onClose={() => {
+          setStationStreamDialogOpen(false);
+        }}
+      >
+        <DialogContent>
+          {tournament && tournament.streams.length > 0 && (
+            <>
+              {reportSet?.stream && (
+                <ListItemButton
+                  disabled={choosing}
+                  disableGutters
+                  style={{ marginTop: '8px' }}
+                  onClick={async () => {
+                    setChoosing(true);
+                    try {
+                      await window.electron.assignSetStream(reportSet!.id, 0);
+                      setStationStreamDialogOpen(false);
+                      setReportDialogOpen(false);
+                    } catch (e: any) {
+                      showError(e instanceof Error ? e.message : e);
+                    } finally {
+                      setChoosing(false);
+                    }
+                  }}
+                >
+                  <ListItemText>
+                    Remove from {reportSet!.stream.streamName}
+                  </ListItemText>
+                </ListItemButton>
+              )}
+              <List disablePadding>
+                {tournament.streams
+                  .filter((stream) => stream.id !== reportSet?.stream?.id)
+                  .map((stream) => (
+                    <ListItemButton
+                      disabled={choosing}
+                      key={stream.id}
+                      disableGutters
+                      onClick={async () => {
+                        setChoosing(true);
+                        try {
+                          await window.electron.assignSetStream(
+                            reportSet!.id,
+                            stream.id,
+                          );
+                          setStationStreamDialogOpen(false);
+                          setReportDialogOpen(false);
+                        } catch (e: any) {
+                          showError(e instanceof Error ? e.message : e);
+                        } finally {
+                          setChoosing(false);
+                        }
+                      }}
+                    >
+                      <ListItemText>{stream.streamName}</ListItemText>
+                    </ListItemButton>
+                  ))}
+              </List>
+            </>
+          )}
+          {tournament && tournament.stations.length > 0 && (
+            <>
+              {reportSet?.station && (
+                <ListItemText style={{ padding: '12px 0', margin: '8px 0 0' }}>
+                  Assigned to station {reportSet!.station.number}
+                </ListItemText>
+              )}
+              <List
+                disablePadding
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                }}
+              >
+                {tournament.stations
+                  .filter((station) => station.id !== reportSet?.station?.id)
+                  .map((station) => (
+                    <ListItemButton
+                      disabled={choosing}
+                      key={station.id}
+                      style={{ flexGrow: 0 }}
+                      onClick={async () => {
+                        setChoosing(true);
+                        try {
+                          await window.electron.assignSetStation(
+                            reportSet!.id,
+                            station.id,
+                          );
+                          setStationStreamDialogOpen(false);
+                          setReportDialogOpen(false);
+                        } catch (e: any) {
+                          showError(e instanceof Error ? e.message : e);
+                        } finally {
+                          setChoosing(false);
+                        }
+                      }}
+                    >
+                      <ListItemText>{station.number}</ListItemText>
+                    </ListItemButton>
+                  ))}
+              </List>
+            </>
+          )}
+        </DialogContent>
       </Dialog>
       <ErrorDialog
         open={errorDialogOpen}
