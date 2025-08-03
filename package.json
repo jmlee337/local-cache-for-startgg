@@ -175,8 +175,8 @@
     "webpack-merge": "^5.9.0"
   },
   "build": {
-    "productName": "LocalCacheForStartgg",
-    "appId": "org.jmlee337.LocalCacheForStartgg",
+    "productName": "OfflineModeForStartgg",
+    "appId": "org.jmlee337.OfflineModeForStartgg",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll}",
     "files": [

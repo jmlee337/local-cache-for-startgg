@@ -69,7 +69,7 @@ export default function Settings() {
         >
           <DialogTitle>Settings</DialogTitle>
           <Typography variant="caption">
-            Local Cache for start.gg version {appVersion}
+            Offline Mode for start.gg version {appVersion}
           </Typography>
         </Stack>
         <DialogContent>
