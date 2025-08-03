@@ -373,7 +373,29 @@ export default function Tournament() {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportWinnerId, setReportWinnerId] = useState(0);
   const [reportIsDq, setReportIsDq] = useState(false);
+  const [reportEntrant1Score, setReportEntrant1Score] = useState(0);
+  const [reportEntrant2Score, setReportEntrant2Score] = useState(0);
   const [reporting, setReporting] = useState(false);
+
+  let reportGameData:
+    | [
+        { entrantId: number; score: number },
+        { entrantId: number; score: number },
+      ]
+    | null = null;
+  if (reportSet && reportSet.entrant1Id && reportSet.entrant2Id) {
+    if (reportEntrant1Score > reportEntrant2Score) {
+      reportGameData = [
+        { entrantId: reportSet.entrant1Id, score: reportEntrant1Score },
+        { entrantId: reportSet.entrant2Id, score: reportEntrant2Score },
+      ];
+    } else if (reportEntrant1Score < reportEntrant2Score) {
+      reportGameData = [
+        { entrantId: reportSet.entrant2Id, score: reportEntrant2Score },
+        { entrantId: reportSet.entrant1Id, score: reportEntrant1Score },
+      ];
+    }
+  }
 
   return (
     <Stack>
@@ -580,6 +602,8 @@ export default function Tournament() {
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant2Id!);
                   setReportIsDq(true);
+                  setReportEntrant1Score(0);
+                  setReportEntrant2Score(0);
                 }}
               >
                 DQ
@@ -587,13 +611,101 @@ export default function Tournament() {
               <Button
                 disabled={reportSet?.state === 3}
                 variant={
-                  !reportIsDq && reportWinnerId === reportSet?.entrant1Id
+                  !reportIsDq &&
+                  !(
+                    reportEntrant2Score === 0 &&
+                    (reportWinnerId === reportSet?.entrant1Id ||
+                      reportWinnerId === reportSet?.entrant2Id)
+                  ) &&
+                  reportEntrant1Score === 0
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  setReportWinnerId(
+                    reportEntrant2Score > 0 ? reportSet!.entrant2Id! : 0,
+                  );
+                  setReportIsDq(false);
+                  setReportEntrant1Score(0);
+                }}
+              >
+                0
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant1Score === 1
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant2Score > 1) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else if (reportEntrant2Score < 1) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant1Score(1);
+                }}
+              >
+                1
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant1Score === 2
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant2Score > 2) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else if (reportEntrant2Score < 2) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant1Score(2);
+                }}
+              >
+                2
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant1Score === 3
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant2Score > 3) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else if (reportEntrant2Score < 3) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant1Score(3);
+                }}
+              >
+                3
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
                     : 'text'
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant1Id!);
                   setReportIsDq(false);
+                  setReportEntrant1Score(0);
+                  setReportEntrant2Score(0);
                 }}
               >
                 W
@@ -618,6 +730,8 @@ export default function Tournament() {
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant1Id!);
                   setReportIsDq(true);
+                  setReportEntrant1Score(0);
+                  setReportEntrant2Score(0);
                 }}
               >
                 DQ
@@ -625,13 +739,101 @@ export default function Tournament() {
               <Button
                 disabled={reportSet?.state === 3}
                 variant={
-                  !reportIsDq && reportWinnerId === reportSet?.entrant2Id
+                  !reportIsDq &&
+                  !(
+                    reportEntrant1Score === 0 &&
+                    (reportWinnerId === reportSet?.entrant1Id ||
+                      reportWinnerId === reportSet?.entrant2Id)
+                  ) &&
+                  reportEntrant2Score === 0
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  setReportWinnerId(
+                    reportEntrant1Score > 0 ? reportSet!.entrant1Id! : 0,
+                  );
+                  setReportIsDq(false);
+                  setReportEntrant2Score(0);
+                }}
+              >
+                0
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant2Score === 1
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant1Score > 1) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else if (reportEntrant1Score < 1) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant2Score(1);
+                }}
+              >
+                1
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant2Score === 2
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant1Score > 2) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else if (reportEntrant1Score < 2) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant2Score(2);
+                }}
+              >
+                2
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  !reportIsDq && reportEntrant2Score === 3
+                    ? 'contained'
+                    : 'text'
+                }
+                onClick={() => {
+                  if (reportEntrant1Score > 3) {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                  } else if (reportEntrant1Score < 3) {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                  } else {
+                    setReportWinnerId(0);
+                  }
+                  setReportIsDq(false);
+                  setReportEntrant2Score(3);
+                }}
+              >
+                3
+              </Button>
+              <Button
+                disabled={reportSet?.state === 3}
+                variant={
+                  reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
                     : 'text'
                 }
                 onClick={() => {
                   setReportWinnerId(reportSet!.entrant2Id!);
                   setReportIsDq(false);
+                  setReportEntrant1Score(0);
+                  setReportEntrant2Score(0);
                 }}
               >
                 W
@@ -697,6 +899,7 @@ export default function Tournament() {
                   reportSet!.id,
                   reportWinnerId,
                   reportIsDq,
+                  reportGameData,
                 );
                 setReportDialogOpen(false);
               } catch (e: any) {

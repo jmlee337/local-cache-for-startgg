@@ -42,7 +42,7 @@ import {
   setAutoSyncTransaction,
   startSetTransaction,
 } from './transaction';
-import { RendererTournament } from '../common/types';
+import { ApiGameData, RendererTournament } from '../common/types';
 
 const DEFAULT_PORT = 50000;
 
@@ -288,8 +288,34 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       id: number,
       winnerId: number,
       isDQ: boolean,
+      entrantScores:
+        | [
+            { entrantId: number; score: number },
+            { entrantId: number; score: number },
+          ]
+        | null,
     ) => {
-      reportSetTransaction(id, winnerId, isDQ, []);
+      const apiGameData: ApiGameData[] = [];
+      if (!isDQ && entrantScores !== null) {
+        let gameNum = 1;
+        for (let i = 0; i < entrantScores[0].score; i += 1) {
+          apiGameData.push({
+            gameNum,
+            winnerId: entrantScores[0].entrantId,
+            selections: [],
+          });
+          gameNum += 1;
+        }
+        for (let i = 0; i < entrantScores[1].score; i += 1) {
+          apiGameData.push({
+            gameNum,
+            winnerId: entrantScores[1].entrantId,
+            selections: [],
+          });
+          gameNum += 1;
+        }
+      }
+      reportSetTransaction(id, winnerId, isDQ, apiGameData);
     },
   );
 

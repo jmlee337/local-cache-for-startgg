@@ -9,12 +9,12 @@ import {
   TransactionType,
   DbEntrant,
   DbEvent,
-  DbGameData,
+  DbTransactionGameData,
   DbLoadedEvent,
   DbPhase,
   DbPlayer,
   DbPool,
-  DbSelections,
+  DbTransactionSelections,
   DbSet,
   DbSetMutation,
   DbTournament,
@@ -24,6 +24,7 @@ import {
   RendererTournament,
   DbStation,
   DbStream,
+  ApiGameData,
 } from '../common/types';
 
 enum SyncStatus {
@@ -179,7 +180,7 @@ export function dbInit() {
     )`,
   ).run();
   db.prepare(
-    `CREATE TABLE IF NOT EXISTS gameData (
+    `CREATE TABLE IF NOT EXISTS transactionGameData (
       transactionNum INTEGER,
       gameNum INTEGER,
       winnerId INTEGER NOT NULL,
@@ -188,12 +189,12 @@ export function dbInit() {
     )`,
   ).run();
   db.prepare(
-    `CREATE TABLE IF NOT EXISTS selections (
-      transactionNum INTEGER,
-      gameNum INTEGER,
-      entrantId INTEGER,
+    `CREATE TABLE IF NOT EXISTS transactionSelections (
+      id INTEGER PRIMARY KEY,
+      transactionNum INTEGER NOT NULL,
+      gameNum INTEGER NOT NULL,
+      entrantId INTEGER NOT NULL,
       characterId INTEGER NOT NULL,
-      PRIMARY KEY (transactionNum, gameNum, entrantId)
     )`,
   ).run();
   const init = db
@@ -980,6 +981,7 @@ export function reportSet(
   id: number,
   winnerId: number,
   isDQ: boolean,
+  gameData: ApiGameData[],
   transactionNum: number,
   queuedMs: number,
 ) {
@@ -1013,6 +1015,13 @@ export function reportSet(
   if (isDQ) {
     entrant1Score = winnerId === entrant1Id ? 0 : -1;
     entrant2Score = winnerId === entrant2Id ? 0 : -1;
+  } else if (gameData.length > 0) {
+    entrant1Score = gameData.filter(
+      (game) => game.winnerId === entrant1Id,
+    ).length;
+    entrant2Score = gameData.filter(
+      (game) => game.winnerId === entrant2Id,
+    ).length;
   }
 
   let wProgressionSet: ReportProgressionSet | undefined;
@@ -1344,7 +1353,7 @@ export function insertTransaction(
       apiTransaction.gameData?.forEach((gameData) => {
         db!
           .prepare(
-            `INSERT INTO gameData (
+            `INSERT INTO transactionGameData (
               transactionNum, gameNum, winnerId, stageId
             ) VALUES (
              @transactionNum, @gameNum, @winnerId, @stageId
@@ -1359,7 +1368,7 @@ export function insertTransaction(
         gameData.selections.forEach((selection) => {
           db!
             .prepare(
-              `INSERT INTO selections (
+              `INSERT INTO transactionSelections (
                 transactionNum, gameNum, entrantId, characterId
               ) VALUES (
                 @transactionNum, @gameNum, @entrantId, @characterId
@@ -1380,8 +1389,10 @@ export function insertTransaction(
 function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
   const { transactionNum } = dbTransaction;
   const gameDatas = db!
-    .prepare('SELECT * FROM gameData WHERE transactionNum = @transactionNum')
-    .all({ transactionNum }) as DbGameData[];
+    .prepare(
+      'SELECT * FROM transactionGameData WHERE transactionNum = @transactionNum',
+    )
+    .all({ transactionNum }) as DbTransactionGameData[];
   const gameNumToSelections = new Map<
     number,
     { entrantId: number; characterId: number }[]
@@ -1389,9 +1400,9 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
   (
     db!
       .prepare(
-        'SELECT * FROM selections WHERE transactionNum = @transactionNum',
+        'SELECT * FROM transactionSelections WHERE transactionNum = @transactionNum',
       )
-      .all({ transactionNum }) as DbSelections[]
+      .all({ transactionNum }) as DbTransactionSelections[]
   ).forEach((dbSelection) => {
     const selection = {
       entrantId: dbSelection.entrantId,
@@ -1704,10 +1715,14 @@ export function deleteTransaction(
       )
       .run({ transactionNum });
     db!
-      .prepare('DELETE FROM gameData WHERE transactionNum = @transactionNum')
+      .prepare(
+        'DELETE FROM transactionGameData WHERE transactionNum = @transactionNum',
+      )
       .run({ transactionNum });
     db!
-      .prepare('DELETE FROM selections WHERE transactionNum = @transactionNum')
+      .prepare(
+        'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
+      )
       .run({ transactionNum });
 
     // start.gg does not return sets affected by resetSet or sets affected by

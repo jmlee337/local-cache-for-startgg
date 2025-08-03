@@ -157,6 +157,7 @@ export function reportSetTransaction(
     id,
     winnerId,
     isDQ,
+    gameData,
     currentTransactionNum,
     autoSync ? Date.now() : 0, // queuedMs
   );

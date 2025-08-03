@@ -36,8 +36,18 @@ const electronHandler = {
   assignSetStream: (id: number, streamId: number): Promise<void> =>
     ipcRenderer.invoke('assignSetStream', id, streamId),
   startSet: (id: number): Promise<void> => ipcRenderer.invoke('startSet', id),
-  reportSet: (id: number, winnerId: number, isDQ: boolean): Promise<void> =>
-    ipcRenderer.invoke('reportSet', id, winnerId, isDQ),
+  reportSet: (
+    id: number,
+    winnerId: number,
+    isDQ: boolean,
+    entrantScores:
+      | [
+          { entrantId: number; score: number },
+          { entrantId: number; score: number },
+        ]
+      | null,
+  ): Promise<void> =>
+    ipcRenderer.invoke('reportSet', id, winnerId, isDQ, entrantScores),
   getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
   onAdminedTournaments: (
     callback: (

@@ -227,18 +227,20 @@ export type DbTournament = {
   startAt: number;
 };
 
-export type DbSelections = {
+export type DbTransactionSelections = {
   transactionNumber: number;
   gameNum: number;
   entrantId: number;
   characterId: number;
 };
 
-export type DbGameData = {
+export type DbTransactionGameData = {
   transactionNum: number;
   gameNum: number;
   winnerId: number;
   stageId: number | null;
+  entrant1Score: number | null;
+  entrant2Score: number | null;
 };
 
 export type DbTransaction = {
@@ -258,6 +260,8 @@ export type ApiGameData = {
   gameNum: number;
   winnerId: number;
   stageId?: number;
+  entrant1Score?: number;
+  entrant2Score?: number;
   selections: {
     entrantId: number;
     characterId: number;
