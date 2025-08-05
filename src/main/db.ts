@@ -19,12 +19,13 @@ import {
   DbSetMutation,
   DbTournament,
   DbTransaction,
-  RendererEvent,
   RendererSet,
   RendererTournament,
   DbStation,
   DbStream,
   ApiGameData,
+  RendererStation,
+  RendererStream,
 } from '../common/types';
 
 enum SyncStatus {
@@ -194,7 +195,7 @@ export function dbInit() {
       transactionNum INTEGER NOT NULL,
       gameNum INTEGER NOT NULL,
       entrantId INTEGER NOT NULL,
-      characterId INTEGER NOT NULL,
+      characterId INTEGER NOT NULL
     )`,
   ).run();
   const init = db
@@ -497,6 +498,74 @@ function applyMutations(set: DbSet) {
   });
 }
 
+function getEntrantName(id: number): string | null {
+  const maybeEntrant = db!
+    .prepare('SELECT * FROM entrants WHERE id = @id')
+    .get({ id }) as DbEntrant | undefined;
+  if (!maybeEntrant) {
+    return null;
+  }
+
+  return maybeEntrant.participant2Id
+    ? maybeEntrant.name
+    : maybeEntrant.participant1GamerTag;
+}
+
+function getRendererStation(id: number): RendererStation | null {
+  const maybeStation = db!
+    .prepare('SELECT * FROM stations WHERE id = @id')
+    .get({ id }) as DbStation | undefined;
+  if (!maybeStation) {
+    return null;
+  }
+
+  return maybeStation;
+}
+
+function getRendererStream(id: number): RendererStream | null {
+  const maybeStream = db!
+    .prepare('SELECT * FROM streams WHERE id = @id')
+    .get({ id }) as DbStream | undefined;
+  if (!maybeStream) {
+    return null;
+  }
+
+  return maybeStream;
+}
+
+function dbSetToRendererSet(dbSet: DbSet): RendererSet {
+  const entrant1Name = dbSet.entrant1Id
+    ? getEntrantName(dbSet.entrant1Id)
+    : null;
+  const entrant2Name = dbSet.entrant2Id
+    ? getEntrantName(dbSet.entrant2Id)
+    : null;
+  return {
+    id: dbSet.id,
+    fullRoundText: dbSet.fullRoundText,
+    identifier: dbSet.identifier,
+    state: dbSet.state,
+    entrant1Id: dbSet.entrant1Id,
+    entrant1Name,
+    entrant1PrereqStr: dbSet.entrant1PrereqStr,
+    entrant1Score: dbSet.entrant1Score,
+    entrant2Id: dbSet.entrant2Id,
+    entrant2Name,
+    entrant2PrereqStr: dbSet.entrant2PrereqStr,
+    entrant2Score: dbSet.entrant2Score,
+    winnerId: dbSet.winnerId,
+    station:
+      dbSet.stationId === null
+        ? null
+        : getRendererStation(dbSet.stationId) ?? null,
+    stream:
+      dbSet.streamId === null
+        ? null
+        : getRendererStream(dbSet.streamId) ?? null,
+    syncState: dbSet.syncState,
+  };
+}
+
 type ResetProgressionSet = {
   id: number;
   phaseGroupId: number;
@@ -671,6 +740,10 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
     }
   }
 
+  set.state = 1;
+  set.entrant1Score = null;
+  set.entrant2Score = null;
+  set.winnerId = null;
   const updatedAt = Date.now() / 1000;
   db.transaction(() => {
     db!
@@ -701,13 +774,13 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
           @transactionNum,
           @queuedMs,
           1,
+          @state,
           1,
+          @entrant1Score,
           1,
-          null,
+          @entrant2Score,
           1,
-          null,
-          1,
-          null,
+          @winnerId,
           @updatedAt
         )`,
       )
@@ -719,6 +792,10 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
         tournamentId: set.tournamentId,
         transactionNum,
         queuedMs,
+        state: set.state,
+        entrant1Score: set.entrant1Score,
+        entrant2Score: set.entrant2Score,
+        winnerId: set.winnerId,
         updatedAt,
       });
     if (wProgressionSet) {
@@ -802,7 +879,10 @@ export function resetSet(id: number, transactionNum: number, queuedMs: number) {
         });
     }
   })();
-  return set.eventId;
+  return {
+    eventId: set.eventId,
+    set: dbSetToRendererSet(set),
+  };
 }
 
 export function startSet(id: number, transactionNum: number, queuedMs: number) {
@@ -827,6 +907,7 @@ export function startSet(id: number, transactionNum: number, queuedMs: number) {
   if (set.state !== 1 && set.state !== 6) {
     throw new Error(`set: ${id} has unexpected state: ${set.state}`);
   }
+  set.state = 2;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -849,7 +930,7 @@ export function startSet(id: number, transactionNum: number, queuedMs: number) {
       @transactionNum,
       @queuedMs,
       1,
-      2,
+      @state,
       @updatedAt
     )`,
   ).run({
@@ -860,9 +941,13 @@ export function startSet(id: number, transactionNum: number, queuedMs: number) {
     tournamentId: set.tournamentId,
     transactionNum,
     queuedMs,
+    state: set.state,
     updatedAt: Date.now() / 1000,
   });
-  return set.eventId;
+  return {
+    eventId: set.eventId,
+    set: dbSetToRendererSet(set),
+  };
 }
 
 export function assignSetStation(
@@ -880,6 +965,19 @@ export function assignSetStation(
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
+
+  const { tournamentId } = set;
+  const station = db
+    .prepare(
+      'SELECT * FROM stations WHERE id = @stationId AND tournamentId = @tournamentId',
+    )
+    .get({ stationId, tournamentId }) as DbStation | undefined;
+  if (!station) {
+    throw new Error(`no such station: ${stationId}`);
+  }
+
+  applyMutations(set);
+  set.stationId = stationId;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -913,10 +1011,13 @@ export function assignSetStation(
     tournamentId: set.tournamentId,
     transactionNum,
     queuedMs,
-    stationId,
+    stationId: set.stationId,
     updatedAt: Date.now() / 1000,
   });
-  return set.eventId;
+  return {
+    eventId: set.eventId,
+    set: dbSetToRendererSet(set),
+  };
 }
 
 export function assignSetStream(
@@ -934,6 +1035,19 @@ export function assignSetStream(
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
+
+  const { tournamentId } = set;
+  const stream = db
+    .prepare(
+      'SELECT * FROM streams WHERE id = @streamId AND tournamentId = @tournamentId',
+    )
+    .get({ streamId, tournamentId }) as DbStream | undefined;
+  if (!stream) {
+    throw new Error(`no such stream: ${streamId}`);
+  }
+
+  applyMutations(set);
+  set.streamId = streamId;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -967,10 +1081,13 @@ export function assignSetStream(
     tournamentId: set.tournamentId,
     transactionNum,
     queuedMs,
-    streamId,
+    streamId: set.streamId,
     updatedAt: Date.now() / 1000,
   });
-  return set.eventId;
+  return {
+    eventId: set.eventId,
+    set: dbSetToRendererSet(set),
+  };
 }
 
 type ReportProgressionSet = ResetProgressionSet & {
@@ -1009,20 +1126,20 @@ export function reportSet(
       `invalid winnerId: ${winnerId} (${entrant1Id}, ${entrant2Id})`,
     );
   }
-  const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
-  let entrant1Score: number | null = null;
-  let entrant2Score: number | null = null;
+  set.state = 3;
+  set.winnerId = winnerId;
   if (isDQ) {
-    entrant1Score = winnerId === entrant1Id ? 0 : -1;
-    entrant2Score = winnerId === entrant2Id ? 0 : -1;
+    set.entrant1Score = winnerId === entrant1Id ? 0 : -1;
+    set.entrant2Score = winnerId === entrant2Id ? 0 : -1;
   } else if (gameData.length > 0) {
-    entrant1Score = gameData.filter(
+    set.entrant1Score = gameData.filter(
       (game) => game.winnerId === entrant1Id,
     ).length;
-    entrant2Score = gameData.filter(
+    set.entrant2Score = gameData.filter(
       (game) => game.winnerId === entrant2Id,
     ).length;
   }
+  const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
 
   let wProgressionSet: ReportProgressionSet | undefined;
   let lProgressionSet: ReportProgressionSet | undefined;
@@ -1211,10 +1328,10 @@ export function reportSet(
         tournamentId: set.tournamentId,
         transactionNum,
         queuedMs,
-        state: 3,
-        entrant1Score,
-        entrant2Score,
-        winnerId,
+        state: set.state,
+        entrant1Score: set.entrant1Score,
+        entrant2Score: set.entrant2Score,
+        winnerId: set.winnerId,
         updatedAt,
       });
     if (wProgressionSet) {
@@ -1302,7 +1419,10 @@ export function reportSet(
         });
     }
   })();
-  return set.eventId;
+  return {
+    eventId: set.eventId,
+    set: dbSetToRendererSet(set),
+  };
 }
 
 export function insertTransaction(
@@ -1989,27 +2109,9 @@ export function getPoolSetIds(id: number): Set<number> {
   return new Set(dbSets.map((dbSet) => dbSet.id));
 }
 
-function getEntrantName(id: number): string | null {
-  const maybeEntrant = db!
-    .prepare('SELECT * FROM entrants WHERE id = @id')
-    .get({ id }) as DbEntrant | undefined;
-  if (!maybeEntrant) {
-    return null;
-  }
-
-  return maybeEntrant.participant2Id
-    ? maybeEntrant.name
-    : maybeEntrant.participant1GamerTag;
-}
-
 let lastTournament: RendererTournament | undefined;
 export function getLastTournament() {
   return lastTournament;
-}
-
-const idToLastEvent = new Map<number, RendererEvent>();
-export function getLastEvent(id: number) {
-  return idToLastEvent.get(id);
 }
 
 export function getTournament(): RendererTournament | undefined {
@@ -2051,15 +2153,9 @@ export function getTournament(): RendererTournament | undefined {
   const dbStations = db
     .prepare('SELECT * FROM stations WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbStation[];
-  const idToDbStation = new Map(
-    dbStations.map((dbStation) => [dbStation.id, dbStation]),
-  );
   const dbStreams = db
     .prepare('SELECT * FROM streams WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbStream[];
-  const idToDbStream = new Map(
-    dbStreams.map((dbStream) => [dbStream.id, dbStream]),
-  );
   lastTournament = {
     id: dbTournament.id,
     slug: dbTournament.slug,
@@ -2101,38 +2197,7 @@ export function getTournament(): RendererTournament | undefined {
                 }
               });
 
-              const rendererSets = dbSets.map((dbSet): RendererSet => {
-                const entrant1Name = dbSet.entrant1Id
-                  ? getEntrantName(dbSet.entrant1Id)
-                  : null;
-                const entrant2Name = dbSet.entrant2Id
-                  ? getEntrantName(dbSet.entrant2Id)
-                  : null;
-                return {
-                  id: dbSet.id,
-                  fullRoundText: dbSet.fullRoundText,
-                  identifier: dbSet.identifier,
-                  state: dbSet.state,
-                  entrant1Id: dbSet.entrant1Id,
-                  entrant1Name,
-                  entrant1PrereqStr: dbSet.entrant1PrereqStr,
-                  entrant1Score: dbSet.entrant1Score,
-                  entrant2Id: dbSet.entrant2Id,
-                  entrant2Name,
-                  entrant2PrereqStr: dbSet.entrant2PrereqStr,
-                  entrant2Score: dbSet.entrant2Score,
-                  winnerId: dbSet.winnerId,
-                  station:
-                    dbSet.stationId === null
-                      ? null
-                      : idToDbStation.get(dbSet.stationId) ?? null,
-                  stream:
-                    dbSet.streamId === null
-                      ? null
-                      : idToDbStream.get(dbSet.streamId) ?? null,
-                  syncState: dbSet.syncState,
-                };
-              });
+              const rendererSets = dbSets.map(dbSetToRendererSet);
               return {
                 id: dbPool.id,
                 name: dbPool.name,
@@ -2145,9 +2210,6 @@ export function getTournament(): RendererTournament | undefined {
     stations: dbStations,
     streams: dbStreams,
   };
-  lastTournament.events.forEach((event) => {
-    idToLastEvent.set(event.id, event);
-  });
   return lastTournament;
 }
 

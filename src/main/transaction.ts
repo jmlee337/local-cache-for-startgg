@@ -29,7 +29,7 @@ export function setAutoSyncTransaction(newAutoSync: boolean) {
 export function resetSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const eventId = resetSet(
+  const ret = resetSet(
     id,
     currentTransactionNum,
     autoSync ? Date.now() : 0, // queuedMs
@@ -39,17 +39,18 @@ export function resetSetTransaction(id: number) {
     type: TransactionType.RESET,
     setId: id,
   };
-  insertTransaction(apiTransaction, eventId);
+  insertTransaction(apiTransaction, ret.eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
   updateClients();
+  return { set: ret.set };
 }
 
 export function startSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const eventId = startSet(
+  const ret = startSet(
     id,
     currentTransactionNum,
     autoSync ? Date.now() : 0, // queuedMs
@@ -59,17 +60,18 @@ export function startSetTransaction(id: number) {
     type: TransactionType.START,
     setId: id,
   };
-  insertTransaction(apiTransaction, eventId);
+  insertTransaction(apiTransaction, ret.eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
   updateClients();
+  return { set: ret.set };
 }
 
 export function assignSetStationTransaction(id: number, stationId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const eventId = assignSetStation(
+  const ret = assignSetStation(
     id,
     stationId,
     currentTransactionNum,
@@ -81,17 +83,18 @@ export function assignSetStationTransaction(id: number, stationId: number) {
     setId: id,
     stationId,
   };
-  insertTransaction(apiTransaction, eventId);
+  insertTransaction(apiTransaction, ret.eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
   updateClients();
+  return { set: ret.set };
 }
 
 export function assignSetStreamTransaction(id: number, streamId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const eventId = assignSetStream(
+  const ret = assignSetStream(
     id,
     streamId,
     currentTransactionNum,
@@ -103,11 +106,12 @@ export function assignSetStreamTransaction(id: number, streamId: number) {
     setId: id,
     streamId,
   };
-  insertTransaction(apiTransaction, eventId);
+  insertTransaction(apiTransaction, ret.eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
   updateClients();
+  return { set: ret.set };
 }
 
 export function reportSetTransaction(
@@ -153,7 +157,7 @@ export function reportSetTransaction(
 
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const eventId = reportSet(
+  const ret = reportSet(
     id,
     winnerId,
     isDQ,
@@ -169,9 +173,10 @@ export function reportSetTransaction(
     isDQ,
     gameData,
   };
-  insertTransaction(apiTransaction, eventId);
+  insertTransaction(apiTransaction, ret.eventId);
   if (autoSync) {
     queueTransaction(apiTransaction);
   }
   updateClients();
+  return { set: ret.set };
 }

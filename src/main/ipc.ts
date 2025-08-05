@@ -30,7 +30,6 @@ import {
 import {
   startWebsocketServer,
   stopWebsocketServer,
-  tournamentChanged,
   updateSubscribers,
 } from './websocket';
 import {
@@ -215,10 +214,10 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       setTournamentId(newId);
       if (oldId !== newId) {
         resetLoadedEventIds(getTournament());
-        refreshEvents();
-        tournamentChanged();
+        queueTransactions(getQueuedTransactions());
       }
-      queueTransactions(getQueuedTransactions());
+      refreshEvents();
+      updateSubscribers();
       updateRenderer();
     },
   );
@@ -236,10 +235,10 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       setTournamentId(newId);
       if (oldId !== newId) {
         resetLoadedEventIds(getTournament());
-        refreshEvents();
-        tournamentChanged();
+        queueTransactions(getQueuedTransactions());
       }
-      queueTransactions(getQueuedTransactions());
+      refreshEvents();
+      updateSubscribers();
       updateRenderer();
     },
   );

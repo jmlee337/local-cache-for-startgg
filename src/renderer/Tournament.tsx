@@ -561,6 +561,8 @@ export default function Tournament() {
               reportSet={(newReportSet: RendererSet) => {
                 setReportWinnerId(0);
                 setReportIsDq(false);
+                setReportEntrant1Score(0);
+                setReportEntrant2Score(0);
                 setReportSet(newReportSet);
                 setReportDialogOpen(true);
               }}

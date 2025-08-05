@@ -2,7 +2,7 @@ import http from 'http';
 import { AddressInfo } from 'net';
 import type { connection } from 'websocket';
 import websocket from 'websocket';
-import { getLastEvent, getLastTournament } from './db';
+import { getLastTournament } from './db';
 import {
   assignSetStationTransaction,
   assignSetStreamTransaction,
@@ -10,6 +10,20 @@ import {
   resetSetTransaction,
   startSetTransaction,
 } from './transaction';
+import { RendererSet } from '../common/types';
+
+type Response = {
+  op:
+    | 'start-set-response'
+    | 'assign-set-station-response'
+    | 'assign-set-stream-response'
+    | 'reset-set-response'
+    | 'report-set-response';
+  err?: string;
+  data?: {
+    set: RendererSet;
+  };
+};
 
 const BRACKET_PROTOCOL = 'bracket-protocol';
 
@@ -17,10 +31,14 @@ let httpServer: http.Server | null;
 let websocketServer: websocket.server | null;
 const connections = new Set<connection>();
 
-type Subscription = {
-  eventId?: number;
-};
-const connectionToSubscription = new Map<connection, Subscription>();
+function sendTournamentUpdateEvent(connection: connection) {
+  connection.sendUTF(
+    JSON.stringify({
+      op: 'tournament-update-event',
+      tournament: getLastTournament(),
+    }),
+  );
+}
 
 export async function startWebsocketServer(port: number) {
   if (httpServer && websocketServer) {
@@ -63,122 +81,140 @@ export async function startWebsocketServer(port: number) {
       if (request.requestedProtocols[0] === BRACKET_PROTOCOL) {
         const newConnection = request.accept(BRACKET_PROTOCOL, request.origin);
         connections.add(newConnection);
+        sendTournamentUpdateEvent(newConnection);
         newConnection.on('message', async (data) => {
           if (data.type === 'binary') {
             return;
           }
 
           const json = JSON.parse(data.utf8Data);
-          if (json.op === 'get-tournament-and-events-request') {
-            const tournament = getLastTournament();
-            newConnection.sendUTF(
-              JSON.stringify({
-                op: 'get-tournament-and-events-response',
-                tournament: tournament
-                  ? {
-                      slug: tournament.slug,
-                      events: tournament.events.map((event) => ({
-                        id: event.id,
-                        name: event.name,
-                      })),
-                    }
-                  : undefined,
-              }),
-            );
-          } else if (json.op === 'subscribe-to-tournament-request') {
-            connectionToSubscription.set(newConnection, {});
-            newConnection.sendUTF(
-              JSON.stringify({
-                op: 'subscribe-to-tournament-response',
-                tournament: getLastTournament(),
-              }),
-            );
-          } else if (json.op === 'subscribe-to-event-request') {
-            const eventId = json.id as number;
-            const event = getLastEvent(eventId);
-            if (event) {
-              connectionToSubscription.set(newConnection, {
-                eventId,
-              });
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'subscribe-to-event-response',
-                  event,
-                }),
-              );
-            } else {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'subscribe-to-event-response',
-                  err: `event not found: ${eventId}`,
-                }),
-              );
+          if (json.op === 'reset-set-request') {
+            const response: Response = {
+              op: 'reset-set-response',
+            };
+            if (!Number.isInteger(json.id)) {
+              response.err = 'id must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            try {
+              response.data = resetSetTransaction(json.id);
+              newConnection.sendUTF(JSON.stringify(response));
+            } catch (e: any) {
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
             }
           } else if (json.op === 'start-set-request') {
+            const response: Response = {
+              op: 'start-set-response',
+            };
+            if (!Number.isInteger(json.id)) {
+              response.err = 'id must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
             try {
-              startSetTransaction(json.id);
+              response.data = startSetTransaction(json.id);
+              newConnection.sendUTF(JSON.stringify(response));
             } catch (e: any) {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'start-set-response',
-                  err: e instanceof Error ? e.message : e,
-                }),
-              );
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
             }
           } else if (json.op === 'assign-set-station-request') {
+            const response: Response = {
+              op: 'assign-set-station-response',
+            };
+            if (!Number.isInteger(json.id)) {
+              response.err = 'id must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            if (!Number.isInteger(json.stationId)) {
+              response.err = 'stationId must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
             try {
-              assignSetStationTransaction(json.id, json.stationId);
-            } catch (e: any) {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'assign-set-station-response',
-                  err: e instanceof Error ? e.message : e,
-                }),
+              response.data = assignSetStationTransaction(
+                json.id,
+                json.stationId,
               );
+              newConnection.sendUTF(JSON.stringify(response));
+            } catch (e: any) {
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
             }
           } else if (json.op === 'assign-set-stream-request') {
+            const response: Response = {
+              op: 'assign-set-stream-response',
+            };
+            if (!Number.isInteger(json.id)) {
+              response.err = 'id must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            if (!Number.isInteger(json.streamId)) {
+              response.err = 'streamId must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
             try {
-              assignSetStreamTransaction(json.id, json.streamId);
-            } catch (e: any) {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'assign-set-stream-response',
-                  err: e instanceof Error ? e.message : e,
-                }),
+              response.data = assignSetStreamTransaction(
+                json.id,
+                json.streamId,
               );
+              newConnection.sendUTF(JSON.stringify(response));
+            } catch (e: any) {
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
             }
           } else if (json.op === 'report-set-request') {
+            const response: Response = {
+              op: 'report-set-response',
+            };
+            if (!Number.isInteger(json.id)) {
+              response.err = 'id must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            if (!Number.isInteger(json.winnerId)) {
+              response.err = 'winnerId must be integer';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            if (typeof json.isDQ !== 'boolean') {
+              response.err = 'isDQ must be boolean';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            if (!Array.isArray(json.gameData)) {
+              response.err = 'gameData must be array';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
             try {
-              reportSetTransaction(
+              response.data = reportSetTransaction(
                 json.id,
                 json.winnerId,
                 json.isDQ,
                 json.gameData,
               );
+              newConnection.sendUTF(JSON.stringify(response));
             } catch (e: any) {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'report-set-response',
-                  err: e instanceof Error ? e.message : e,
-                }),
-              );
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
             }
-          } else if (json.op === 'reset-set-request') {
-            try {
-              resetSetTransaction(json.id);
-            } catch (e: any) {
-              newConnection.sendUTF(
-                JSON.stringify({
-                  op: 'reset-set-response',
-                  err: e instanceof Error ? e.message : e,
-                }),
-              );
-            }
+          } else {
+            newConnection.sendUTF(
+              JSON.stringify({
+                op: 'error',
+                err: `invalid request: ${json.op}`,
+              }),
+            );
           }
         });
         newConnection.on('close', () => {
           connections.delete(newConnection);
-          connectionToSubscription.delete(newConnection);
         });
         return;
       }
@@ -193,51 +229,14 @@ export async function startWebsocketServer(port: number) {
 
 export function stopWebsocketServer() {
   if (httpServer && websocketServer) {
-    connectionToSubscription.clear();
     websocketServer.shutDown();
     websocketServer = null;
     httpServer.close();
     httpServer = null;
+    connections.clear();
   }
 }
 
 export function updateSubscribers() {
-  Array.from(connectionToSubscription.entries()).forEach(
-    ([connection, subscription]) => {
-      if (subscription.eventId) {
-        connection.sendUTF(
-          JSON.stringify({
-            op: 'event-update-event',
-            event: getLastEvent(subscription.eventId),
-          }),
-        );
-      } else {
-        connection.sendUTF(
-          JSON.stringify({
-            op: 'tournament-update-event',
-            tournament: getLastTournament(),
-          }),
-        );
-      }
-    },
-  );
-}
-
-export function tournamentChanged() {
-  connectionToSubscription.clear();
-  Array.from(connections.keys()).forEach((connection) => {
-    const tournament = getLastTournament();
-    connection.sendUTF(
-      JSON.stringify({
-        op: 'tournament-changed-event',
-        tournament: {
-          slug: tournament!.slug,
-          events: tournament!.events.map((event) => ({
-            id: event.id,
-            name: event.name,
-          })),
-        },
-      }),
-    );
-  });
+  Array.from(connections.keys()).forEach(sendTournamentUpdateEvent);
 }
