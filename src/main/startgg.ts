@@ -182,17 +182,18 @@ const TOURNAMENT_STREAMS_AND_STATIONS_QUERY = `
     }
   }
 `;
-export async function getApiTournament(slug: string) {
+export async function getApiTournament(inSlug: string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
 
   try {
     const response = await wrappedFetch(
-      `https://api.smash.gg/tournament/${slug}?expand[]=event`,
+      `https://api.smash.gg/tournament/${inSlug}?expand[]=event`,
     );
     const json = await response.json();
-    const { id } = json.entities.tournament;
+    const { id, slug: apiSlug } = json.entities.tournament;
+    const slug = apiSlug.slice(11);
     const tournament: DbTournament = {
       id,
       slug,
