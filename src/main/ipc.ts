@@ -216,9 +216,16 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         resetLoadedEventIds(getTournament());
         queueTransactions(getQueuedTransactions());
       }
-      refreshEvents();
       updateSubscribers();
       updateRenderer();
+
+      try {
+        await refreshEvents();
+        updateSubscribers();
+        updateRenderer();
+      } catch {
+        // just catch
+      }
     },
   );
 
@@ -227,19 +234,23 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'setTournament',
     async (event: IpcMainInvokeEvent, newId: number, slug: string) => {
       const oldId = getTournamentId();
-      try {
-        await getApiTournament(slug);
-      } catch {
-        // ignore
-      }
       setTournamentId(newId);
       if (oldId !== newId) {
         resetLoadedEventIds(getTournament());
         queueTransactions(getQueuedTransactions());
       }
-      refreshEvents();
       updateSubscribers();
       updateRenderer();
+
+      try {
+        await getApiTournament(slug);
+        resetLoadedEventIds(getTournament());
+        await refreshEvents();
+        updateSubscribers();
+        updateRenderer();
+      } catch {
+        // just catch
+      }
     },
   );
 
