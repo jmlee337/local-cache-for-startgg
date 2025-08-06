@@ -2230,3 +2230,71 @@ export function getTournaments() {
     return { ...tournament, isSynced: numSetMutations['COUNT(id)'] === 0 };
   });
 }
+
+export function deleteTournament(id: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbTournament = db
+    .prepare('SELECT * FROM tournaments WHERE id = @id')
+    .get({ id }) as DbTournament | undefined;
+  if (!dbTournament) {
+    throw new Error(`No tournament with id: ${id}`);
+  }
+
+  const dbEvents = db
+    .prepare('SELECT * FROM events WHERE tournamentId = @id')
+    .all({ id }) as DbEvent[];
+  const eventIds = dbEvents.map((dbEvent) => dbEvent.id);
+
+  const dbTransactions: DbTransaction[] = [];
+  eventIds.forEach((eventId) => {
+    dbTransactions.push(
+      ...(db!
+        .prepare('SELECT * FROM transactions WHERE eventId = @eventId')
+        .all({ eventId }) as DbTransaction[]),
+    );
+  });
+  const transactionNums = dbTransactions.map(
+    (dbTransaction) => dbTransaction.transactionNum,
+  );
+
+  db.transaction(() => {
+    db!.prepare('DELETE FROM tournaments WHERE id = @id').run({ id });
+    db!.prepare('DELETE FROM events WHERE tournamentId = @id').run({ id });
+    db!
+      .prepare('DELETE FROM loadedEvents WHERE tournamentId = @id')
+      .run({ id });
+    db!.prepare('DELETE FROM phases WHERE tournamentId = @id').run({ id });
+    db!.prepare('DELETE FROM pools WHERE tournamentId = @id').run({ id });
+    db!.prepare('DELETE FROM sets WHERE tournamentId = @id').run({ id });
+    db!
+      .prepare('DELETE FROM setMutations WHERE tournamentId = @id')
+      .run({ id });
+    db!.prepare('DELETE FROM stations WHERE tournamentId = @id').run({ id });
+    db!.prepare('DELETE FROM streams WHERE tournamentId = @id').run({ id });
+
+    eventIds.forEach((eventId) => {
+      db!
+        .prepare('DELETE FROM transactions WHERE eventId = @eventId')
+        .run({ eventId });
+      db!
+        .prepare('DELETE FROM entrants WHERE eventId = @eventId')
+        .run({ eventId });
+    });
+
+    transactionNums.forEach((transactionNum) => {
+      db!
+        .prepare(
+          'DELETE FROM transactionGameData WHERE transactionNum = @transactionNum',
+        )
+        .run({ transactionNum });
+      db!
+        .prepare(
+          'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
+        )
+        .run({ transactionNum });
+    });
+  })();
+}

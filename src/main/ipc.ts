@@ -19,6 +19,7 @@ import {
 } from './startgg';
 import {
   dbInit,
+  deleteTournament,
   deleteTransaction,
   getQueuedTransactions,
   getTournament,
@@ -47,11 +48,17 @@ const DEFAULT_PORT = 50000;
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateRenderer = () => {
-    mainWindow.webContents.send('tournament', getTournament());
+    // defer
+    setTimeout(() => {
+      mainWindow.webContents.send('tournament', getTournament());
+    }, 0);
   };
   const updateClients = () => {
-    mainWindow.webContents.send('tournament', getTournament());
-    updateSubscribers();
+    // defer
+    setTimeout(() => {
+      mainWindow.webContents.send('tournament', getTournament());
+      updateSubscribers();
+    }, 0);
   };
 
   const initTransactionNum = dbInit();
@@ -197,6 +204,21 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('getLocalTournaments');
   ipcMain.handle('getLocalTournaments', getTournaments);
 
+  ipcMain.removeHandler('deleteLocalTournament');
+  ipcMain.handle(
+    'deleteLocalTournament',
+    (event: IpcMainInvokeEvent, id: number) => {
+      const currentId = getTournamentId();
+      deleteTournament(id);
+      if (id === currentId) {
+        setTournamentId(0);
+        getTournament();
+        resetLoadedEventIds(undefined);
+        updateClients();
+      }
+    },
+  );
+
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
     return getAdminedTournaments();
@@ -216,13 +238,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         resetLoadedEventIds(getTournament());
         queueTransactions(getQueuedTransactions());
       }
-      updateSubscribers();
-      updateRenderer();
+      updateClients();
 
       try {
         await refreshEvents();
-        updateSubscribers();
-        updateRenderer();
+        updateClients();
       } catch {
         // just catch
       }
@@ -239,15 +259,13 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         resetLoadedEventIds(getTournament());
         queueTransactions(getQueuedTransactions());
       }
-      updateSubscribers();
-      updateRenderer();
+      updateClients();
 
       try {
         await getApiTournament(slug);
         resetLoadedEventIds(getTournament());
         await refreshEvents();
-        updateSubscribers();
-        updateRenderer();
+        updateClients();
       } catch {
         // just catch
       }

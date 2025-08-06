@@ -272,6 +272,84 @@ function EventListItem({
   );
 }
 
+function LocalTournamentItemButton({
+  localTournament,
+  set,
+  setLocalTournaments,
+  showError,
+}: {
+  localTournament: AdminedTournament;
+  set: (id: number, slug: string) => Promise<void>;
+  setLocalTournaments: (localTournaments: AdminedTournament[]) => void;
+  showError: (message: string) => void;
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  return (
+    <ListItemButton
+      style={{ gap: '8px', padding: '4px 8px 4px 16px' }}
+      onClick={async () => {
+        await set(localTournament.id, localTournament.slug);
+      }}
+    >
+      <ListItemText>{localTournament.name}</ListItemText>
+      {localTournament.isSynced ? (
+        <Tooltip title="Fully synced">
+          <CloudDone />
+        </Tooltip>
+      ) : (
+        <Tooltip title="Not fully synced">
+          <CloudOff />
+        </Tooltip>
+      )}
+      <Tooltip title="Delete">
+        <IconButton
+          disabled={deleting}
+          onClick={(ev) => {
+            ev.stopPropagation();
+            setDeleteOpen(true);
+          }}
+        >
+          <Close />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        open={deleteOpen}
+        onClose={() => {
+          setDeleteOpen(false);
+        }}
+      >
+        <DialogTitle>
+          Delete {localTournament.name}? ({localTournament.id})
+        </DialogTitle>
+        <DialogActions>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={async (ev) => {
+              ev.stopPropagation();
+              setDeleting(true);
+              try {
+                await window.electron.deleteLocalTournament(localTournament.id);
+                setLocalTournaments(
+                  await window.electron.getLocalTournaments(),
+                );
+              } catch (e: any) {
+                showError(e instanceof Error ? e.message : e);
+              } finally {
+                setDeleting(false);
+              }
+            }}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </ListItemButton>
+  );
+}
+
 export default function Tournament() {
   const [gettingAdminedTournaments, setGettingAdminedTournaments] =
     useState(false);
@@ -465,33 +543,13 @@ export default function Tournament() {
                   Local tournaments
                 </Box>
                 {localTournaments.map((localTournament) => (
-                  <ListItemButton
-                    key={localTournament.slug}
-                    style={{ gap: '8px', padding: '4px 8px 4px 16px' }}
-                    onClick={async () => {
-                      await set(localTournament.id, localTournament.slug);
-                    }}
-                  >
-                    <ListItemText>{localTournament.name}</ListItemText>
-                    {localTournament.isSynced ? (
-                      <Tooltip title="Fully synced">
-                        <CloudDone />
-                      </Tooltip>
-                    ) : (
-                      <Tooltip title="Not fully synced">
-                        <CloudOff />
-                      </Tooltip>
-                    )}
-                    <Tooltip title="Delete">
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                      >
-                        <Close />
-                      </IconButton>
-                    </Tooltip>
-                  </ListItemButton>
+                  <LocalTournamentItemButton
+                    key={localTournament.id}
+                    localTournament={localTournament}
+                    set={set}
+                    setLocalTournaments={setLocalTournaments}
+                    showError={showError}
+                  />
                 ))}
               </>
             )}

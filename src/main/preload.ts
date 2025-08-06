@@ -20,6 +20,8 @@ const electronHandler = {
     ipcRenderer.invoke('setWebsocket', websocket),
   getLocalTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getLocalTournaments'),
+  deleteLocalTournament: (id: number): Promise<void> =>
+    ipcRenderer.invoke('deleteLocalTournament', id),
   getAdminedTournaments: (): Promise<AdminedTournament[]> =>
     ipcRenderer.invoke('getAdminedTournaments'),
   getCurrentTournament: (): Promise<RendererTournament | undefined> =>
