@@ -67,7 +67,7 @@ export function dbInit() {
       phaseId INTEGER,
       eventId INTEGER,
       tournamentId, INTEGER,
-      callOrder REAL,
+      ordinal INTEGER,
       fullRoundText TEXT,
       identifier TEXT,
       round INTEGER,
@@ -371,7 +371,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   phaseId,
   eventId,
   tournamentId,
-  callOrder,
+  ordinal,
   fullRoundText,
   identifier,
   round,
@@ -407,7 +407,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @phaseId,
   @eventId,
   @tournamentId,
-  @callOrder,
+  @ordinal,
   @fullRoundText,
   @identifier,
   @round,
@@ -546,8 +546,10 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
     : null;
   return {
     id: dbSet.id,
+    ordinal: dbSet.ordinal,
     fullRoundText: dbSet.fullRoundText,
     identifier: dbSet.identifier,
+    round: dbSet.round,
     state: dbSet.state,
     entrant1Id: dbSet.entrant1Id,
     entrant1Name,
@@ -2187,7 +2189,7 @@ export function getTournament(): RendererTournament | undefined {
               (
                 db!
                   .prepare(
-                    'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY callOrder, id',
+                    'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY ordinal, id',
                   )
                   .all({ id: dbPool.id }) as DbSet[]
               ).forEach((dbSet) => {

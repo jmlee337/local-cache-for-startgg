@@ -20,8 +20,10 @@ export type RendererStream = {
 
 export type RendererSet = {
   id: number;
+  ordinal: number;
   fullRoundText: string;
   identifier: string;
+  round: number;
   state: number;
   entrant1Id: number | null;
   entrant1Name: string | null;
@@ -158,7 +160,7 @@ export type DbSet = {
   tournamentId: number;
 
   // locally immutable
-  callOrder: number;
+  ordinal: number;
   fullRoundText: string;
   identifier: string;
   round: number;

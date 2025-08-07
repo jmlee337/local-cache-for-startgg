@@ -271,13 +271,23 @@ function EventListItem({
                       gap="16px"
                       marginLeft="32px"
                     >
-                      {pool.sets.map((set) => (
-                        <SetListItemButton
-                          key={set.id}
-                          set={set}
-                          reportSet={reportSet}
-                        />
-                      ))}
+                      {pool.sets
+                        .sort((a, b) => {
+                          if (a.round === b.round) {
+                            if (a.identifier.length === b.identifier.length) {
+                              return a.identifier.localeCompare(b.identifier);
+                            }
+                            return a.identifier.length - b.identifier.length;
+                          }
+                          return a.ordinal - b.ordinal;
+                        })
+                        .map((set) => (
+                          <SetListItemButton
+                            key={set.id}
+                            set={set}
+                            reportSet={reportSet}
+                          />
+                        ))}
                     </Stack>
                   )}
                 </Box>

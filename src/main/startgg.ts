@@ -334,8 +334,85 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
   );
 }
 
-function dbSetsFromApiSets(apiSets: any[], tournamentId: number) {
-  const idToSet = new Map<number, DbSet>();
+function dbSetsFromApiSets(
+  apiSets: any[],
+  tournamentId: number,
+  bracketType: number,
+) {
+  const idToDEOrdinal = new Map<number, number>();
+  let roundMax = 0;
+  const reachableSets = apiSets.filter((set) => !set.unreachable);
+  if (bracketType === 2) {
+    const idToApiSet = new Map<number, any>(
+      reachableSets.map((apiSet) => [apiSet.id, apiSet]),
+    );
+
+    const stack: any[] = [];
+    const winnersQueue: any[] = [];
+    let losersQueue: any[] = [];
+    const gfs = reachableSets
+      .filter((set) => set.isGF)
+      .sort((setA, setB) => setB.round - setA.round);
+    if (gfs.length === 2) {
+      stack.push(gfs[0]);
+      stack.push(gfs[1]);
+      // queue losers finals
+      if (gfs[1].entrant2PrereqType === 'set') {
+        losersQueue.push(idToApiSet.get(gfs[1].entrant2PrereqId));
+      }
+    } else {
+      reachableSets
+        .filter((set) => set.wProgressionSeedId && set.lProgressionSeedId)
+        .forEach((set) => {
+          stack.push(set);
+        });
+      reachableSets
+        .filter((set) => set.wProgressionSeedId && set.round < 0)
+        .sort((setA, setB) => setA.round - setB.round)
+        .forEach((set) => {
+          losersQueue.push(set);
+        });
+    }
+
+    while (losersQueue.length > 0) {
+      const newLosersQueue: any[] = [];
+      while (losersQueue.length > 0) {
+        const curr = losersQueue.shift();
+        stack.push(curr);
+
+        if (curr.entrant1PrereqType === 'set') {
+          const pushSet = idToApiSet.get(curr.entrant1PrereqId);
+          if (curr.entrant1PrereqCondition === 'winner') {
+            newLosersQueue.push(pushSet);
+          } else {
+            winnersQueue.push(pushSet);
+          }
+        }
+        if (curr.entrant2PrereqType === 'set') {
+          const pushSet = idToApiSet.get(curr.entrant2PrereqId);
+          if (curr.entrant2PrereqCondition === 'winner') {
+            newLosersQueue.push(pushSet);
+          } else {
+            winnersQueue.push(pushSet);
+          }
+        }
+      }
+      while (winnersQueue.length > 0) {
+        const curr = winnersQueue.shift();
+        stack.push(curr);
+      }
+      losersQueue = newLosersQueue;
+    }
+
+    for (let i = 0; i < stack.length; i += 1) {
+      idToDEOrdinal.set(stack[i].id, -i);
+    }
+  } else {
+    roundMax = reachableSets
+      .map((apiSet) => apiSet.round)
+      .reduce((previous, current) => Math.max(previous, current), 0);
+  }
+  const idToDbSet = new Map<number, DbSet>();
   apiSets
     .filter(
       (set) =>
@@ -376,15 +453,16 @@ function dbSetsFromApiSets(apiSets: any[], tournamentId: number) {
       if (set.lProgressingName === undefined) {
         set.lProgressingName = null;
       }
+      set.ordinal = idToDEOrdinal.get(set.id) ?? set.round - roundMax;
       return set;
     })
     .forEach((set) => {
-      idToSet.set(set.id, set);
+      idToDbSet.set(set.id, set);
     });
 
   // coalesce byes
   const sets: DbSet[] = [];
-  Array.from(idToSet.values()).forEach((dbSet) => {
+  Array.from(idToDbSet.values()).forEach((dbSet) => {
     if (
       dbSet.entrant1PrereqType === 'bye' ||
       dbSet.entrant2PrereqType === 'bye'
@@ -392,13 +470,13 @@ function dbSetsFromApiSets(apiSets: any[], tournamentId: number) {
       return;
     }
     if (dbSet.entrant1PrereqType === 'set') {
-      const prereqSet1 = idToSet.get(dbSet.entrant1PrereqId)!;
+      const prereqSet1 = idToDbSet.get(dbSet.entrant1PrereqId)!;
       if (
         prereqSet1.entrant1PrereqType === 'bye' ||
         prereqSet1.entrant2PrereqType === 'bye'
       ) {
         const { prereqType, prereqId, prereqCondition, prereqStr } =
-          coalescePrereq(prereqSet1, idToSet);
+          coalescePrereq(prereqSet1, idToDbSet);
         dbSet.entrant1PrereqType = prereqType;
         dbSet.entrant1PrereqId = prereqId;
         dbSet.entrant1PrereqCondition = prereqCondition;
@@ -406,13 +484,13 @@ function dbSetsFromApiSets(apiSets: any[], tournamentId: number) {
       }
     }
     if (dbSet.entrant2PrereqType === 'set') {
-      const prereqSet2 = idToSet.get(dbSet.entrant2PrereqId)!;
+      const prereqSet2 = idToDbSet.get(dbSet.entrant2PrereqId)!;
       if (
         prereqSet2.entrant1PrereqType === 'bye' ||
         prereqSet2.entrant2PrereqType === 'bye'
       ) {
         const { prereqType, prereqId, prereqCondition, prereqStr } =
-          coalescePrereq(prereqSet2, idToSet);
+          coalescePrereq(prereqSet2, idToDbSet);
         dbSet.entrant2PrereqType = prereqType;
         dbSet.entrant2PrereqId = prereqId;
         dbSet.entrant2PrereqCondition = prereqCondition;
@@ -653,7 +731,11 @@ export async function loadEvent(tournamentId: number, eventId: number) {
           }
         }
 
-        const sets = dbSetsFromApiSets(json.entities.sets, tournamentId);
+        const sets = dbSetsFromApiSets(
+          json.entities.sets,
+          tournamentId,
+          pool.bracketType,
+        );
         upsertPool(pool, entrants, sets);
       }),
     );
@@ -700,7 +782,11 @@ export async function refreshEvent(tournamentId: number, eventId: number) {
           `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
         );
         const json = await response.json();
-        const sets = dbSetsFromApiSets(json.entities.sets, tournamentId);
+        const sets = dbSetsFromApiSets(
+          json.entities.sets,
+          tournamentId,
+          json.entities.groups.groupTypeId,
+        );
         sets.forEach((set) => {
           if (!expectedSetIds.delete(set.id)) {
             throw new Error(`unexpected setId: ${set.id}`);
