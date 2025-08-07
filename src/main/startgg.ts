@@ -172,6 +172,9 @@ const TOURNAMENT_STREAMS_AND_STATIONS_QUERY = `
         nodes {
           id
           number
+          stream {
+            id
+          }
         }
       }
       streams {
@@ -252,6 +255,7 @@ export async function getApiTournament(inSlug: string) {
           id: apiStation.id,
           tournamentId: id,
           number: apiStation.number,
+          streamId: apiStation.stream?.id ?? null,
         }),
       ),
     );

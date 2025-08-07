@@ -156,7 +156,8 @@ export function dbInit() {
     `CREATE TABLE IF NOT EXISTS stations (
       id INTEGER PRIMARY KEY,
       tournamentId INTEGER NOT NULL,
-      number INTEGER
+      number INTEGER,
+      streamId INTEGER
     )`,
   ).run();
   db.prepare(
@@ -301,8 +302,11 @@ export function getPlayer(id: number) {
   return db.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
 }
 
-const STATION_UPSERT_SQL =
-  'REPLACE INTO stations (id, tournamentId, number) VALUES (@id, @tournamentId, @number)';
+const STATION_UPSERT_SQL = `REPLACE INTO
+  stations
+    (id, tournamentId, number, streamId)
+  VALUES
+    (@id, @tournamentId, @number, @streamId)`;
 export function upsertStations(stations: DbStation[]) {
   if (!db) {
     throw new Error('not init');
@@ -978,6 +982,7 @@ export function assignSetStation(
 
   applyMutations(set);
   set.stationId = stationId;
+  set.streamId = station.streamId;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -990,6 +995,8 @@ export function assignSetStation(
       queuedMs,
       stationIdPresent,
       stationId,
+      streamIdPresent,
+      streamId,
       updatedAt
     ) VALUES (
       @id,
@@ -1001,6 +1008,8 @@ export function assignSetStation(
       @queuedMs,
       1,
       @stationId,
+      1,
+      @streamId,
       @updatedAt
     )`,
   ).run({
@@ -1012,6 +1021,7 @@ export function assignSetStation(
     transactionNum,
     queuedMs,
     stationId: set.stationId,
+    streamId: set.streamId,
     updatedAt: Date.now() / 1000,
   });
   return {

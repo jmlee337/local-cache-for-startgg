@@ -15,6 +15,7 @@ export type RendererStation = {
 export type RendererStream = {
   id: number;
   streamName: string;
+  streamSource: string;
 };
 
 export type RendererSet = {
@@ -78,6 +79,7 @@ export type DbStation = {
   id: number;
   tournamentId: number;
   number: number;
+  streamId: number | null;
 };
 
 export type DbStream = {

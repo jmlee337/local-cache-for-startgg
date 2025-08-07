@@ -67,7 +67,6 @@ function SetEntrant({
       overflow="hidden"
       textOverflow="ellipsis"
       whiteSpace="nowrap"
-      width="176px"
       color={secondary ? '#757575' : undefined}
       fontWeight={secondary ? undefined : 500}
     >
@@ -138,13 +137,14 @@ function SetListItemButton({
         backgroundColor: set.state === 3 ? '#eeeeee' : undefined,
         flexGrow: 0,
         opacity: '100%',
+        width: '232px',
       }}
       onClick={() => {
         reportSet(set);
       }}
     >
-      <Stack alignItems="stretch">
-        <Stack direction="row" alignItems="center" gap="4px">
+      <Stack alignItems="stretch" width="100%">
+        <Stack direction="row" alignItems="center" gap="4px" width="100%">
           {titleStart}
           <Typography flexGrow={1} textAlign="center" variant="caption">
             {set.fullRoundText} ({set.identifier})
@@ -156,8 +156,9 @@ function SetListItemButton({
           alignItems="center"
           gap="8px"
           sx={{ typography: (theme) => theme.typography.body2 }}
+          width="100%"
         >
-          <Stack>
+          <Stack flexGrow={1}>
             <SetEntrant
               entrantName={set.entrant1Name}
               prereqStr={set.entrant1PrereqStr}
@@ -167,14 +168,29 @@ function SetListItemButton({
               prereqStr={set.entrant2PrereqStr}
             />
           </Stack>
-          <Stack>
-            <Box textAlign="end" width="16px">
-              {entrant1Score}
-            </Box>
-            <Box textAlign="end" width="16px">
-              {entrant2Score}
-            </Box>
-          </Stack>
+          {set.state === 3 && (
+            <Stack flexGrow={0}>
+              <Box textAlign="end" width="16px">
+                {entrant1Score}
+              </Box>
+              <Box textAlign="end" width="16px">
+                {entrant2Score}
+              </Box>
+            </Stack>
+          )}
+          {set.state !== 3 && (set.station || set.stream) && (
+            <Stack flexGrow={0} justifyContent="center">
+              {set.stream ? (
+                <Tooltip
+                  title={`${set.stream.streamSource} ${set.stream.streamName}`}
+                >
+                  <Tv />
+                </Tooltip>
+              ) : (
+                <Typography variant="body1">{set.station?.number}</Typography>
+              )}
+            </Stack>
+          )}
         </Stack>
       </Stack>
     </ListItemButton>
@@ -619,8 +635,8 @@ export default function Tournament() {
               reportSet={(newReportSet: RendererSet) => {
                 setReportWinnerId(0);
                 setReportIsDq(false);
-                setReportEntrant1Score(0);
-                setReportEntrant2Score(0);
+                setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
+                setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
                 setReportSet(newReportSet);
                 setReportDialogOpen(true);
               }}
@@ -635,10 +651,32 @@ export default function Tournament() {
           setReportDialogOpen(false);
         }}
       >
-        <DialogTitle>
-          {reportSet?.fullRoundText} ({reportSet?.identifier})
-        </DialogTitle>
-        <DialogContent>
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          padding="16px 24px"
+        >
+          <Typography variant="h6">
+            {reportSet?.fullRoundText} ({reportSet?.identifier})
+          </Typography>
+          <Stack direction="row" alignItems="center" spacing="8px">
+            {reportSet?.station && (
+              <Typography variant="body1">
+                Station {reportSet?.station?.number}
+              </Typography>
+            )}
+            {reportSet?.stream && (
+              <Tooltip
+                title={`${reportSet?.stream.streamSource} ${reportSet?.stream.streamName}`}
+              >
+                <Tv />
+              </Tooltip>
+            )}
+            <Typography variant="caption">({reportSet?.id})</Typography>
+          </Stack>
+        </Stack>
+        <DialogContent style={{ paddingTop: 0 }}>
           <Stack
             alignItems="center"
             sx={{ typography: (theme) => theme.typography.body2 }}
