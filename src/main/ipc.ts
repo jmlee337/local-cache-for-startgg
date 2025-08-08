@@ -21,6 +21,8 @@ import {
   dbInit,
   deleteTournament,
   deleteTransaction,
+  getLastTournament,
+  getLoadedEventIds,
   getQueuedTransactions,
   getTournament,
   getTournamentId,
@@ -42,30 +44,27 @@ import {
   setAutoSyncTransaction,
   startSetTransaction,
 } from './transaction';
-import { ApiGameData, RendererTournament } from '../common/types';
+import { ApiGameData, TransactionType } from '../common/types';
 
 const DEFAULT_PORT = 50000;
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
-  const updateRenderer = () => {
-    // defer
-    setTimeout(() => {
-      mainWindow.webContents.send('tournament', getTournament());
-    }, 0);
-  };
   const updateClients = () => {
     // defer
-    setTimeout(() => {
-      mainWindow.webContents.send('tournament', getTournament());
+    setImmediate(() => {
+      mainWindow.webContents.send('tournament', getLastTournament());
       updateSubscribers();
-    }, 0);
+    });
   };
 
   const initTransactionNum = dbInit();
   startggInit(mainWindow);
   onTransaction((completedTransactionNum, updates) => {
-    deleteTransaction(completedTransactionNum, updates);
-    updateRenderer();
+    if (completedTransactionNum !== null) {
+      deleteTransaction(completedTransactionNum, updates);
+    }
+    getTournament();
+    updateClients();
   });
 
   const store = new Store();
@@ -92,20 +91,10 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
-  const loadedEventIds: number[] = [];
-  const resetLoadedEventIds = (
-    rendererTournament: RendererTournament | undefined,
-  ) => {
-    loadedEventIds.length = 0;
-    if (rendererTournament) {
-      loadedEventIds.push(
-        ...rendererTournament.events
-          .filter((event) => event.isLoaded)
-          .map((event) => event.id),
-      );
-    }
+  let loadedEventIds: number[] = [];
+  const resetLoadedEventIds = () => {
+    loadedEventIds = getLoadedEventIds();
   };
-
   const refreshEvents = async () => {
     const tournamentId = getTournamentId();
     await Promise.all(
@@ -132,7 +121,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       if (autoSync && getTournamentId()) {
         refreshEvents();
         queueTransactions(queueAllTransactions());
-        updateRenderer();
+        updateClients();
       }
     },
   );
@@ -212,8 +201,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       deleteTournament(id);
       if (id === currentId) {
         setTournamentId(0);
+        resetLoadedEventIds();
         getTournament();
-        resetLoadedEventIds(undefined);
         updateClients();
       }
     },
@@ -235,17 +224,17 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       const newId = await getApiTournament(slug);
       setTournamentId(newId);
       if (oldId !== newId) {
-        resetLoadedEventIds(getTournament());
-        queueTransactions(getQueuedTransactions());
+        resetLoadedEventIds();
+        await refreshEvents();
+        getTournament();
+        const queuedTransactions = getQueuedTransactions();
+        queueTransactions(
+          queuedTransactions.length > 0
+            ? queuedTransactions
+            : [{ type: TransactionType.REFRESH_TOURNAMENT }],
+        );
       }
       updateClients();
-
-      try {
-        await refreshEvents();
-        updateClients();
-      } catch {
-        // just catch
-      }
     },
   );
 
@@ -254,21 +243,26 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'setTournament',
     async (event: IpcMainInvokeEvent, newId: number, slug: string) => {
       const oldId = getTournamentId();
-      setTournamentId(newId);
       if (oldId !== newId) {
-        resetLoadedEventIds(getTournament());
-        queueTransactions(getQueuedTransactions());
+        setTournamentId(newId);
+        resetLoadedEventIds();
+        getTournament();
+        (async () => {
+          try {
+            await Promise.all([getApiTournament(slug), refreshEvents()]);
+          } catch {
+            // just catch
+          }
+          getTournament();
+          const queuedTransactions = getQueuedTransactions();
+          queueTransactions(
+            queuedTransactions.length > 0
+              ? queuedTransactions
+              : [{ type: TransactionType.REFRESH_TOURNAMENT }],
+          );
+        })();
       }
       updateClients();
-
-      try {
-        await getApiTournament(slug);
-        resetLoadedEventIds(getTournament());
-        await refreshEvents();
-        updateClients();
-      } catch {
-        // just catch
-      }
     },
   );
 

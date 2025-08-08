@@ -214,6 +214,16 @@ export function getTournamentId() {
 export function setTournamentId(newTournamentId: number) {
   currentTournamentId = newTournamentId;
 }
+export function getTournamentSlug() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbTournament = db
+    .prepare('SELECT * FROM tournaments WHERE id = @id')
+    .get({ id: currentTournamentId }) as DbTournament | undefined;
+  return dbTournament?.slug ?? null;
+}
 
 const TOURNAMENT_UPSERT_SQL =
   'REPLACE INTO tournaments (id, name, slug, startAt) VALUES (@id, @name, @slug, @startAt)';
@@ -1444,16 +1454,16 @@ export function insertTransaction(
   if (!db) {
     throw new Error('not init');
   }
+  if (apiTransaction.type === TransactionType.REFRESH_TOURNAMENT) {
+    throw new Error('cannot insert dbTransaction with type REFRESH_TOURNAMENT');
+  }
 
   db.transaction(() => {
     const dbTransaction: DbTransaction = {
       transactionNum: apiTransaction.transactionNum,
       eventId,
       type: apiTransaction.type,
-      setId:
-        apiTransaction.type !== TransactionType.UPDATE_EVENTS
-          ? apiTransaction.setId
-          : 0,
+      setId: apiTransaction.setId,
       stationId:
         apiTransaction.type === TransactionType.ASSIGN_STATION
           ? apiTransaction.stationId
@@ -1546,11 +1556,10 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
       gameNumToSelections.set(dbSelection.gameNum, [selection]);
     }
   });
-  if (dbTransaction.type === TransactionType.UPDATE_EVENTS) {
-    return {
-      transactionNum: dbTransaction.transactionNum,
-      type: dbTransaction.type,
-    };
+  if (dbTransaction.type === TransactionType.REFRESH_TOURNAMENT) {
+    throw new Error(
+      'dbTransaction with type REFRESH_TOURNAMENT should not exist',
+    );
   }
   if (
     dbTransaction.type === TransactionType.RESET ||
@@ -2119,6 +2128,18 @@ export function getPoolSetIds(id: number): Set<number> {
     .prepare('SELECT * FROM sets WHERE phaseGroupId = @id')
     .all({ id }) as DbSet[];
   return new Set(dbSets.map((dbSet) => dbSet.id));
+}
+
+export function getLoadedEventIds() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  return (
+    db
+      .prepare('SELECT * FROM loadedEvents WHERE tournamentId = @id')
+      .all({ id: currentTournamentId }) as DbLoadedEvent[]
+  ).map((loadedEvent) => loadedEvent.id);
 }
 
 let lastTournament: RendererTournament | undefined;

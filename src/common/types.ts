@@ -69,7 +69,7 @@ export type RendererTournament = {
 };
 
 export enum TransactionType {
-  UPDATE_EVENTS,
+  REFRESH_TOURNAMENT,
   RESET,
   START,
   ASSIGN_STATION,
@@ -272,14 +272,13 @@ export type ApiGameData = {
   }[];
 };
 
-export type ApiTransaction = {
-  transactionNum: number;
-} & (
+export type ApiTransaction =
   | {
-      type: TransactionType.UPDATE_EVENTS;
+      type: TransactionType.REFRESH_TOURNAMENT;
     }
   | ({
       setId: number;
+      transactionNum: number;
     } & (
       | {
           type: TransactionType.RESET | TransactionType.START;
@@ -298,8 +297,7 @@ export type ApiTransaction = {
           isDQ: boolean;
           gameData: ApiGameData[];
         }
-    ))
-);
+    ));
 
 export type ApiSetUpdate = {
   id: number;

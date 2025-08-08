@@ -28,9 +28,10 @@ import {
   upsertPlayers,
   upsertTournament,
   updateEventSets,
-  getLastTournament,
   upsertStations,
   upsertStreams,
+  getTournamentSlug,
+  getLoadedEventIds,
 } from './db';
 
 let apiKey = '';
@@ -991,12 +992,13 @@ async function reportSet(
 
 const emitter = new EventEmitter();
 export function onTransaction(
-  callback: (transactionNum: number, updates: ApiSetUpdate[]) => void,
+  callback: (transactionNum: number | null, updates: ApiSetUpdate[]) => void,
 ) {
   emitter.removeAllListeners();
   emitter.addListener('transaction', callback);
 }
 
+let timeout: NodeJS.Timeout | null = null;
 const queue: ApiTransaction[] = [];
 async function tryNextTransaction() {
   if (queue.length === 0) {
@@ -1007,14 +1009,26 @@ async function tryNextTransaction() {
     throw new Error(`unknown transaciton type: ${transaction.type}`);
   }
 
+  if (timeout) {
+    clearTimeout(timeout);
+    timeout = null;
+  }
   try {
-    if (transaction.type === TransactionType.UPDATE_EVENTS) {
-      const lastTournament = getLastTournament();
-      lastTournament?.events
-        .filter((event) => event.isLoaded)
-        .forEach((event) => {
-          refreshEvent(lastTournament.id, event.id);
-        });
+    if (transaction.type === TransactionType.REFRESH_TOURNAMENT) {
+      const slug = getTournamentSlug();
+      if (slug) {
+        const id = await getApiTournament(slug);
+        await Promise.all(
+          getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
+        );
+        emitter.emit('transaction', null, []);
+        timeout = setTimeout(() => {
+          queue.push({ type: TransactionType.REFRESH_TOURNAMENT });
+          if (queue.length === 1) {
+            setImmediate(tryNextTransaction);
+          }
+        }, 12000);
+      }
     } else if (transaction.type === TransactionType.RESET) {
       const update = await resetSet(transaction.setId);
       emitter.emit('transaction', transaction.transactionNum, [update]);
@@ -1047,17 +1061,22 @@ async function tryNextTransaction() {
     queue.shift();
     if (queue.length > 0) {
       setTimeout(tryNextTransaction, 1000);
+    } else if (transaction.type !== TransactionType.REFRESH_TOURNAMENT) {
+      queue.push({ type: TransactionType.REFRESH_TOURNAMENT });
+      setImmediate(tryNextTransaction);
     }
   } catch (e: any) {
+    // todo diff behavior on diff errors
     updateSyncResultWithError(e as Error);
-
-    const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
-    if (timeoutS === 64 && queue[0].type !== 0) {
+    if (
+      consecutiveErrors === 1 &&
+      queue[0].type !== TransactionType.REFRESH_TOURNAMENT
+    ) {
       queue.unshift({
-        type: TransactionType.UPDATE_EVENTS,
-        transactionNum: -1,
+        type: TransactionType.REFRESH_TOURNAMENT,
       });
     }
+    const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
     setTimeout(tryNextTransaction, timeoutS * 1000);
   }
 }
