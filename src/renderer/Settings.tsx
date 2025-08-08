@@ -15,7 +15,11 @@ import { useEffect, useState } from 'react';
 import { ContentCopy, Settings as SettingsIcon } from '@mui/icons-material';
 import IconButton from './IconButton';
 
-export default function Settings() {
+export default function Settings({
+  showError,
+}: {
+  showError: (message: string) => void;
+}) {
   const [apiKey, setApiKey] = useState('');
   const [autoSync, setAutoSync] = useState(true);
   const [websocket, setWebsocket] = useState(true);
@@ -57,8 +61,12 @@ export default function Settings() {
         fullWidth
         open={open}
         onClose={async () => {
-          await window.electron.setApiKey(apiKey);
-          setOpen(false);
+          try {
+            await window.electron.setApiKey(apiKey);
+            setOpen(false);
+          } catch (e: any) {
+            showError((e as Error).message);
+          }
         }}
       >
         <Stack

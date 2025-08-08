@@ -43,12 +43,23 @@ async function wrappedFetch(
   input: URL | RequestInfo,
   init?: RequestInit | undefined,
 ): Promise<Response> {
-  const response = await fetch(input, init);
+  let response: Response | undefined;
+  try {
+    response = await fetch(input, init);
+  } catch (e: any) {
+    throw new ApiError({
+      cause: e,
+      message: '***You may not be connected to the internet***',
+      fetch: true,
+    });
+  }
   if (!response.ok) {
-    const keyErr =
-      response.status === 400
-        ? ' ***start.gg API key invalid or expired!***'
-        : '';
+    let keyErr = '';
+    if (response.status === 400) {
+      keyErr = ' ***start.gg API key invalid!***';
+    } else if (response.status === 401) {
+      keyErr = ' ***start.gg API key expired!***';
+    }
     throw new ApiError({
       message: keyErr || response.statusText,
       status: response.status,
@@ -77,9 +88,36 @@ async function fetchGql(key: string, query: string, variables: any) {
   return json.data;
 }
 
+function isRetryableApiError(e: any) {
+  if (e instanceof ApiError) {
+    if (
+      e.fetch ||
+      (e.status !== undefined && Math.floor(e.status / 100) === 5)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 let mainWindow: BrowserWindow | undefined;
 export function startggInit(window: BrowserWindow) {
   mainWindow = window;
+}
+
+let fatalErrorMessage = '';
+export function getFatalErrorMessage() {
+  return fatalErrorMessage;
+}
+function updateWithFatalError(e: Error) {
+  let messagePrefix = '';
+  if (e instanceof ApiError) {
+    if (e.status !== undefined) {
+      messagePrefix = `${e.status}: `;
+    }
+  }
+  fatalErrorMessage = `${messagePrefix}${e.message}`;
+  mainWindow!.webContents.send('fatalError', fatalErrorMessage);
 }
 
 let consecutiveErrors = 0;
@@ -93,7 +131,7 @@ const syncResult: SyncResult = {
 export function getSyncResult() {
   return syncResult;
 }
-function updateSyncResultWithError(e: Error) {
+function updateSyncResultWithError(e: ApiError) {
   const nowMs = Date.now();
   syncResult.success = false;
   syncResult.lastError = e.message;
@@ -108,6 +146,8 @@ function updateSyncResultWithSuccess() {
   syncResult.success = true;
   syncResult.lastSuccessMs = Date.now();
   consecutiveErrors = 0;
+  fatalErrorMessage = '';
+  mainWindow!.webContents.send('fatalError', fatalErrorMessage);
   mainWindow!.webContents.send('syncResult', syncResult);
 }
 
@@ -141,7 +181,11 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
       startAt: tournament.startAt,
     }));
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 }
@@ -274,7 +318,11 @@ export async function getApiTournament(inSlug: string) {
     updateSyncResultWithSuccess();
     return id;
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 }
@@ -590,7 +638,11 @@ export async function loadEvent(tournamentId: number, eventId: number) {
     upsertEvent(dbEvent, dbPhases, dbPools);
     updateSyncResultWithSuccess();
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 
@@ -612,7 +664,11 @@ export async function loadEvent(tournamentId: number, eventId: number) {
         !(e instanceof ApiError) ||
         !e.gqlErrors[0].message.startsWith('Your query complexity is too high.')
       ) {
-        updateSyncResultWithError(e as Error);
+        if (isRetryableApiError(e)) {
+          updateSyncResultWithError(e);
+        } else {
+          updateWithFatalError(e);
+        }
         throw e;
       }
     }
@@ -742,7 +798,11 @@ export async function loadEvent(tournamentId: number, eventId: number) {
     );
     updateSyncResultWithSuccess();
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 }
@@ -762,7 +822,11 @@ export async function refreshEvent(tournamentId: number, eventId: number) {
     });
     updateSyncResultWithSuccess();
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 
@@ -803,7 +867,11 @@ export async function refreshEvent(tournamentId: number, eventId: number) {
     );
     updateSyncResultWithSuccess();
   } catch (e: any) {
-    updateSyncResultWithError(e as Error);
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+    } else {
+      updateWithFatalError(e);
+    }
     throw e;
   }
 }
@@ -1066,18 +1134,21 @@ async function tryNextTransaction() {
       setImmediate(tryNextTransaction);
     }
   } catch (e: any) {
-    // todo diff behavior on diff errors
-    updateSyncResultWithError(e as Error);
-    if (
-      consecutiveErrors === 1 &&
-      queue[0].type !== TransactionType.REFRESH_TOURNAMENT
-    ) {
-      queue.unshift({
-        type: TransactionType.REFRESH_TOURNAMENT,
-      });
+    if (isRetryableApiError(e)) {
+      updateSyncResultWithError(e);
+      if (
+        consecutiveErrors === 1 &&
+        queue[0].type !== TransactionType.REFRESH_TOURNAMENT
+      ) {
+        queue.unshift({
+          type: TransactionType.REFRESH_TOURNAMENT,
+        });
+      }
+      const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
+      setTimeout(tryNextTransaction, timeoutS * 1000);
+    } else {
+      updateWithFatalError(e);
     }
-    const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
-    setTimeout(tryNextTransaction, timeoutS * 1000);
   }
 }
 

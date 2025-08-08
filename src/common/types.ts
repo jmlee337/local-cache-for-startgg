@@ -313,17 +313,21 @@ export type ApiSetUpdate = {
 };
 
 export class ApiError extends Error {
+  public fetch: boolean;
+
   public status?: number;
 
   public gqlErrors: { message: string }[];
 
   constructor(e: {
-    message?: string;
-    options?: ErrorOptions;
+    message: string;
+    cause?: unknown;
+    fetch?: boolean;
     status?: number;
     gqlErrors?: { message: string }[];
   }) {
-    super(e.message, e.options);
+    super(e.message, e.cause !== undefined ? { cause: e.cause } : undefined);
+    this.fetch = e.fetch ?? false;
     this.status = e.status;
     this.gqlErrors = e.gqlErrors ?? [];
   }

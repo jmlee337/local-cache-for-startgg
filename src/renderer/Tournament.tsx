@@ -46,6 +46,7 @@ import Settings from './Settings';
 import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
+import FatalError from './FatalError';
 
 function SetEntrant({
   entrantName,
@@ -313,33 +314,35 @@ function LocalTournamentItemButton({
   const [deleting, setDeleting] = useState(false);
 
   return (
-    <ListItemButton
-      style={{ gap: '8px', padding: '4px 8px 4px 16px' }}
-      onClick={async () => {
-        await set(localTournament.id, localTournament.slug);
-      }}
-    >
-      <ListItemText>{localTournament.name}</ListItemText>
-      {localTournament.isSynced ? (
-        <Tooltip title="Fully synced">
-          <CloudDone />
+    <>
+      <ListItemButton
+        style={{ gap: '8px', padding: '4px 8px 4px 16px' }}
+        onClick={async () => {
+          await set(localTournament.id, localTournament.slug);
+        }}
+      >
+        <ListItemText>{localTournament.name}</ListItemText>
+        {localTournament.isSynced ? (
+          <Tooltip title="Fully synced">
+            <CloudDone />
+          </Tooltip>
+        ) : (
+          <Tooltip title="Not fully synced">
+            <CloudOff />
+          </Tooltip>
+        )}
+        <Tooltip title="Delete">
+          <IconButton
+            disabled={deleting}
+            onClick={(ev) => {
+              ev.stopPropagation();
+              setDeleteOpen(true);
+            }}
+          >
+            <Close />
+          </IconButton>
         </Tooltip>
-      ) : (
-        <Tooltip title="Not fully synced">
-          <CloudOff />
-        </Tooltip>
-      )}
-      <Tooltip title="Delete">
-        <IconButton
-          disabled={deleting}
-          onClick={(ev) => {
-            ev.stopPropagation();
-            setDeleteOpen(true);
-          }}
-        >
-          <Close />
-        </IconButton>
-      </Tooltip>
+      </ListItemButton>
       <Dialog
         open={deleteOpen}
         onClose={() => {
@@ -353,8 +356,7 @@ function LocalTournamentItemButton({
           <Button
             variant="contained"
             color="error"
-            onClick={async (ev) => {
-              ev.stopPropagation();
+            onClick={async () => {
               setDeleting(true);
               try {
                 await window.electron.deleteLocalTournament(localTournament.id);
@@ -372,7 +374,7 @@ function LocalTournamentItemButton({
           </Button>
         </DialogActions>
       </Dialog>
-    </ListItemButton>
+    </>
   );
 }
 
@@ -388,27 +390,44 @@ export default function Tournament() {
     try {
       setAdminedTournaments(await window.electron.getAdminedTournaments());
       setAdminedTournamentsError('');
-    } catch (e: any) {
-      if (e instanceof ApiError) {
-        if (e.status !== undefined) {
-          if (
-            e.status === 500 ||
-            e.status === 502 ||
-            e.status === 503 ||
-            e.status === 504
-          ) {
+    } catch (err: any) {
+      const getApiError = (e: any) => {
+        if (e instanceof ApiError) {
+          return e;
+        }
+        if (e instanceof Error && e.cause) {
+          return getApiError(e.cause);
+        }
+        return undefined;
+      };
+      const apiError = getApiError(err);
+      if (apiError) {
+        if (apiError.status !== undefined) {
+          if (Math.floor(apiError.status / 100) === 5) {
             setAdminedTournamentsError(
-              `Failed to get tournaments from start.gg: ${e.status}. You may retry.`,
+              `***Please retry*** - failed to get tournaments from start.gg: ${apiError.status}, ${apiError.message}`,
             );
           } else {
             setAdminedTournamentsError(
-              `Failed to get tournaments from start.gg: ${e.status}.`,
+              `Failed to get tournaments from start.gg: ${apiError.status}, ${apiError.message}`,
             );
           }
+        } else if (apiError.fetch) {
+          setAdminedTournamentsError(
+            '***You may be offline*** - failed to get tournaments from start.gg.',
+          );
+        } else {
+          setAdminedTournamentsError(
+            `Failed to get tournaments from start.gg: ${apiError.message}`,
+          );
         }
+      } else if (err instanceof Error) {
+        setAdminedTournamentsError(
+          `Failed to get tournaments from start.gg: ${err.message}`,
+        );
       } else {
         setAdminedTournamentsError(
-          'Failed to get tournaments from start.gg. You may be offline.',
+          `Failed to get tournaments from start.gg: ${err}`,
         );
       }
     } finally {
@@ -529,8 +548,9 @@ export default function Tournament() {
         <Stack direction="row">
           <Sync />
           <Websocket />
+          <FatalError />
         </Stack>
-        <Settings />
+        <Settings showError={showError} />
         <Dialog
           fullWidth
           open={open}

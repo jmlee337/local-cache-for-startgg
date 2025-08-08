@@ -50,6 +50,8 @@ const electronHandler = {
       | null,
   ): Promise<void> =>
     ipcRenderer.invoke('reportSet', id, winnerId, isDQ, entrantScores),
+  getFatalErrorMessage: (): Promise<string> =>
+    ipcRenderer.invoke('getFatalErrorMessage'),
   getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
   onAdminedTournaments: (
     callback: (
@@ -59,6 +61,12 @@ const electronHandler = {
   ) => {
     ipcRenderer.removeAllListeners('adminedTournaments');
     ipcRenderer.on('adminedTournaments', callback);
+  },
+  onFatalError: (
+    callback: (event: IpcRendererEvent, message: string) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('fatalError');
+    ipcRenderer.on('fatalError', callback);
   },
   onSyncResult: (
     callback: (event: IpcRendererEvent, syncResult: SyncResult) => void,

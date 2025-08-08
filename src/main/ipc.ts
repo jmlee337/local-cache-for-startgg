@@ -9,6 +9,7 @@ import Store from 'electron-store';
 import {
   getAdminedTournaments,
   getApiTournament,
+  getFatalErrorMessage,
   getSyncResult,
   loadEvent,
   onTransaction,
@@ -340,6 +341,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       reportSetTransaction(id, winnerId, isDQ, apiGameData);
     },
   );
+
+  ipcMain.removeHandler('getFatalErrorMessage');
+  ipcMain.handle('getFatalErrorMessage', getFatalErrorMessage);
 
   ipcMain.removeHandler('getSyncResult');
   ipcMain.handle('getSyncResult', getSyncResult);
