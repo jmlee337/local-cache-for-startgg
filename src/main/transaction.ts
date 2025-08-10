@@ -7,110 +7,81 @@ import {
   resetSet,
   startSet,
 } from './db';
-import { queueTransaction } from './startgg';
+import { maybeTryNow } from './startgg';
 
-let autoSync = false;
 let transactionNum = 0;
 let updateClients = () => {};
 export function initTransaction(
-  initAutoSync: boolean,
   initTransactionNum: number,
   initUpdateClients: () => void,
 ) {
-  autoSync = initAutoSync;
   transactionNum = initTransactionNum;
   updateClients = initUpdateClients;
-}
-
-export function setAutoSyncTransaction(newAutoSync: boolean) {
-  autoSync = newAutoSync;
 }
 
 export function resetSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const ret = resetSet(
-    id,
-    currentTransactionNum,
-    autoSync ? Date.now() : 0, // queuedMs
-  );
+  const ret = resetSet(id, currentTransactionNum);
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
     type: TransactionType.RESET,
     setId: id,
   };
-  insertTransaction(apiTransaction, ret.eventId);
-  if (autoSync) {
-    queueTransaction(apiTransaction);
-  }
   updateClients();
+
+  insertTransaction(apiTransaction, ret.tournamentId);
+  maybeTryNow(ret.tournamentId);
   return { set: ret.set };
 }
 
 export function startSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const ret = startSet(
-    id,
-    currentTransactionNum,
-    autoSync ? Date.now() : 0, // queuedMs
-  );
+  const ret = startSet(id, currentTransactionNum);
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
     type: TransactionType.START,
     setId: id,
   };
-  insertTransaction(apiTransaction, ret.eventId);
-  if (autoSync) {
-    queueTransaction(apiTransaction);
-  }
   updateClients();
+
+  insertTransaction(apiTransaction, ret.tournamentId);
+  maybeTryNow(ret.tournamentId);
   return { set: ret.set };
 }
 
 export function assignSetStationTransaction(id: number, stationId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const ret = assignSetStation(
-    id,
-    stationId,
-    currentTransactionNum,
-    autoSync ? Date.now() : 0, // queuedMs
-  );
+  const ret = assignSetStation(id, stationId, currentTransactionNum);
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
     type: TransactionType.ASSIGN_STATION,
     setId: id,
     stationId,
   };
-  insertTransaction(apiTransaction, ret.eventId);
-  if (autoSync) {
-    queueTransaction(apiTransaction);
-  }
   updateClients();
+
+  insertTransaction(apiTransaction, ret.tournamentId);
+  maybeTryNow(ret.tournamentId);
   return { set: ret.set };
 }
 
 export function assignSetStreamTransaction(id: number, streamId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const ret = assignSetStream(
-    id,
-    streamId,
-    currentTransactionNum,
-    autoSync ? Date.now() : 0, // queuedMs
-  );
+  const ret = assignSetStream(id, streamId, currentTransactionNum);
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
     type: TransactionType.ASSIGN_STREAM,
     setId: id,
     streamId,
   };
-  insertTransaction(apiTransaction, ret.eventId);
-  if (autoSync) {
-    queueTransaction(apiTransaction);
-  }
   updateClients();
+
+  insertTransaction(apiTransaction, ret.tournamentId);
+  maybeTryNow(ret.tournamentId);
   return { set: ret.set };
 }
 
@@ -157,14 +128,7 @@ export function reportSetTransaction(
 
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
-  const ret = reportSet(
-    id,
-    winnerId,
-    isDQ,
-    gameData,
-    currentTransactionNum,
-    autoSync ? Date.now() : 0, // queuedMs
-  );
+  const ret = reportSet(id, winnerId, isDQ, gameData, currentTransactionNum);
   const apiTransaction: ApiTransaction = {
     transactionNum: currentTransactionNum,
     type: TransactionType.REPORT,
@@ -173,10 +137,9 @@ export function reportSetTransaction(
     isDQ,
     gameData,
   };
-  insertTransaction(apiTransaction, ret.eventId);
-  if (autoSync) {
-    queueTransaction(apiTransaction);
-  }
   updateClients();
+
+  insertTransaction(apiTransaction, ret.tournamentId);
+  maybeTryNow(ret.tournamentId);
   return { set: ret.set };
 }

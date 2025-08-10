@@ -13,22 +13,18 @@ import {
   getSyncResult,
   loadEvent,
   onTransaction,
-  queueTransactions,
-  refreshEvent,
+  startRefreshingTournament,
   setApiKey,
   startggInit,
 } from './startgg';
 import {
   dbInit,
   deleteTournament,
-  deleteTransaction,
   getLastTournament,
-  getLoadedEventIds,
-  getQueuedTransactions,
   getTournament,
   getTournamentId,
   getTournaments,
-  queueAllTransactions,
+  setAutoSync,
   setTournamentId,
 } from './db';
 import {
@@ -42,10 +38,9 @@ import {
   initTransaction,
   reportSetTransaction,
   resetSetTransaction,
-  setAutoSyncTransaction,
   startSetTransaction,
 } from './transaction';
-import { ApiGameData, TransactionType } from '../common/types';
+import { ApiGameData } from '../common/types';
 
 const DEFAULT_PORT = 50000;
 
@@ -53,6 +48,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateClients = () => {
     // defer
     setImmediate(() => {
+      getTournament();
       mainWindow.webContents.send('tournament', getLastTournament());
       updateSubscribers();
     });
@@ -60,11 +56,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
 
   const initTransactionNum = dbInit();
   startggInit(mainWindow);
-  onTransaction((completedTransactionNum, updates) => {
-    if (completedTransactionNum !== null) {
-      deleteTransaction(completedTransactionNum, updates);
-    }
-    getTournament();
+  onTransaction(() => {
     updateClients();
   });
 
@@ -92,23 +84,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
-  let loadedEventIds: number[] = [];
-  const resetLoadedEventIds = () => {
-    loadedEventIds = getLoadedEventIds();
-  };
-  const refreshEvents = async () => {
-    const tournamentId = getTournamentId();
-    await Promise.all(
-      loadedEventIds.map(async (eventId) => {
-        await refreshEvent(tournamentId, eventId);
-      }),
-    );
-  };
-
   let autoSync = store.has('autoSync')
     ? (store.get('autoSync') as boolean)
     : true;
-  initTransaction(autoSync, initTransactionNum, updateClients);
+  setAutoSync(autoSync);
+  initTransaction(initTransactionNum, updateClients);
   ipcMain.removeHandler('getAutoSync');
   ipcMain.handle('getAutoSync', () => autoSync);
 
@@ -116,12 +96,10 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'setAutoSync',
     (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
-      store.set('autoSync', newAutoSync);
-      setAutoSyncTransaction(newAutoSync);
-      autoSync = newAutoSync;
-      if (autoSync && getTournamentId()) {
-        refreshEvents();
-        queueTransactions(queueAllTransactions());
+      if (autoSync !== newAutoSync) {
+        store.set('autoSync', newAutoSync);
+        autoSync = newAutoSync;
+        setAutoSync(newAutoSync);
         updateClients();
       }
     },
@@ -202,8 +180,6 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       deleteTournament(id);
       if (id === currentId) {
         setTournamentId(0);
-        resetLoadedEventIds();
-        getTournament();
         updateClients();
       }
     },
@@ -223,19 +199,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     async (event: IpcMainInvokeEvent, slug: string) => {
       const oldId = getTournamentId();
       const newId = await getApiTournament(slug);
-      setTournamentId(newId);
       if (oldId !== newId) {
-        resetLoadedEventIds();
-        await refreshEvents();
-        getTournament();
-        const queuedTransactions = getQueuedTransactions();
-        queueTransactions(
-          queuedTransactions.length > 0
-            ? queuedTransactions
-            : [{ type: TransactionType.REFRESH_TOURNAMENT }],
-        );
+        setTournamentId(newId);
+        updateClients();
+        startRefreshingTournament(newId, slug);
       }
-      updateClients();
     },
   );
 
@@ -246,24 +214,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       const oldId = getTournamentId();
       if (oldId !== newId) {
         setTournamentId(newId);
-        resetLoadedEventIds();
-        getTournament();
-        (async () => {
-          try {
-            await Promise.all([getApiTournament(slug), refreshEvents()]);
-          } catch {
-            // just catch
-          }
-          getTournament();
-          const queuedTransactions = getQueuedTransactions();
-          queueTransactions(
-            queuedTransactions.length > 0
-              ? queuedTransactions
-              : [{ type: TransactionType.REFRESH_TOURNAMENT }],
-          );
-        })();
+        updateClients();
+        startRefreshingTournament(newId, slug);
       }
-      updateClients();
     },
   );
 
@@ -273,7 +226,6 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     async (event: IpcMainInvokeEvent, eventId: number) => {
       await loadEvent(getTournamentId(), eventId);
       updateClients();
-      loadedEventIds.push(eventId);
     },
   );
 

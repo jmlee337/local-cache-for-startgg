@@ -5,7 +5,6 @@ import {
   ApiError,
   ApiGameData,
   ApiSetUpdate,
-  ApiTransaction,
   TransactionType,
   DbEntrant,
   DbEvent,
@@ -30,8 +29,10 @@ import {
   updateEventSets,
   upsertStations,
   upsertStreams,
-  getTournamentSlug,
   getLoadedEventIds,
+  getNextTransaction,
+  deleteTransaction,
+  getTournamentId,
 } from './db';
 
 let apiKey = '';
@@ -101,8 +102,10 @@ function isRetryableApiError(e: any) {
 }
 
 let mainWindow: BrowserWindow | undefined;
+const idToSlug = new Map<number, string>();
 export function startggInit(window: BrowserWindow) {
   mainWindow = window;
+  idToSlug.clear();
 }
 
 let fatalErrorMessage = '';
@@ -807,7 +810,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
   }
 }
 
-export async function refreshEvent(tournamentId: number, eventId: number) {
+async function refreshEvent(tournamentId: number, eventId: number) {
   const expectedPoolIds = getEventPoolIds(eventId);
   const poolIdsToRefresh: number[] = [];
   try {
@@ -862,7 +865,7 @@ export async function refreshEvent(tournamentId: number, eventId: number) {
             `missing setIds: ${Array.from(expectedSetIds.keys())}`,
           );
         }
-        updateEventSets(eventId, sets);
+        updateEventSets(tournamentId, eventId, sets);
       }),
     );
     updateSyncResultWithSuccess();
@@ -1059,110 +1062,108 @@ async function reportSet(
 }
 
 const emitter = new EventEmitter();
-export function onTransaction(
-  callback: (transactionNum: number | null, updates: ApiSetUpdate[]) => void,
-) {
+export function onTransaction(callback: () => void) {
   emitter.removeAllListeners();
   emitter.addListener('transaction', callback);
 }
 
-let timeout: NodeJS.Timeout | null = null;
-const queue: ApiTransaction[] = [];
-async function tryNextTransaction() {
-  if (queue.length === 0) {
+const slugToTimeout = new Map<string, NodeJS.Timeout>();
+async function tryNextTransaction(id: number, slug: string) {
+  slugToTimeout.delete(slug);
+  if (id !== getTournamentId()) {
     return;
   }
-  const transaction = queue[0];
-  if (!Object.values(TransactionType).includes(transaction.type)) {
-    throw new Error(`unknown transaciton type: ${transaction.type}`);
-  }
 
-  if (timeout) {
-    clearTimeout(timeout);
-    timeout = null;
-  }
   try {
-    if (transaction.type === TransactionType.REFRESH_TOURNAMENT) {
-      const slug = getTournamentSlug();
-      if (slug) {
-        const id = await getApiTournament(slug);
-        await Promise.all(
-          getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
-        );
-        emitter.emit('transaction', null, []);
-        timeout = setTimeout(() => {
-          queue.push({ type: TransactionType.REFRESH_TOURNAMENT });
-          if (queue.length === 1) {
-            setImmediate(tryNextTransaction);
-          }
-        }, 12000);
-      }
-    } else if (transaction.type === TransactionType.RESET) {
-      const update = await resetSet(transaction.setId);
-      emitter.emit('transaction', transaction.transactionNum, [update]);
-    } else if (transaction.type === TransactionType.ASSIGN_STATION) {
-      const update = await assignSetStation(
-        transaction.setId,
-        transaction.stationId,
-      );
-      emitter.emit('transaction', transaction.transactionNum, [update]);
-    } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
-      const update = await assignSetStream(
-        transaction.setId,
-        transaction.streamId,
-      );
-      emitter.emit('transaction', transaction.transactionNum, [update]);
-    } else if (transaction.type === TransactionType.START) {
-      const update = await startSet(transaction.setId);
-      emitter.emit('transaction', transaction.transactionNum, [update]);
-    } else if (transaction.type === TransactionType.REPORT) {
-      const updates = await reportSet(
-        transaction.setId,
-        transaction.winnerId,
-        transaction.isDQ,
-        transaction.gameData,
-      );
-      emitter.emit('transaction', transaction.transactionNum, updates);
-    }
+    await getApiTournament(slug);
+    await Promise.all(
+      getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
+    );
+    emitter.emit('transaction');
     updateSyncResultWithSuccess();
+    let transaction = getNextTransaction();
+    if (transaction) {
+      while (true) {
+        let updates: ApiSetUpdate[] = [];
+        if (transaction.type === TransactionType.RESET) {
+          updates = [await resetSet(transaction.setId)];
+        } else if (transaction.type === TransactionType.ASSIGN_STATION) {
+          updates = [
+            await assignSetStation(transaction.setId, transaction.stationId),
+          ];
+        } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
+          updates = [
+            await assignSetStream(transaction.setId, transaction.streamId),
+          ];
+        } else if (transaction.type === TransactionType.START) {
+          updates = [await startSet(transaction.setId)];
+        } else if (transaction.type === TransactionType.REPORT) {
+          updates = await reportSet(
+            transaction.setId,
+            transaction.winnerId,
+            transaction.isDQ,
+            transaction.gameData,
+          );
+        } else {
+          throw new Error(`unknown transaciton type: ${transaction.type}`);
+        }
+        deleteTransaction(transaction.transactionNum, updates);
+        emitter.emit('transaction');
+        updateSyncResultWithSuccess();
 
-    queue.shift();
-    if (queue.length > 0) {
-      setTimeout(tryNextTransaction, 1000);
-    } else if (transaction.type !== TransactionType.REFRESH_TOURNAMENT) {
-      queue.push({ type: TransactionType.REFRESH_TOURNAMENT });
-      setImmediate(tryNextTransaction);
+        transaction = getNextTransaction();
+        if (!transaction) {
+          break;
+        } else {
+          await new Promise<void>((resolve) => {
+            setTimeout(() => {
+              resolve();
+            }, 1000);
+          });
+        }
+      }
     }
+    slugToTimeout.set(
+      slug,
+      setTimeout(() => {
+        tryNextTransaction(id, slug);
+      }, 12000),
+    );
   } catch (e: any) {
     if (isRetryableApiError(e)) {
       updateSyncResultWithError(e);
-      if (
-        consecutiveErrors === 1 &&
-        queue[0].type !== TransactionType.REFRESH_TOURNAMENT
-      ) {
-        queue.unshift({
-          type: TransactionType.REFRESH_TOURNAMENT,
-        });
-      }
       const timeoutS = Math.min(2 ** (consecutiveErrors - 1), 64);
-      setTimeout(tryNextTransaction, timeoutS * 1000);
+      slugToTimeout.set(
+        slug,
+        setTimeout(() => {
+          tryNextTransaction(id, slug);
+        }, timeoutS * 1000),
+      );
     } else {
       updateWithFatalError(e);
     }
   }
 }
 
-export function queueTransaction(transaction: ApiTransaction) {
-  queue.push(transaction);
-  if (queue.length === 1) {
-    setImmediate(tryNextTransaction);
+export function maybeTryNow(id: number) {
+  const slug = idToSlug.get(id);
+  if (!slug) {
+    throw new Error(`tournamentId not found ${id}`);
+  }
+
+  const timeout = slugToTimeout.get(slug);
+  if (timeout) {
+    clearTimeout(timeout);
+    slugToTimeout.delete(slug);
+    setImmediate(() => {
+      tryNextTransaction(id, slug);
+    });
   }
 }
 
-export function queueTransactions(transactions: ApiTransaction[]) {
-  const shouldTry = queue.length === 0;
-  queue.push(...transactions);
-  if (shouldTry) {
-    setImmediate(tryNextTransaction);
-  }
+export function startRefreshingTournament(id: number, slug: string) {
+  idToSlug.set(id, slug);
+  setImmediate(() => {
+    tryNextTransaction(id, slug);
+  });
 }

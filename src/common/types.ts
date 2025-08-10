@@ -7,6 +7,12 @@ export type AdminedTournament = {
   startAt: number;
 };
 
+export enum SyncState {
+  SYNCED,
+  QUEUED,
+  LOCAL,
+}
+
 export type RendererStation = {
   id: number;
   number: number;
@@ -36,7 +42,7 @@ export type RendererSet = {
   winnerId: number | null;
   station: RendererStation | null;
   stream: RendererStream | null;
-  syncState: 0 | 1 | 2 | 3; // 0: synced, 1: queued, 2: released, 3: local
+  syncState: SyncState;
 };
 
 export type RendererPool = {
@@ -69,7 +75,6 @@ export type RendererTournament = {
 };
 
 export enum TransactionType {
-  REFRESH_TOURNAMENT,
   RESET,
   START,
   ASSIGN_STATION,
@@ -147,7 +152,6 @@ export type DbSetMutation = {
   // local only
   transactionNum: number;
   isReleased: null | 1;
-  queuedMs: number;
   requiresUpdateHack: null | 1;
 };
 
@@ -192,8 +196,10 @@ export type DbSet = {
   stationId: number | null;
   streamId: number | null;
 
-  // we only store 0, but we modify after query via setMutation
-  syncState: 0 | 1 | 2 | 3; // 0: synced, 1: queued, 2: released, 3: local
+  manuallyReleased: 1 | null;
+
+  // we only store SYNCED, but we modify after query via setMutation
+  syncState: SyncState;
 };
 
 export type DbPool = {
@@ -249,7 +255,7 @@ export type DbTransactionGameData = {
 
 export type DbTransaction = {
   transactionNum: number;
-  eventId: number;
+  tournamentId: number;
   type: TransactionType;
   setId: number;
   stationId: number | null;
@@ -272,32 +278,28 @@ export type ApiGameData = {
   }[];
 };
 
-export type ApiTransaction =
+export type ApiTransaction = {
+  setId: number;
+  transactionNum: number;
+} & (
   | {
-      type: TransactionType.REFRESH_TOURNAMENT;
+      type: TransactionType.RESET | TransactionType.START;
     }
-  | ({
-      setId: number;
-      transactionNum: number;
-    } & (
-      | {
-          type: TransactionType.RESET | TransactionType.START;
-        }
-      | {
-          type: TransactionType.ASSIGN_STATION;
-          stationId: number;
-        }
-      | {
-          type: TransactionType.ASSIGN_STREAM;
-          streamId: number;
-        }
-      | {
-          type: TransactionType.REPORT;
-          winnerId: number;
-          isDQ: boolean;
-          gameData: ApiGameData[];
-        }
-    ));
+  | {
+      type: TransactionType.ASSIGN_STATION;
+      stationId: number;
+    }
+  | {
+      type: TransactionType.ASSIGN_STREAM;
+      streamId: number;
+    }
+  | {
+      type: TransactionType.REPORT;
+      winnerId: number;
+      isDQ: boolean;
+      gameData: ApiGameData[];
+    }
+);
 
 export type ApiSetUpdate = {
   id: number;
