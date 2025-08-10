@@ -31,8 +31,9 @@ import {
   upsertStreams,
   getLoadedEventIds,
   getNextTransaction,
-  deleteTransaction,
+  finalizeTransaction,
   getTournamentId,
+  deleteTransaction,
 } from './db';
 
 let apiKey = '';
@@ -1141,7 +1142,20 @@ async function tryNextTransaction(id: number, slug: string) {
             await assignSetStream(transaction.setId, transaction.streamId),
           ];
         } else if (transaction.type === TransactionType.START) {
-          updates = [await startSet(transaction.setId)];
+          try {
+            updates = [await startSet(transaction.setId)];
+          } catch (e: any) {
+            if (
+              e instanceof ApiError &&
+              e.gqlErrors.some(
+                (gqlError) => gqlError.message === 'Set is already started',
+              )
+            ) {
+              deleteTransaction(transaction.transactionNum);
+            } else {
+              throw e;
+            }
+          }
         } else if (transaction.type === TransactionType.REPORT) {
           updates = transaction.isUpdate
             ? [
@@ -1161,7 +1175,7 @@ async function tryNextTransaction(id: number, slug: string) {
         } else {
           throw new Error(`unknown transaciton type: ${transaction.type}`);
         }
-        deleteTransaction(transaction.transactionNum, updates);
+        finalizeTransaction(transaction.transactionNum, updates);
         emitter.emit('transaction');
         updateSyncResultWithSuccess();
 

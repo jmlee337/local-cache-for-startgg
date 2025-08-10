@@ -1790,7 +1790,7 @@ export function releaseSet(id: number): ApiTransaction[] {
 }
 */
 
-export function deleteTransaction(
+export function finalizeTransaction(
   transactionNum: number,
   updates: ApiSetUpdate[],
 ) {
@@ -1952,6 +1952,35 @@ function getSyncStatus(dbTransaction: DbTransaction, afterSet: DbSet) {
   }
 }
 
+export function deleteTransaction(transactionNum: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db.transaction(() => {
+    db!
+      .prepare(
+        'DELETE FROM transactions WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM transactionGameData WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+  })();
+}
+
 export function updateEventSets(
   tournamentId: number,
   eventId: number,
@@ -2101,30 +2130,7 @@ export function updateEventSets(
         )
         .run();
     }
-    transactionNumsToDelete.forEach((transactionNum) => {
-      db!.transaction(() => {
-        db!
-          .prepare(
-            'DELETE FROM transactions WHERE transactionNum = @transactionNum',
-          )
-          .run({ transactionNum });
-        db!
-          .prepare(
-            'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
-          )
-          .run({ transactionNum });
-        db!
-          .prepare(
-            'DELETE FROM transactionGameData WHERE transactionNum = @transactionNum',
-          )
-          .run({ transactionNum });
-        db!
-          .prepare(
-            'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
-          )
-          .run({ transactionNum });
-      })();
-    });
+    transactionNumsToDelete.forEach(deleteTransaction);
   });
 }
 
