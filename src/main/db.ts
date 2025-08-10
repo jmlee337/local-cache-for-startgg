@@ -174,6 +174,7 @@ export function dbInit() {
       streamId INTEGER,
       winnerId INTEGER,
       isDQ INTEGER,
+      isUpdate INTEGER,
       isConflict INTEGER
     )`,
   ).run();
@@ -1104,8 +1105,13 @@ export function reportSet(
   }
 
   applyMutations(set);
-  const { entrant1Id, entrant2Id, wProgressionSeedId, lProgressionSeedId } =
-    set;
+  const {
+    entrant1Id,
+    entrant2Id,
+    wProgressionSeedId,
+    lProgressionSeedId,
+    state,
+  } = set;
   if (!entrant1Id || !entrant2Id) {
     throw new Error(
       `set not reportable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
@@ -1116,6 +1122,13 @@ export function reportSet(
       `invalid winnerId: ${winnerId} (${entrant1Id}, ${entrant2Id})`,
     );
   }
+  if (state === 3 && winnerId !== set.winnerId) {
+    throw new Error('cannot change winner of completed set');
+  }
+  if (state === 3 && isDQ) {
+    throw new Error('cannot change reported set to DQ');
+  }
+
   set.state = 3;
   set.winnerId = winnerId;
   if (isDQ) {
@@ -1133,141 +1146,145 @@ export function reportSet(
 
   let wProgressionSet: ReportProgressionSet | undefined;
   let lProgressionSet: ReportProgressionSet | undefined;
-  const maybeAssignProgression = (
-    setId: number,
-    phaseGroupId: number,
-    phaseId: number,
-    eventId: number,
-    tournamentId: number,
-    entrantNum: 1 | 2,
-    prereqCondition: string | null,
-  ) => {
-    if (prereqCondition !== 'winner' && prereqCondition !== 'loser') {
-      throw new Error(
-        `prereqCondition was not 'winner' or 'loser': ${prereqCondition}`,
-      );
-    }
+  if (state !== 3) {
+    const maybeAssignProgression = (
+      setId: number,
+      phaseGroupId: number,
+      phaseId: number,
+      eventId: number,
+      tournamentId: number,
+      entrantNum: 1 | 2,
+      prereqCondition: string | null,
+    ) => {
+      if (prereqCondition !== 'winner' && prereqCondition !== 'loser') {
+        throw new Error(
+          `prereqCondition was not 'winner' or 'loser': ${prereqCondition}`,
+        );
+      }
 
-    if (prereqCondition === 'winner') {
-      if (wProgressionSet) {
-        throw new Error(
-          `already have wProgressionSet: ${wProgressionSet.id}, found: ${setId}`,
+      if (prereqCondition === 'winner') {
+        if (wProgressionSet) {
+          throw new Error(
+            `already have wProgressionSet: ${wProgressionSet.id}, found: ${setId}`,
+          );
+        }
+        wProgressionSet = {
+          id: setId,
+          phaseGroupId,
+          phaseId,
+          eventId,
+          tournamentId,
+          requiresUpdateHack: false,
+          entrantNum,
+          entrantId: winnerId,
+        };
+      }
+      if (prereqCondition === 'loser') {
+        if (lProgressionSet) {
+          throw new Error(
+            `already have lProgressionSet: ${lProgressionSet.id}, found: ${setId}`,
+          );
+        }
+        lProgressionSet = {
+          id: setId,
+          phaseGroupId,
+          phaseId,
+          eventId,
+          tournamentId,
+          requiresUpdateHack: false,
+          entrantNum,
+          entrantId: loserId,
+        };
+      }
+    };
+    (
+      db
+        .prepare(
+          'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
+        )
+        .all({ id }) as DbSet[]
+    ).forEach((dbSet) => {
+      if (
+        dbSet.entrant1PrereqId === id &&
+        dbSet.entrant2PrereqId === id &&
+        winnerId === entrant1Id &&
+        set.fullRoundText === 'Grand Final'
+      ) {
+        // no progressions if GF won from winners
+        return;
+      }
+      if (dbSet.entrant1PrereqId === id) {
+        maybeAssignProgression(
+          dbSet.id,
+          dbSet.phaseGroupId,
+          dbSet.phaseId,
+          dbSet.eventId,
+          dbSet.tournamentId,
+          1,
+          dbSet.entrant1PrereqCondition,
         );
       }
-      wProgressionSet = {
-        id: setId,
-        phaseGroupId,
-        phaseId,
-        eventId,
-        tournamentId,
-        requiresUpdateHack: false,
-        entrantNum,
-        entrantId: winnerId,
-      };
-    }
-    if (prereqCondition === 'loser') {
-      if (lProgressionSet) {
-        throw new Error(
-          `already have lProgressionSet: ${lProgressionSet.id}, found: ${setId}`,
+      if (dbSet.entrant2PrereqId === id) {
+        maybeAssignProgression(
+          dbSet.id,
+          dbSet.phaseGroupId,
+          dbSet.phaseId,
+          dbSet.eventId,
+          dbSet.tournamentId,
+          2,
+          dbSet.entrant2PrereqCondition,
         );
       }
-      lProgressionSet = {
-        id: setId,
-        phaseGroupId,
-        phaseId,
-        eventId,
-        tournamentId,
-        requiresUpdateHack: false,
-        entrantNum,
-        entrantId: loserId,
-      };
-    }
-  };
-  (
-    db
-      .prepare(
-        'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
-      )
-      .all({ id }) as DbSet[]
-  ).forEach((dbSet) => {
-    if (
-      dbSet.entrant1PrereqId === id &&
-      dbSet.entrant2PrereqId === id &&
-      winnerId === entrant1Id &&
-      set.fullRoundText === 'Grand Final'
-    ) {
-      // no progressions if GF won from winners
-      return;
-    }
-    if (dbSet.entrant1PrereqId === id) {
-      maybeAssignProgression(
-        dbSet.id,
-        dbSet.phaseGroupId,
-        dbSet.phaseId,
-        dbSet.eventId,
-        dbSet.tournamentId,
-        1,
-        dbSet.entrant1PrereqCondition,
-      );
-    }
-    if (dbSet.entrant2PrereqId === id) {
-      maybeAssignProgression(
-        dbSet.id,
-        dbSet.phaseGroupId,
-        dbSet.phaseId,
-        dbSet.eventId,
-        dbSet.tournamentId,
-        2,
-        dbSet.entrant2PrereqCondition,
-      );
-    }
-  });
-  if (wProgressionSeedId) {
-    const affectedSet = db
-      .prepare(
-        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-      )
-      .get({ seedId: wProgressionSeedId }) as DbSet | undefined;
-    if (affectedSet) {
-      if (wProgressionSet) {
-        throw new Error(
-          `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
-        );
+    });
+    if (wProgressionSeedId) {
+      const affectedSet = db
+        .prepare(
+          'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+        )
+        .get({ seedId: wProgressionSeedId }) as DbSet | undefined;
+      if (affectedSet) {
+        if (wProgressionSet) {
+          throw new Error(
+            `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
+          );
+        }
+        wProgressionSet = {
+          id: affectedSet.id,
+          phaseGroupId: affectedSet.phaseGroupId,
+          phaseId: affectedSet.phaseId,
+          eventId: affectedSet.eventId,
+          tournamentId: affectedSet.tournamentId,
+          requiresUpdateHack: true,
+          entrantNum:
+            affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
+          entrantId: winnerId,
+        };
       }
-      wProgressionSet = {
-        id: affectedSet.id,
-        phaseGroupId: affectedSet.phaseGroupId,
-        phaseId: affectedSet.phaseId,
-        eventId: affectedSet.eventId,
-        tournamentId: affectedSet.tournamentId,
-        requiresUpdateHack: true,
-        entrantNum: affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
-        entrantId: winnerId,
-      };
     }
-  }
-  if (lProgressionSeedId) {
-    const affectedSet = db
-      .prepare(
-        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-      )
-      .get({ seedId: lProgressionSeedId }) as DbSet | undefined;
-    if (affectedSet) {
-      if (lProgressionSet) {
-        throw new Error(
-          `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
-        );
+    if (lProgressionSeedId) {
+      const affectedSet = db
+        .prepare(
+          'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+        )
+        .get({ seedId: lProgressionSeedId }) as DbSet | undefined;
+      if (affectedSet) {
+        if (lProgressionSet) {
+          throw new Error(
+            `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
+          );
+        }
+        lProgressionSet = {
+          id: affectedSet.id,
+          phaseGroupId: affectedSet.phaseGroupId,
+          phaseId: affectedSet.phaseId,
+          eventId: affectedSet.eventId,
+          tournamentId: affectedSet.tournamentId,
+          requiresUpdateHack: true,
+          entrantNum:
+            affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
+          entrantId: loserId,
+        };
       }
-      lProgressionSet = {
-        id: affectedSet.id,
-        phaseGroupId: affectedSet.phaseGroupId,
-        phaseId: affectedSet.phaseId,
-        eventId: affectedSet.eventId,
-        tournamentId: affectedSet.tournamentId,
-        requiresUpdateHack: true,
-        entrantNum: affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
-        entrantId: loserId,
-      };
     }
   }
   const updatedAt = Date.now() / 1000;
@@ -1403,6 +1420,7 @@ export function reportSet(
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
+    isUpdate: state === 3,
   };
 }
 
@@ -1435,15 +1453,38 @@ export function insertTransaction(
       isDQ:
         apiTransaction.type === TransactionType.REPORT && apiTransaction.isDQ
           ? 1
-          : 0,
+          : null,
+      isUpdate:
+        apiTransaction.type === TransactionType.REPORT &&
+        apiTransaction.isUpdate
+          ? 1
+          : null,
       isConflict: null,
     };
     db!
       .prepare(
         `INSERT INTO transactions (
-          transactionNum, tournamentId, type, setId, stationId, streamId, winnerId, isDQ, isConflict
+          transactionNum,
+          tournamentId,
+          type,
+          setId,
+          stationId,
+          streamId,
+          winnerId,
+          isDQ,
+          isUpdate,
+          isConflict
         ) VALUES (
-          @transactionNum, @tournamentId, @type, @setId, @stationId, @streamId, @winnerId, @isDQ, @isConflict
+          @transactionNum,
+          @tournamentId,
+          @type,
+          @setId,
+          @stationId,
+          @streamId,
+          @winnerId,
+          @isDQ,
+          @isUpdate,
+          @isConflict
         )`,
       )
       .run(dbTransaction);
@@ -1551,6 +1592,7 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
       stageId: gameData.stageId ?? undefined,
       selections: gameNumToSelections.get(gameData.gameNum) || [],
     })),
+    isUpdate: dbTransaction.isUpdate === 1,
   };
 }
 

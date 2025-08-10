@@ -261,7 +261,8 @@ export type DbTransaction = {
   stationId: number | null;
   streamId: number | null;
   winnerId: number | null;
-  isDQ: 0 | 1;
+  isDQ: null | 1;
+  isUpdate: null | 1;
   isConflict: null | 1;
 };
 
@@ -298,6 +299,7 @@ export type ApiTransaction = {
       winnerId: number;
       isDQ: boolean;
       gameData: ApiGameData[];
+      isUpdate: boolean;
     }
 );
 

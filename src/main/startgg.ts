@@ -1061,6 +1061,51 @@ async function reportSet(
   });
 }
 
+const UPDATE_SET_MUTATION = `
+  mutation updateSet($setId: ID!, $winnerId: ID, $isDQ: Boolean, $gameData: [BracketSetGameDataInput]) {
+    updateBracketSet(
+      setId: $setId
+      winnerId: $winnerId
+      isDQ: $isDQ
+      gameData: $gameData
+    ) {${UPDATE_SET_INNER}}
+  }
+`;
+async function updateSet(
+  setId: number,
+  winnerId: number,
+  isDQ: boolean,
+  gameData: ApiGameData[],
+): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const data = await fetchGql(apiKey, UPDATE_SET_MUTATION, {
+    setId,
+    winnerId,
+    isDQ,
+    gameData,
+  });
+  const set = data.updateBracketSet;
+  const entrant1 = set.slots[0].entrant;
+  const standing1 = set.slots[0].standing;
+  const entrant2 = set.slots[1].entrant;
+  const standing2 = set.slots[1].standing;
+  return {
+    id: set.id,
+    state: set.state,
+    entrant1Id: entrant1 ? entrant1.id : null,
+    entrant1Score: standing1 ? standing1.stats.score.value : null,
+    entrant2Id: entrant2 ? entrant2.id : null,
+    entrant2Score: standing2 ? standing2.stats.score.value : null,
+    winnerId: set.winnerId,
+    updatedAt: set.updatedAt,
+    stationId: set.station?.id ?? null,
+    streamId: set.stream?.id ?? null,
+  };
+}
+
 const emitter = new EventEmitter();
 export function onTransaction(callback: () => void) {
   emitter.removeAllListeners();
@@ -1098,12 +1143,21 @@ async function tryNextTransaction(id: number, slug: string) {
         } else if (transaction.type === TransactionType.START) {
           updates = [await startSet(transaction.setId)];
         } else if (transaction.type === TransactionType.REPORT) {
-          updates = await reportSet(
-            transaction.setId,
-            transaction.winnerId,
-            transaction.isDQ,
-            transaction.gameData,
-          );
+          updates = transaction.isUpdate
+            ? [
+                await updateSet(
+                  transaction.setId,
+                  transaction.winnerId,
+                  transaction.isDQ,
+                  transaction.gameData,
+                ),
+              ]
+            : await reportSet(
+                transaction.setId,
+                transaction.winnerId,
+                transaction.isDQ,
+                transaction.gameData,
+              );
         } else {
           throw new Error(`unknown transaciton type: ${transaction.type}`);
         }

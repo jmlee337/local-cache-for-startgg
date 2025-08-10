@@ -520,6 +520,21 @@ export default function Tournament() {
     }
   }
 
+  let updateUnchanged = false;
+  if (reportSet && reportSet.state === 3) {
+    if (reportIsDq) {
+      if (reportSet.winnerId === reportSet.entrant1Id) {
+        updateUnchanged = reportSet.entrant2Score === -1;
+      } else {
+        updateUnchanged = reportSet.entrant1Score === -1;
+      }
+    } else {
+      updateUnchanged =
+        reportEntrant1Score === reportSet.entrant1Score &&
+        reportEntrant2Score === reportSet.entrant2Score;
+    }
+  }
+
   return (
     <Stack>
       <Stack direction="row" alignItems="center">
@@ -663,8 +678,11 @@ export default function Tournament() {
               key={event.id}
               event={event}
               reportSet={(newReportSet: RendererSet) => {
-                setReportWinnerId(0);
-                setReportIsDq(false);
+                setReportWinnerId(newReportSet.winnerId ?? 0);
+                setReportIsDq(
+                  newReportSet.entrant1Score === -1 ||
+                    newReportSet.entrant2Score === -1,
+                );
                 setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
                 setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
                 setReportSet(newReportSet);
@@ -737,7 +755,10 @@ export default function Tournament() {
                 DQ
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant1Id
+                }
                 variant={
                   !reportIsDq &&
                   !(
@@ -760,7 +781,13 @@ export default function Tournament() {
                 0
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                    reportEntrant2Score >= 1) ||
+                    (reportSet?.winnerId === reportSet?.entrant2Id &&
+                      reportEntrant2Score <= 1))
+                }
                 variant={
                   !reportIsDq && reportEntrant1Score === 1
                     ? 'contained'
@@ -781,7 +808,13 @@ export default function Tournament() {
                 1
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                    reportEntrant2Score >= 2) ||
+                    (reportSet?.winnerId === reportSet?.entrant2Id &&
+                      reportEntrant2Score <= 2))
+                }
                 variant={
                   !reportIsDq && reportEntrant1Score === 2
                     ? 'contained'
@@ -802,7 +835,10 @@ export default function Tournament() {
                 2
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant2Id
+                }
                 variant={
                   !reportIsDq && reportEntrant1Score === 3
                     ? 'contained'
@@ -823,7 +859,10 @@ export default function Tournament() {
                 3
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant2Id
+                }
                 variant={
                   reportWinnerId === reportSet?.entrant1Id
                     ? 'contained'
@@ -865,7 +904,10 @@ export default function Tournament() {
                 DQ
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant2Id
+                }
                 variant={
                   !reportIsDq &&
                   !(
@@ -888,7 +930,13 @@ export default function Tournament() {
                 0
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                    reportEntrant1Score >= 1) ||
+                    (reportSet?.winnerId === reportSet?.entrant1Id &&
+                      reportEntrant1Score <= 1))
+                }
                 variant={
                   !reportIsDq && reportEntrant2Score === 1
                     ? 'contained'
@@ -909,7 +957,13 @@ export default function Tournament() {
                 1
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                    reportEntrant1Score >= 2) ||
+                    (reportSet?.winnerId === reportSet?.entrant1Id &&
+                      reportEntrant1Score <= 2))
+                }
                 variant={
                   !reportIsDq && reportEntrant2Score === 2
                     ? 'contained'
@@ -930,7 +984,10 @@ export default function Tournament() {
                 2
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant1Id
+                }
                 variant={
                   !reportIsDq && reportEntrant2Score === 3
                     ? 'contained'
@@ -951,7 +1008,10 @@ export default function Tournament() {
                 3
               </Button>
               <Button
-                disabled={reportSet?.state === 3}
+                disabled={
+                  reportSet?.state === 3 &&
+                  reportSet?.winnerId === reportSet?.entrant1Id
+                }
                 variant={
                   reportWinnerId === reportSet?.entrant2Id
                     ? 'contained'
@@ -1018,7 +1078,11 @@ export default function Tournament() {
           </IconButton>
           <Button
             variant="contained"
-            disabled={reportSet?.state === 3 || reporting || !reportWinnerId}
+            disabled={
+              (reportSet?.state === 3 && updateUnchanged) ||
+              reporting ||
+              !reportWinnerId
+            }
             endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
             onClick={async () => {
               setReporting(true);

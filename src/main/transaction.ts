@@ -136,6 +136,7 @@ export function reportSetTransaction(
     winnerId,
     isDQ,
     gameData,
+    isUpdate: ret.isUpdate,
   };
   updateClients();
 
