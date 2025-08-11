@@ -262,6 +262,8 @@ export type DbTransaction = {
   setId: number;
   stationId: number | null;
   streamId: number | null;
+  expectedEntrant1Id: number | null;
+  expectedEntrant2Id: number | null;
   winnerId: number | null;
   isDQ: null | 1;
   isUpdate: null | 1;

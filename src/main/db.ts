@@ -174,6 +174,8 @@ export function dbInit() {
       setId INTEGER NOT NULL,
       stationId INTEGER,
       streamId INTEGER,
+      expectedEntrant1Id INTEGER,
+      expectedEntrant2Id INTEGER,
       winnerId INTEGER,
       isDQ INTEGER,
       isUpdate INTEGER,
@@ -580,6 +582,111 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
   };
 }
 
+function insertTransaction(
+  apiTransaction: ApiTransaction,
+  tournamentId: number,
+  expectedEntrant1Id: number | null,
+  expectedEntrant2Id: number | null,
+) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db.transaction(() => {
+    const dbTransaction: DbTransaction = {
+      transactionNum: apiTransaction.transactionNum,
+      tournamentId,
+      type: apiTransaction.type,
+      setId: apiTransaction.setId,
+      stationId:
+        apiTransaction.type === TransactionType.ASSIGN_STATION
+          ? apiTransaction.stationId
+          : null,
+      streamId:
+        apiTransaction.type === TransactionType.ASSIGN_STREAM
+          ? apiTransaction.streamId
+          : null,
+      expectedEntrant1Id,
+      expectedEntrant2Id,
+      winnerId:
+        apiTransaction.type === TransactionType.REPORT
+          ? apiTransaction.winnerId
+          : null,
+      isDQ:
+        apiTransaction.type === TransactionType.REPORT && apiTransaction.isDQ
+          ? 1
+          : null,
+      isUpdate:
+        apiTransaction.type === TransactionType.REPORT &&
+        apiTransaction.isUpdate
+          ? 1
+          : null,
+      isConflict: null,
+    };
+    db!
+      .prepare(
+        `INSERT INTO transactions (
+          transactionNum,
+          tournamentId,
+          type,
+          setId,
+          stationId,
+          streamId,
+          winnerId,
+          isDQ,
+          isUpdate,
+          isConflict
+        ) VALUES (
+          @transactionNum,
+          @tournamentId,
+          @type,
+          @setId,
+          @stationId,
+          @streamId,
+          @winnerId,
+          @isDQ,
+          @isUpdate,
+          @isConflict
+        )`,
+      )
+      .run(dbTransaction);
+    if (apiTransaction.type === TransactionType.REPORT) {
+      apiTransaction.gameData?.forEach((gameData) => {
+        db!
+          .prepare(
+            `INSERT INTO transactionGameData (
+              transactionNum, gameNum, winnerId, stageId
+            ) VALUES (
+             @transactionNum, @gameNum, @winnerId, @stageId
+            )`,
+          )
+          .run({
+            transactionNum: apiTransaction.transactionNum,
+            gameNum: gameData.gameNum,
+            winnerId: gameData.winnerId,
+            stageId: gameData.stageId ?? null,
+          });
+        gameData.selections.forEach((selection) => {
+          db!
+            .prepare(
+              `INSERT INTO transactionSelections (
+                transactionNum, gameNum, entrantId, characterId
+              ) VALUES (
+                @transactionNum, @gameNum, @entrantId, @characterId
+              )`,
+            )
+            .run({
+              transactionNum: apiTransaction.transactionNum,
+              gameNum: gameData.gameNum,
+              entrantId: selection.entrantId,
+              characterId: selection.characterId,
+            });
+        });
+      });
+    }
+  })();
+}
+
 type ResetProgressionSet = {
   id: number;
   phaseGroupId: number;
@@ -884,6 +991,16 @@ export function resetSet(id: number, transactionNum: number) {
         });
     }
   })();
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.RESET,
+      setId: id,
+    },
+    set.tournamentId,
+    set.entrant1Id,
+    set.entrant2Id,
+  );
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
@@ -903,14 +1020,20 @@ export function startSet(id: number, transactionNum: number) {
   }
 
   applyMutations(set);
-  if (set.state === 3) {
+  const { entrant1Id, entrant2Id, state } = set;
+  if (state === 3) {
     throw new Error(`set is already completed: ${id}`);
   }
-  if (set.state === 2) {
+  if (state === 2) {
     throw new Error(`set is already started: ${id}`);
   }
-  if (set.state !== 1 && set.state !== 6) {
-    throw new Error(`set: ${id} has unexpected state: ${set.state}`);
+  if (state !== 1 && state !== 6) {
+    throw new Error(`set: ${id} has unexpected state: ${state}`);
+  }
+  if (!entrant1Id || !entrant2Id) {
+    throw new Error(
+      `set not startable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
+    );
   }
   set.state = 2;
 
@@ -946,6 +1069,16 @@ export function startSet(id: number, transactionNum: number) {
     state: set.state,
     updatedAt: Date.now() / 1000,
   });
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.START,
+      setId: id,
+    },
+    set.tournamentId,
+    set.entrant1Id,
+    set.entrant2Id,
+  );
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
@@ -1018,6 +1151,17 @@ export function assignSetStation(
     streamId: set.streamId,
     updatedAt: Date.now() / 1000,
   });
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.ASSIGN_STATION,
+      setId: id,
+      stationId,
+    },
+    set.tournamentId,
+    set.entrant1Id,
+    set.entrant2Id,
+  );
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
@@ -1084,6 +1228,17 @@ export function assignSetStream(
     streamId: set.streamId,
     updatedAt: Date.now() / 1000,
   });
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.ASSIGN_STREAM,
+      setId: id,
+      streamId,
+    },
+    set.tournamentId,
+    set.entrant1Id,
+    set.entrant2Id,
+  );
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
@@ -1437,112 +1592,24 @@ export function reportSet(
         });
     }
   })();
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.REPORT,
+      setId: id,
+      winnerId,
+      isDQ,
+      gameData,
+      isUpdate: state === 3,
+    },
+    set.tournamentId,
+    entrant1Id,
+    entrant2Id,
+  );
   return {
     tournamentId: set.tournamentId,
     set: dbSetToRendererSet(set),
-    isUpdate: state === 3,
   };
-}
-
-export function insertTransaction(
-  apiTransaction: ApiTransaction,
-  tournamentId: number,
-) {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  db.transaction(() => {
-    const dbTransaction: DbTransaction = {
-      transactionNum: apiTransaction.transactionNum,
-      tournamentId,
-      type: apiTransaction.type,
-      setId: apiTransaction.setId,
-      stationId:
-        apiTransaction.type === TransactionType.ASSIGN_STATION
-          ? apiTransaction.stationId
-          : null,
-      streamId:
-        apiTransaction.type === TransactionType.ASSIGN_STREAM
-          ? apiTransaction.streamId
-          : null,
-      winnerId:
-        apiTransaction.type === TransactionType.REPORT
-          ? apiTransaction.winnerId
-          : null,
-      isDQ:
-        apiTransaction.type === TransactionType.REPORT && apiTransaction.isDQ
-          ? 1
-          : null,
-      isUpdate:
-        apiTransaction.type === TransactionType.REPORT &&
-        apiTransaction.isUpdate
-          ? 1
-          : null,
-      isConflict: null,
-    };
-    db!
-      .prepare(
-        `INSERT INTO transactions (
-          transactionNum,
-          tournamentId,
-          type,
-          setId,
-          stationId,
-          streamId,
-          winnerId,
-          isDQ,
-          isUpdate,
-          isConflict
-        ) VALUES (
-          @transactionNum,
-          @tournamentId,
-          @type,
-          @setId,
-          @stationId,
-          @streamId,
-          @winnerId,
-          @isDQ,
-          @isUpdate,
-          @isConflict
-        )`,
-      )
-      .run(dbTransaction);
-    if (apiTransaction.type === TransactionType.REPORT) {
-      apiTransaction.gameData?.forEach((gameData) => {
-        db!
-          .prepare(
-            `INSERT INTO transactionGameData (
-              transactionNum, gameNum, winnerId, stageId
-            ) VALUES (
-             @transactionNum, @gameNum, @winnerId, @stageId
-            )`,
-          )
-          .run({
-            transactionNum: apiTransaction.transactionNum,
-            gameNum: gameData.gameNum,
-            winnerId: gameData.winnerId,
-            stageId: gameData.stageId ?? null,
-          });
-        gameData.selections.forEach((selection) => {
-          db!
-            .prepare(
-              `INSERT INTO transactionSelections (
-                transactionNum, gameNum, entrantId, characterId
-              ) VALUES (
-                @transactionNum, @gameNum, @entrantId, @characterId
-              )`,
-            )
-            .run({
-              transactionNum: apiTransaction.transactionNum,
-              gameNum: gameData.gameNum,
-              entrantId: selection.entrantId,
-              characterId: selection.characterId,
-            });
-        });
-      });
-    }
-  })();
 }
 
 function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
@@ -1639,8 +1706,10 @@ function canTransactNow(transaction: DbTransaction) {
     case TransactionType.RESET:
     case TransactionType.START:
     case TransactionType.REPORT:
-      // todo check actual entrants
-      return afterSet.entrant1Id !== null && afterSet.entrant2Id !== null;
+      return (
+        afterSet.entrant1Id === transaction.expectedEntrant1Id &&
+        afterSet.entrant2Id === transaction.expectedEntrant2Id
+      );
     default:
       throw new Error(`unknown transaction type: ${transaction.type}`);
   }
