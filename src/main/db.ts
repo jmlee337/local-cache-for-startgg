@@ -1616,6 +1616,36 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
   };
 }
 
+function canTransactNow(transaction: DbTransaction) {
+  if (transaction.isConflict === 1) {
+    return false;
+  }
+
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const afterSet = db
+    .prepare('SELECT * FROM sets WHERE id = @setId')
+    .get(transaction) as DbSet | undefined;
+  if (!afterSet) {
+    return false;
+  }
+
+  switch (transaction.type) {
+    case TransactionType.ASSIGN_STATION:
+    case TransactionType.ASSIGN_STREAM:
+      return true;
+    case TransactionType.RESET:
+    case TransactionType.START:
+    case TransactionType.REPORT:
+      // todo check actual entrants
+      return afterSet.entrant1Id !== null && afterSet.entrant2Id !== null;
+    default:
+      throw new Error(`unknown transaction type: ${transaction.type}`);
+  }
+}
+
 export function getNextTransaction() {
   if (!db) {
     throw new Error('not init');
@@ -1627,11 +1657,27 @@ export function getNextTransaction() {
         `SELECT *
           FROM transactions
           WHERE tournamentId = @currentTournamentId
-          ORDER BY transactionNum ASC
-          LIMIT 1`,
+          ORDER BY transactionNum ASC`,
       )
       .all({ currentTournamentId }) as DbTransaction[];
-    return transactions.length > 0 ? toApiTransaction(transactions[0]) : null;
+    if (transactions.length === 0) {
+      return null;
+    }
+    if (transactions[0].isConflict === null) {
+      return toApiTransaction(transactions[0]);
+    }
+    const seenSetIds = new Set([transactions[0].setId]);
+    for (let i = 1; i < transactions.length; i += 1) {
+      const transaction = transactions[i];
+      if (!seenSetIds.has(transaction.setId)) {
+        seenSetIds.add(transaction.setId);
+        if (canTransactNow(transactions[i])) {
+          return toApiTransaction(transactions[i]);
+        }
+      }
+    }
+  } else {
+    // todo: store manuallyReleased somewhere and read it here
   }
   return null;
 }
@@ -2289,29 +2335,57 @@ export function updateEventSets(
         }
       }
 
-      const transactionNumsToUpdate: number[] = [];
+      const aheadTransactionNums: number[] = [];
+      const conflictTransactionNums: number[] = [];
       for (const dbTransaction of updateCoalescedDbTransactions) {
-        switch (getSyncStatus(dbTransaction, afterSet, containsReset)) {
+        const syncStatus = getSyncStatus(
+          dbTransaction,
+          afterSet,
+          containsReset,
+        );
+        switch (syncStatus) {
+          case SyncStatus.AHEAD:
+            aheadTransactionNums.push(dbTransaction.transactionNum);
+            break;
           case SyncStatus.BEHIND:
             transactionNumsToDelete.push(dbTransaction.transactionNum);
             break;
           case SyncStatus.CONFLICT:
-            transactionNumsToUpdate.push(dbTransaction.transactionNum);
+            conflictTransactionNums.push(dbTransaction.transactionNum);
             break;
           default:
-          // ahead
+            throw new Error(`unknown SyncStatus: ${syncStatus}`);
         }
       }
       db!
         .prepare(
           `UPDATE transactions
+          SET isConflict = NULL
+          WHERE transactionNum IN (${aheadTransactionNums.join(', ')})`,
+        )
+        .run();
+      db!
+        .prepare(
+          `UPDATE transactions
             SET isConflict = 1
-            WHERE transactionNum IN (${transactionNumsToUpdate.join(', ')})`,
+            WHERE transactionNum IN (${conflictTransactionNums.join(', ')})`,
         )
         .run();
     }
     transactionNumsToDelete.forEach(deleteTransaction);
   });
+}
+
+export function markTransactionConflict(transactionNum: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db.prepare(
+    `UPDATE transactions
+      SET isConflict = 1
+      WHERE transactionNum = @transactionNum`,
+  ).run({ transactionNum });
 }
 
 export function getEventPoolIds(id: number): Set<number> {

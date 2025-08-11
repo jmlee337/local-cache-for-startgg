@@ -35,6 +35,7 @@ import {
   finalizeTransaction,
   getTournamentId,
   deleteTransaction,
+  markTransactionConflict,
 } from './db';
 
 let apiKey = '';
@@ -1190,7 +1191,22 @@ async function tryNextTransaction(id: number, slug: string) {
       while (true) {
         let updates: ApiSetUpdate[] = [];
         if (transaction.type === TransactionType.RESET) {
-          updates = [await resetSet(transaction.setId)];
+          try {
+            updates = [await resetSet(transaction.setId)];
+          } catch (e: any) {
+            if (
+              e instanceof ApiError &&
+              e.gqlErrors.some(
+                (gqlError) =>
+                  gqlError.message ===
+                  'Resetting this set will also reset 1 dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
+              )
+            ) {
+              markTransactionConflict(transaction.transactionNum);
+            } else {
+              throw e;
+            }
+          }
         } else if (transaction.type === TransactionType.ASSIGN_STATION) {
           updates = [
             await assignSetStation(transaction.setId, transaction.stationId),
@@ -1215,21 +1231,52 @@ async function tryNextTransaction(id: number, slug: string) {
             }
           }
         } else if (transaction.type === TransactionType.REPORT) {
-          updates = transaction.isUpdate
-            ? [
+          if (transaction.isUpdate) {
+            try {
+              updates = [
                 await updateSet(
                   transaction.setId,
                   transaction.winnerId,
                   transaction.isDQ,
                   transaction.gameData,
                 ),
-              ]
-            : await reportSet(
+              ];
+            } catch (e: any) {
+              if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
+                )
+              ) {
+                markTransactionConflict(transaction.transactionNum);
+              } else {
+                throw e;
+              }
+            }
+          } else {
+            try {
+              updates = await reportSet(
                 transaction.setId,
                 transaction.winnerId,
                 transaction.isDQ,
                 transaction.gameData,
               );
+            } catch (e: any) {
+              if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message === 'Cannot report completed set via API.',
+                )
+              ) {
+                markTransactionConflict(transaction.transactionNum);
+              } else {
+                throw e;
+              }
+            }
+          }
         } else {
           throw new Error(`unknown transaciton type: ${transaction.type}`);
         }
