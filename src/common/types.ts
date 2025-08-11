@@ -145,6 +145,8 @@ export type DbSetMutation = {
   stationId: number | null;
   streamIdPresent: null | 1;
   streamId: number | null;
+  hasStageDataPresent: null | 1;
+  hasStageData: null | 1;
 
   // locally mutable and required
   updatedAt: number;
@@ -195,8 +197,7 @@ export type DbSet = {
   updatedAt: number;
   stationId: number | null;
   streamId: number | null;
-
-  manuallyReleased: 1 | null;
+  hasStageData: null | 1;
 
   // we only store SYNCED, but we modify after query via setMutation
   syncState: SyncState;
@@ -314,6 +315,7 @@ export type ApiSetUpdate = {
   updatedAt: number;
   stationId: number | null;
   streamId: number | null;
+  hasStageData: null | 1;
 };
 
 export class ApiError extends Error {

@@ -16,6 +16,7 @@ import {
   SyncResult,
   DbStation,
   DbStream,
+  SyncState,
 } from '../common/types';
 import {
   getEventPoolIds,
@@ -473,41 +474,65 @@ function dbSetsFromApiSets(
         !(set.entrant1PrereqType === 'bye' && set.entrant2PrereqType === 'bye'),
     )
     .map((set): DbSet => {
-      set.tournamentId = tournamentId;
-      // correct placeholder entrantIds
-      if (!Number.isInteger(set.entrant1Id)) {
-        set.entrant1Id = null;
-      }
-      if (!Number.isInteger(set.entrant2Id)) {
-        set.entrant2Id = null;
-      }
-      // fill in fields that may be missing
-      if (set.entrant1PrereqStr === undefined) {
-        set.entrant1PrereqStr = null;
-      }
-      if (set.entrant2PrereqStr === undefined) {
-        set.entrant2PrereqStr = null;
-      }
-      if (set.wProgressingPhaseGroupId === undefined) {
-        set.wProgressingPhaseGroupId = null;
-      }
-      if (set.wProgressingPhaseId === undefined) {
-        set.wProgressingPhaseId = null;
-      }
-      if (set.wProgressingName === undefined) {
-        set.wProgressingName = null;
-      }
-      if (set.lProgressingPhaseGroupId === undefined) {
-        set.lProgressingPhaseGroupId = null;
-      }
-      if (set.lProgressingPhaseId === undefined) {
-        set.lProgressingPhaseId = null;
-      }
-      if (set.lProgressingName === undefined) {
-        set.lProgressingName = null;
-      }
-      set.ordinal = idToDEOrdinal.get(set.id) ?? set.round - roundMax;
-      return set;
+      return {
+        id: set.id,
+        phaseGroupId: set.phaseGroupId,
+        phaseId: set.phaseId,
+        eventId: set.eventId,
+        fullRoundText: set.fullRoundText,
+        identifier: set.identifier,
+        round: set.round,
+        entrant1PrereqType: set.entrant1PrereqType,
+        entrant1PrereqId: set.entrant1PrereqId,
+        entrant1PrereqCondition: set.entrant1PrereqCondition,
+        entrant2PrereqType: set.entrant2PrereqType,
+        entrant2PrereqId: set.entrant2PrereqId,
+        entrant2PrereqCondition: set.entrant2PrereqCondition,
+        wProgressionSeedId: set.wProgressionSeedId,
+        lProgressionSeedId: set.lProgressionSeedId,
+        state: set.state,
+        entrant1Score: set.entrant1Score,
+        entrant2Score: set.entrant2Score,
+        winnerId: set.winnerId,
+        updatedAt: set.updatedAt,
+        stationId: set.stationId,
+        streamId: set.streamId,
+        // correct placeholder entrantIds
+        entrant1Id: Number.isInteger(set.entrant1Id) ? set.entrant1Id : null,
+        entrant2Id: Number.isInteger(set.entrant2Id) ? set.entrant2Id : null,
+        // fill in fields that may be missing
+        entrant1PrereqStr:
+          set.entrant1PrereqStr === undefined ? null : set.entrant1PrereqStr,
+        entrant2PrereqStr:
+          set.entrant2PrereqStr === undefined ? null : set.entrant2PrereqStr,
+        wProgressingPhaseGroupId:
+          set.wProgressingPhaseGroupId === undefined
+            ? null
+            : set.wProgressingPhaseGroupId,
+        wProgressingPhaseId:
+          set.wProgressingPhaseId === undefined
+            ? null
+            : set.wProgressingPhaseId,
+        wProgressingName:
+          set.wProgressingName === undefined ? null : set.wProgressingName,
+        lProgressingPhaseGroupId:
+          set.lProgressingPhaseGroupId === undefined
+            ? null
+            : set.lProgressingPhaseGroupId,
+        lProgressingPhaseId:
+          set.lProgressingPhaseId === undefined
+            ? null
+            : set.lProgressingPhaseId,
+        lProgressingName:
+          set.lProgressingName === undefined ? null : set.lProgressingName,
+        // computed here
+        tournamentId,
+        ordinal: idToDEOrdinal.get(set.id) ?? set.round - roundMax,
+        hasStageData: (set.games as any[]).some((game) => game.stageId !== null)
+          ? 1
+          : null,
+        syncState: SyncState.SYNCED,
+      };
     })
     .forEach((set) => {
       idToDbSet.set(set.id, set);
@@ -901,6 +926,11 @@ const UPDATE_SET_INNER = `
       stream {
         id
       }
+      games {
+        stage {
+          id
+        }
+      }
       updatedAt
       winnerId
 `;
@@ -926,6 +956,11 @@ async function resetSet(setId: number): Promise<ApiSetUpdate> {
     updatedAt: data.resetSet.updatedAt,
     stationId: data.resetSet.station?.id ?? null,
     streamId: data.resetSet.stream?.id ?? null,
+    hasStageData:
+      Array.isArray(data.resetSet.games) &&
+      (data.resetSet.games as any[]).some((game) => game.stage)
+        ? 1
+        : null,
   };
 }
 
@@ -957,6 +992,11 @@ async function assignSetStation(
     updatedAt: data.assignStation.updatedAt,
     stationId: data.assignStation.station?.id ?? null,
     streamId: data.assignStation.stream?.id ?? null,
+    hasStageData:
+      Array.isArray(data.assignStation.games) &&
+      (data.assignStation.games as any[]).some((game) => game.stage)
+        ? 1
+        : null,
   };
 }
 
@@ -988,6 +1028,11 @@ async function assignSetStream(
     updatedAt: data.assignStream.updatedAt,
     stationId: data.assignStream.station?.id ?? null,
     streamId: data.assignStream.stream?.id ?? null,
+    hasStageData:
+      Array.isArray(data.assignStream.games) &&
+      (data.assignStream.games as any[]).some((game) => game.stage)
+        ? 1
+        : null,
   };
 }
 
@@ -1013,6 +1058,11 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
     updatedAt: data.markSetInProgress.updatedAt,
     stationId: data.markSetInProgress.station?.id ?? null,
     streamId: data.markSetInProgress.stream?.id ?? null,
+    hasStageData:
+      Array.isArray(data.markSetInProgress.games) &&
+      (data.markSetInProgress.games as any[]).some((game) => game.stage)
+        ? 1
+        : null,
   };
 }
 
@@ -1058,6 +1108,11 @@ async function reportSet(
       updatedAt: set.updatedAt,
       stationId: set.station?.id ?? null,
       streamId: set.stream?.id ?? null,
+      hasStageData:
+        Array.isArray(set.games) &&
+        (set.games as any[]).some((game) => game.stage)
+          ? 1
+          : null,
     };
   });
 }
@@ -1104,6 +1159,11 @@ async function updateSet(
     updatedAt: set.updatedAt,
     stationId: set.station?.id ?? null,
     streamId: set.stream?.id ?? null,
+    hasStageData:
+      Array.isArray(set.games) &&
+      (set.games as any[]).some((game) => game.stage)
+        ? 1
+        : null,
   };
 }
 

@@ -70,6 +70,7 @@ export function dbInit() {
       state INTEGER,
       stationId INTEGER,
       streamId INTEGER,
+      hasStageData INTEGER,
       entrant1Id INTEGER,
       entrant1Score INTEGER,
       entrant1PrereqType TEXT,
@@ -92,7 +93,6 @@ export function dbInit() {
       lProgressingPhaseId INTEGER,
       lProgressingName TEXT,
       updatedAt INTEGER,
-      manuallyReleased INTEGER,
       syncState INTEGER NOT NULL
     )`,
   ).run();
@@ -123,6 +123,8 @@ export function dbInit() {
       stationId INTEGER,
       streamIdPresent INTEGER,
       streamId INTEGER,
+      hasStageDataPresent INTEGER,
+      hasStageData INTEGER,
       updatedAt INTEGER NOT NULL
     )`,
   ).run();
@@ -375,6 +377,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   state,
   stationId,
   streamId,
+  hasStageData,
   entrant1Id,
   entrant1Score,
   entrant1PrereqType,
@@ -411,6 +414,7 @@ const SET_UPSERT_SQL = `REPLACE INTO sets (
   @state,
   @stationId,
   @streamId,
+  @hasStageData,
   @entrant1Id,
   @entrant1Score,
   @entrant1PrereqType,
@@ -486,7 +490,10 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   if (setMutation.streamIdPresent) {
     set.streamId = setMutation.streamId;
   }
-  if (autoSync || set.manuallyReleased) {
+  if (setMutation.hasStageDataPresent) {
+    set.hasStageData = setMutation.hasStageData;
+  }
+  if (autoSync) {
     set.syncState = SyncState.QUEUED;
   } else {
     set.syncState = SyncState.LOCAL;
@@ -1131,6 +1138,9 @@ export function reportSet(
 
   set.state = 3;
   set.winnerId = winnerId;
+  set.hasStageData = gameData.some((game) => game.stageId !== undefined)
+    ? 1
+    : null;
   if (isDQ) {
     set.entrant1Score = winnerId === entrant1Id ? 0 : -1;
     set.entrant2Score = winnerId === entrant2Id ? 0 : -1;
@@ -1306,6 +1316,8 @@ export function reportSet(
           entrant2Score,
           winnerIdPresent,
           winnerId,
+          hasStageDataPresent,
+          hasStageData,
           updatedAt
         ) VALUES (
           @id,
@@ -1322,6 +1334,8 @@ export function reportSet(
           @entrant2Score,
           1,
           @winnerId,
+          1,
+          @hasStageData,
           @updatedAt
         )`,
       )
@@ -1336,6 +1350,7 @@ export function reportSet(
         entrant1Score: set.entrant1Score,
         entrant2Score: set.entrant2Score,
         winnerId: set.winnerId,
+        hasStageData: set.hasStageData,
         updatedAt,
       });
     if (wProgressionSet) {
@@ -1854,6 +1869,9 @@ export function finalizeTransaction(
           if (dbSetMutation.streamIdPresent) {
             exprs.push('streamId = @streamId');
           }
+          if (dbSetMutation.hasStageDataPresent) {
+            exprs.push('hasStageData = @hasStageData');
+          }
           if (exprs.length === 0) {
             throw new Error(
               `no mutations in dbSetMutation: ${dbSetMutation.id}, transactionNum: ${dbSetMutation.transactionNum}`,
@@ -1885,7 +1903,8 @@ export function finalizeTransaction(
               winnerId = @winnerId,
               updatedAt = @updatedAt,
               stationId = @stationId,
-              streamId = @streamId
+              streamId = @streamId,
+              hasStageData = @hasStageData
             WHERE id = @id`,
         )
         .run(update);
@@ -2009,7 +2028,8 @@ export function updateEventSets(
             winnerId = @winnerId,
             updatedAt = @updatedAt,
             stationId = @stationId,
-            streamId = @streamId
+            streamId = @streamId,
+            hasStageData = @hasStageData
           WHERE id = @id AND updatedAt < @updatedAt`,
       )
       .run(set);
