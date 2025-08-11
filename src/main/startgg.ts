@@ -474,6 +474,7 @@ function dbSetsFromApiSets(
         !(set.entrant1PrereqType === 'bye' && set.entrant2PrereqType === 'bye'),
     )
     .map((set): DbSet => {
+      const games = Array.isArray(set.games) ? (set.games as any[]) : [];
       return {
         id: set.id,
         phaseGroupId: set.phaseGroupId,
@@ -528,9 +529,10 @@ function dbSetsFromApiSets(
         // computed here
         tournamentId,
         ordinal: idToDEOrdinal.get(set.id) ?? set.round - roundMax,
-        hasStageData: (set.games as any[]).some((game) => game.stageId !== null)
-          ? 1
-          : null,
+        hasStageData:
+          games.length > 0 && games.every((game) => game.stageId !== null)
+            ? 1
+            : null,
         syncState: SyncState.SYNCED,
       };
     })
@@ -945,6 +947,9 @@ async function resetSet(setId: number): Promise<ApiSetUpdate> {
   }
 
   const data = await fetchGql(apiKey, RESET_SET_MUTATION, { setId });
+  const games = Array.isArray(data.resetSet.games)
+    ? (data.resetSet.games as any[])
+    : [];
   return {
     id: data.resetSet.id,
     state: data.resetSet.state,
@@ -957,10 +962,7 @@ async function resetSet(setId: number): Promise<ApiSetUpdate> {
     stationId: data.resetSet.station?.id ?? null,
     streamId: data.resetSet.stream?.id ?? null,
     hasStageData:
-      Array.isArray(data.resetSet.games) &&
-      (data.resetSet.games as any[]).some((game) => game.stage)
-        ? 1
-        : null,
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
   };
 }
 
@@ -981,6 +983,9 @@ async function assignSetStation(
     setId,
     stationId,
   });
+  const games = Array.isArray(data.assignStation.games)
+    ? (data.assignStation.games as any[])
+    : [];
   return {
     id: data.assignStation.id,
     state: data.assignStation.state,
@@ -993,10 +998,7 @@ async function assignSetStation(
     stationId: data.assignStation.station?.id ?? null,
     streamId: data.assignStation.stream?.id ?? null,
     hasStageData:
-      Array.isArray(data.assignStation.games) &&
-      (data.assignStation.games as any[]).some((game) => game.stage)
-        ? 1
-        : null,
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
   };
 }
 
@@ -1017,6 +1019,9 @@ async function assignSetStream(
     setId,
     streamId,
   });
+  const games = Array.isArray(data.assignStream.games)
+    ? (data.assignStream.games as any[])
+    : [];
   return {
     id: data.assignStream.id,
     state: data.assignStream.state,
@@ -1029,10 +1034,7 @@ async function assignSetStream(
     stationId: data.assignStream.station?.id ?? null,
     streamId: data.assignStream.stream?.id ?? null,
     hasStageData:
-      Array.isArray(data.assignStream.games) &&
-      (data.assignStream.games as any[]).some((game) => game.stage)
-        ? 1
-        : null,
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
   };
 }
 
@@ -1047,6 +1049,9 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
   }
 
   const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
+  const games = Array.isArray(data.markSetInProgress.games)
+    ? (data.markSetInProgress.games as any[])
+    : [];
   return {
     id: data.markSetInProgress.id,
     state: data.markSetInProgress.state,
@@ -1059,10 +1064,7 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
     stationId: data.markSetInProgress.station?.id ?? null,
     streamId: data.markSetInProgress.stream?.id ?? null,
     hasStageData:
-      Array.isArray(data.markSetInProgress.games) &&
-      (data.markSetInProgress.games as any[]).some((game) => game.stage)
-        ? 1
-        : null,
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
   };
 }
 
@@ -1097,6 +1099,7 @@ async function reportSet(
     const standing1 = set.slots[0].standing;
     const entrant2 = set.slots[1].entrant;
     const standing2 = set.slots[1].standing;
+    const games = Array.isArray(set.games) ? (set.games as any[]) : [];
     return {
       id: set.id,
       state: set.state,
@@ -1109,10 +1112,7 @@ async function reportSet(
       stationId: set.station?.id ?? null,
       streamId: set.stream?.id ?? null,
       hasStageData:
-        Array.isArray(set.games) &&
-        (set.games as any[]).some((game) => game.stage)
-          ? 1
-          : null,
+        games.length > 0 && games.every((game) => game.stage) ? 1 : null,
     };
   });
 }
@@ -1148,6 +1148,7 @@ async function updateSet(
   const standing1 = set.slots[0].standing;
   const entrant2 = set.slots[1].entrant;
   const standing2 = set.slots[1].standing;
+  const games = Array.isArray(set.games) ? (set.games as any[]) : [];
   return {
     id: set.id,
     state: set.state,
@@ -1160,10 +1161,7 @@ async function updateSet(
     stationId: set.station?.id ?? null,
     streamId: set.stream?.id ?? null,
     hasStageData:
-      Array.isArray(set.games) &&
-      (set.games as any[]).some((game) => game.stage)
-        ? 1
-        : null,
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
   };
 }
 

@@ -42,6 +42,7 @@ export type RendererSet = {
   winnerId: number | null;
   station: RendererStation | null;
   stream: RendererStream | null;
+  hasStageData: 1 | null;
   syncState: SyncState;
 };
 

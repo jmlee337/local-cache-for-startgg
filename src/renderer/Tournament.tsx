@@ -12,6 +12,7 @@ import {
   Refresh,
   RestartAlt,
   Router,
+  StadiumOutlined,
   Tv,
 } from '@mui/icons-material';
 import {
@@ -709,6 +710,11 @@ export default function Tournament() {
             {reportSet?.fullRoundText} ({reportSet?.identifier})
           </Typography>
           <Stack direction="row" alignItems="center" spacing="8px">
+            {reportSet?.hasStageData === 1 && (
+              <Tooltip title="Games and stages reported">
+                <StadiumOutlined />
+              </Tooltip>
+            )}
             {reportSet?.station && (
               <Typography variant="body1">
                 Station {reportSet?.station?.number}
@@ -757,7 +763,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant1Id
+                  (reportSet?.winnerId === reportSet?.entrant1Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq &&
@@ -786,7 +793,8 @@ export default function Tournament() {
                   ((reportSet?.winnerId === reportSet?.entrant1Id &&
                     reportEntrant2Score >= 1) ||
                     (reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant2Score <= 1))
+                      reportEntrant2Score <= 1) ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant1Score === 1
@@ -813,7 +821,8 @@ export default function Tournament() {
                   ((reportSet?.winnerId === reportSet?.entrant1Id &&
                     reportEntrant2Score >= 2) ||
                     (reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant2Score <= 2))
+                      reportEntrant2Score <= 2) ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant1Score === 2
@@ -837,7 +846,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant2Id
+                  (reportSet?.winnerId === reportSet?.entrant2Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant1Score === 3
@@ -861,7 +871,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant2Id
+                  (reportSet?.winnerId === reportSet?.entrant2Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   reportWinnerId === reportSet?.entrant1Id
@@ -906,7 +917,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant2Id
+                  (reportSet?.winnerId === reportSet?.entrant2Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq &&
@@ -935,7 +947,8 @@ export default function Tournament() {
                   ((reportSet?.winnerId === reportSet?.entrant2Id &&
                     reportEntrant1Score >= 1) ||
                     (reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant1Score <= 1))
+                      reportEntrant1Score <= 1) ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant2Score === 1
@@ -962,7 +975,8 @@ export default function Tournament() {
                   ((reportSet?.winnerId === reportSet?.entrant2Id &&
                     reportEntrant1Score >= 2) ||
                     (reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant1Score <= 2))
+                      reportEntrant1Score <= 2) ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant2Score === 2
@@ -986,7 +1000,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant1Id
+                  (reportSet?.winnerId === reportSet?.entrant1Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   !reportIsDq && reportEntrant2Score === 3
@@ -1010,7 +1025,8 @@ export default function Tournament() {
               <Button
                 disabled={
                   reportSet?.state === 3 &&
-                  reportSet?.winnerId === reportSet?.entrant1Id
+                  (reportSet?.winnerId === reportSet?.entrant1Id ||
+                    reportSet?.hasStageData === 1)
                 }
                 variant={
                   reportWinnerId === reportSet?.entrant2Id
@@ -1079,7 +1095,8 @@ export default function Tournament() {
           <Button
             variant="contained"
             disabled={
-              (reportSet?.state === 3 && updateUnchanged) ||
+              (reportSet?.state === 3 &&
+                (updateUnchanged || reportSet?.hasStageData === 1)) ||
               reporting ||
               !reportWinnerId
             }

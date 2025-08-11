@@ -575,6 +575,7 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
       dbSet.streamId === null
         ? null
         : getRendererStream(dbSet.streamId) ?? null,
+    hasStageData: dbSet.hasStageData,
     syncState: dbSet.syncState,
   };
 }
@@ -1118,6 +1119,7 @@ export function reportSet(
     wProgressionSeedId,
     lProgressionSeedId,
     state,
+    hasStageData,
   } = set;
   if (!entrant1Id || !entrant2Id) {
     throw new Error(
@@ -1135,12 +1137,15 @@ export function reportSet(
   if (state === 3 && isDQ) {
     throw new Error('cannot change reported set to DQ');
   }
+  const reportHasStageData =
+    gameData.length > 0 && gameData.every((game) => game.stageId !== undefined);
+  if (state === 3 && hasStageData && !reportHasStageData) {
+    throw new Error('cannot remove stage data in update');
+  }
 
   set.state = 3;
   set.winnerId = winnerId;
-  set.hasStageData = gameData.some((game) => game.stageId !== undefined)
-    ? 1
-    : null;
+  set.hasStageData = reportHasStageData ? 1 : null;
   if (isDQ) {
     set.entrant1Score = winnerId === entrant1Id ? 0 : -1;
     set.entrant2Score = winnerId === entrant2Id ? 0 : -1;
@@ -1912,7 +1917,11 @@ export function finalizeTransaction(
   })();
 }
 
-function getSyncStatus(dbTransaction: DbTransaction, afterSet: DbSet) {
+function getSyncStatus(
+  dbTransaction: DbTransaction,
+  afterSet: DbSet,
+  containsReset: boolean,
+) {
   switch (dbTransaction.type) {
     case TransactionType.RESET:
       if (afterSet.state === 1) {
@@ -1956,20 +1965,44 @@ function getSyncStatus(dbTransaction: DbTransaction, afterSet: DbSet) {
         ? SyncStatus.BEHIND
         : SyncStatus.AHEAD;
     case TransactionType.START:
-      if (afterSet.state === 1 || afterSet.state === 6) {
+      if (containsReset || afterSet.state === 1 || afterSet.state === 6) {
         return SyncStatus.AHEAD;
       }
       return SyncStatus.BEHIND;
     case TransactionType.REPORT:
-      if (dbTransaction.isUpdate) {
-        if (afterSet.state === 3) {
-          return SyncStatus.AHEAD;
-        }
-      } else {
+      if (containsReset) {
+        return SyncStatus.AHEAD;
+      }
+      if (dbTransaction.isUpdate === null) {
         if (afterSet.state !== 3) {
           return SyncStatus.AHEAD;
         }
-        // TODO: report is behind if winner and scores match but doesn't contain stage data and afterSet does
+      } else if (afterSet.state === 3) {
+        // update
+        if (afterSet.winnerId !== dbTransaction.winnerId) {
+          return SyncStatus.CONFLICT;
+        }
+        if (afterSet.hasStageData === 1) {
+          const apiTransaction = toApiTransaction(dbTransaction);
+          if (apiTransaction.type !== TransactionType.REPORT) {
+            throw new Error('unreachable');
+          }
+          if (
+            apiTransaction.gameData.length > 0 &&
+            apiTransaction.gameData.every((game) => game.stageId !== undefined)
+          ) {
+            return SyncStatus.CONFLICT;
+          }
+          return SyncStatus.BEHIND;
+        }
+        if (
+          afterSet.entrant1Score !== -1 &&
+          afterSet.entrant2Score !== -1 &&
+          dbTransaction.isDQ === 1
+        ) {
+          return SyncStatus.BEHIND;
+        }
+        return SyncStatus.AHEAD;
       }
       return SyncStatus.CONFLICT;
     default:
@@ -2064,11 +2097,11 @@ export function updateEventSets(
         ...dbTransactions.map((dbTransaction) => dbTransaction.transactionNum),
       );
     } else {
-      // first pass, coalesce
+      // coalesce
       // - multiple assign station
       // - multiple assign stream
       // - reset, start, report, update before reset
-      const firstPassDbTransactions: DbTransaction[] = [];
+      const resetStationStreamCoalescedDbTransactions: DbTransaction[] = [];
       let foundReset = false;
       let foundAssignStation = false;
       let foundAssignStream = false;
@@ -2094,14 +2127,80 @@ export function updateEventSets(
         } else if (dbTransaction.type === TransactionType.ASSIGN_STREAM) {
           foundAssignStream = true;
         }
-        firstPassDbTransactions.unshift(dbTransaction);
+        resetStationStreamCoalescedDbTransactions.unshift(dbTransaction);
       }
 
-      // second pass, coalesce multiple update
-      const secondPassDbTransactions: DbTransaction[] = [];
+      // coalesce start before report
+      const reportCoalescedDbTransactions: DbTransaction[] = [];
+      let foundReport = false;
+      for (
+        let i = resetStationStreamCoalescedDbTransactions.length - 1;
+        i >= 0;
+        i -= 1
+      ) {
+        const dbTransaction = resetStationStreamCoalescedDbTransactions[i];
+        if (foundReport && dbTransaction.type === TransactionType.START) {
+          transactionNumsToDelete.push(dbTransaction.transactionNum);
+          continue;
+        }
+        if (dbTransaction.type === TransactionType.REPORT) {
+          foundReport = true;
+        }
+        reportCoalescedDbTransactions.unshift(dbTransaction);
+      }
+
+      // coalesce reset
+      const resetTransactionI = reportCoalescedDbTransactions.findIndex(
+        (dbTransaction) => dbTransaction.type === TransactionType.RESET,
+      );
+      if (resetTransactionI !== -1) {
+        // at this point there's 1 START or 1 REPORT (after RESET) or neither
+        const startOrReportTransaction = reportCoalescedDbTransactions.find(
+          (dbTransaction) =>
+            dbTransaction.type === TransactionType.START ||
+            (dbTransaction.type === TransactionType.REPORT &&
+              dbTransaction.isUpdate === null),
+        );
+        if (
+          startOrReportTransaction &&
+          ((startOrReportTransaction.type === TransactionType.START &&
+            (afterSet.state === 1 || afterSet.state === 6)) ||
+            (startOrReportTransaction.type === TransactionType.REPORT &&
+              afterSet.state !== 3))
+        ) {
+          const resetTransaction = reportCoalescedDbTransactions.splice(
+            resetTransactionI,
+            1,
+          )[0];
+          transactionNumsToDelete.push(resetTransaction.transactionNum);
+        }
+      }
+      const containsReset = reportCoalescedDbTransactions.some(
+        (dbTransaction) => dbTransaction.type === TransactionType.RESET,
+      );
+
+      // turn report into update
+      if (!containsReset && afterSet.state === 3) {
+        const reportTransaction = reportCoalescedDbTransactions.find(
+          (dbTransaction) =>
+            dbTransaction.type === TransactionType.REPORT &&
+            dbTransaction.isUpdate === null,
+        );
+        if (reportTransaction) {
+          db!
+            .prepare(
+              'UPDATE transactions SET isUpdate = 1 WHERE transactionNum = @transactionNum',
+            )
+            .run(reportTransaction);
+          reportTransaction.isUpdate = 1;
+        }
+      }
+
+      // coalesce multiple update
+      const updateCoalescedDbTransactions: DbTransaction[] = [];
       let foundUpdate = false;
-      for (let i = firstPassDbTransactions.length - 1; i >= 0; i -= 1) {
-        const dbTransaction = firstPassDbTransactions[i];
+      for (let i = reportCoalescedDbTransactions.length - 1; i >= 0; i -= 1) {
+        const dbTransaction = reportCoalescedDbTransactions[i];
         if (
           foundUpdate &&
           dbTransaction.type === TransactionType.REPORT &&
@@ -2116,58 +2215,17 @@ export function updateEventSets(
         ) {
           foundUpdate = true;
         }
-        secondPassDbTransactions.unshift(dbTransaction);
+        updateCoalescedDbTransactions.unshift(dbTransaction);
       }
 
-      // third pass, coalesce start before report
-      const thirdPassDbTransactions: DbTransaction[] = [];
-      let foundReport = false;
-      for (let i = secondPassDbTransactions.length - 1; i >= 0; i -= 1) {
-        const dbTransaction = secondPassDbTransactions[i];
-        if (foundReport && dbTransaction.type === TransactionType.START) {
-          transactionNumsToDelete.push(dbTransaction.transactionNum);
-          continue;
-        }
-        if (dbTransaction.type === TransactionType.REPORT) {
-          foundReport = true;
-        }
-        thirdPassDbTransactions.unshift(dbTransaction);
-      }
-
-      // fourth pass, coalesce reset if unecessary
-      const resetTransactionI = thirdPassDbTransactions.findIndex(
-        (dbTransaction) => dbTransaction.type === TransactionType.RESET,
-      );
-      if (resetTransactionI !== -1) {
-        // at this point there's 1 START or 1 REPORT (after RESET) or neither
-        const startOrReportTransaction = thirdPassDbTransactions.find(
-          (dbTransaction) =>
-            dbTransaction.type === TransactionType.START ||
-            dbTransaction.type === TransactionType.REPORT,
-        );
-        if (
-          startOrReportTransaction &&
-          ((startOrReportTransaction.type === TransactionType.START &&
-            (afterSet.state === 1 || afterSet.state === 6)) ||
-            (startOrReportTransaction.type === TransactionType.REPORT &&
-              afterSet.state !== 3))
-        ) {
-          const resetTransaction = thirdPassDbTransactions.splice(
-            resetTransactionI,
-            1,
-          )[0];
-          transactionNumsToDelete.push(resetTransaction.transactionNum);
-        }
-      }
-
-      // fifth pass, combine report with update
-      const updateTransactionI = thirdPassDbTransactions.findIndex(
+      // combine report with update
+      const updateTransactionI = updateCoalescedDbTransactions.findIndex(
         (dbTransaction) =>
           dbTransaction.type === TransactionType.REPORT &&
           dbTransaction.isUpdate,
       );
       if (updateTransactionI !== -1) {
-        const reportTransactions = thirdPassDbTransactions.filter(
+        const reportTransactions = updateCoalescedDbTransactions.filter(
           (dbTransaction) => dbTransaction.type === TransactionType.REPORT,
         );
         if (reportTransactions.length > 2) {
@@ -2226,14 +2284,14 @@ export function updateEventSets(
               )
               .run({ reportTransactionNum, updateTransactionNum });
           })();
-          thirdPassDbTransactions.splice(updateTransactionI, 1);
+          updateCoalescedDbTransactions.splice(updateTransactionI, 1);
           transactionNumsToDelete.push(updateTransactionNum);
         }
       }
 
       const transactionNumsToUpdate: number[] = [];
-      for (const dbTransaction of thirdPassDbTransactions) {
-        switch (getSyncStatus(dbTransaction, afterSet)) {
+      for (const dbTransaction of updateCoalescedDbTransactions) {
+        switch (getSyncStatus(dbTransaction, afterSet, containsReset)) {
           case SyncStatus.BEHIND:
             transactionNumsToDelete.push(dbTransaction.transactionNum);
             break;
@@ -2247,8 +2305,8 @@ export function updateEventSets(
       db!
         .prepare(
           `UPDATE transactions
-          SET isConflict = 1
-          WHERE transactionNum IN (${transactionNumsToUpdate.join(', ')})`,
+            SET isConflict = 1
+            WHERE transactionNum IN (${transactionNumsToUpdate.join(', ')})`,
         )
         .run();
     }
