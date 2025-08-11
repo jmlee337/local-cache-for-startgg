@@ -1942,10 +1942,16 @@ function getSyncStatus(dbTransaction: DbTransaction, afterSet: DbSet) {
       }
       return SyncStatus.BEHIND;
     case TransactionType.REPORT:
-      if (afterSet.state !== 3) {
-        return SyncStatus.AHEAD;
+      if (dbTransaction.isUpdate) {
+        if (afterSet.state === 3) {
+          return SyncStatus.AHEAD;
+        }
+      } else {
+        if (afterSet.state !== 3) {
+          return SyncStatus.AHEAD;
+        }
+        // TODO: report is behind if winner and scores match but doesn't contain stage data and afterSet does
       }
-      // todo updateBracketSet
       return SyncStatus.CONFLICT;
     default:
       throw new Error(`unknown transaction type: ${dbTransaction.type}`);
@@ -2038,7 +2044,10 @@ export function updateEventSets(
         ...dbTransactions.map((dbTransaction) => dbTransaction.transactionNum),
       );
     } else {
-      // first pass, coalesce multiple assigns and stuff before reset
+      // first pass, coalesce
+      // - multiple assign station
+      // - multiple assign stream
+      // - reset, start, report, update before reset
       const firstPassDbTransactions: DbTransaction[] = [];
       let foundReset = false;
       let foundAssignStation = false;
@@ -2068,11 +2077,33 @@ export function updateEventSets(
         firstPassDbTransactions.unshift(dbTransaction);
       }
 
-      // second pass, coalesce start before report
+      // second pass, coalesce multiple update
       const secondPassDbTransactions: DbTransaction[] = [];
-      let foundReport = false;
+      let foundUpdate = false;
       for (let i = firstPassDbTransactions.length - 1; i >= 0; i -= 1) {
         const dbTransaction = firstPassDbTransactions[i];
+        if (
+          foundUpdate &&
+          dbTransaction.type === TransactionType.REPORT &&
+          dbTransaction.isUpdate
+        ) {
+          transactionNumsToDelete.push(dbTransaction.transactionNum);
+          continue;
+        }
+        if (
+          dbTransaction.type === TransactionType.REPORT &&
+          dbTransaction.isUpdate
+        ) {
+          foundUpdate = true;
+        }
+        secondPassDbTransactions.unshift(dbTransaction);
+      }
+
+      // third pass, coalesce start before report
+      const thirdPassDbTransactions: DbTransaction[] = [];
+      let foundReport = false;
+      for (let i = secondPassDbTransactions.length - 1; i >= 0; i -= 1) {
+        const dbTransaction = secondPassDbTransactions[i];
         if (foundReport && dbTransaction.type === TransactionType.START) {
           transactionNumsToDelete.push(dbTransaction.transactionNum);
           continue;
@@ -2080,16 +2111,16 @@ export function updateEventSets(
         if (dbTransaction.type === TransactionType.REPORT) {
           foundReport = true;
         }
-        secondPassDbTransactions.unshift(dbTransaction);
+        thirdPassDbTransactions.unshift(dbTransaction);
       }
 
-      // third pass, coalesce reset if unecessary
-      const resetTransactionI = secondPassDbTransactions.findIndex(
+      // fourth pass, coalesce reset if unecessary
+      const resetTransactionI = thirdPassDbTransactions.findIndex(
         (dbTransaction) => dbTransaction.type === TransactionType.RESET,
       );
       if (resetTransactionI !== -1) {
         // at this point there's 1 START or 1 REPORT (after RESET) or neither
-        const startOrReportTransaction = secondPassDbTransactions.find(
+        const startOrReportTransaction = thirdPassDbTransactions.find(
           (dbTransaction) =>
             dbTransaction.type === TransactionType.START ||
             dbTransaction.type === TransactionType.REPORT,
@@ -2101,7 +2132,7 @@ export function updateEventSets(
             (startOrReportTransaction.type === TransactionType.REPORT &&
               afterSet.state !== 3))
         ) {
-          const resetTransaction = secondPassDbTransactions.splice(
+          const resetTransaction = thirdPassDbTransactions.splice(
             resetTransactionI,
             1,
           )[0];
@@ -2109,8 +2140,79 @@ export function updateEventSets(
         }
       }
 
+      // fifth pass, combine report with update
+      const updateTransactionI = thirdPassDbTransactions.findIndex(
+        (dbTransaction) =>
+          dbTransaction.type === TransactionType.REPORT &&
+          dbTransaction.isUpdate,
+      );
+      if (updateTransactionI !== -1) {
+        const reportTransactions = thirdPassDbTransactions.filter(
+          (dbTransaction) => dbTransaction.type === TransactionType.REPORT,
+        );
+        if (reportTransactions.length > 2) {
+          throw new Error(
+            'should not be multiple reports or updates during this pass',
+          );
+        }
+        if (reportTransactions.length === 2) {
+          if (
+            reportTransactions[0].isUpdate ||
+            !reportTransactions[1].isUpdate
+          ) {
+            throw new Error(
+              `report should come before update during this pass: ${
+                reportTransactions[0].isUpdate ? 'UPDATE' : 'REPORT'
+              }, ${reportTransactions[1].isUpdate ? 'UPDATE' : 'REPORT'}`,
+            );
+          }
+          const reportTransactionNum = reportTransactions[0].transactionNum;
+          const updateTransactionNum = reportTransactions[1].transactionNum;
+          db!.transaction(() => {
+            db!
+              .prepare(
+                'DELETE FROM transactionGameData WHERE transactionNum = @reportTransactionNum',
+              )
+              .run({ reportTransactionNum });
+            db!
+              .prepare(
+                'DELETE FROM transactionSelections WHERE transactionNum = @reportTransactionNum',
+              )
+              .run({ reportTransactionNum });
+            db!
+              .prepare(
+                'DELETE FROM setMutations WHERE transactionNum = @reportTransactionNum',
+              )
+              .run({ reportTransactionNum });
+            db!
+              .prepare(
+                `UPDATE transactionGameData
+                  SET transactionNum = @reportTransactionNum
+                  WHERE transactionNum = @updateTransactionNum`,
+              )
+              .run({ reportTransactionNum, updateTransactionNum });
+            db!
+              .prepare(
+                `UPDATE transactionSelections
+                  SET transactionNum = @reportTransactionNum
+                  WHERE transactionNum = @updateTransactionNum`,
+              )
+              .run({ reportTransactionNum, updateTransactionNum });
+            db!
+              .prepare(
+                `UPDATE setMutations
+                  SET transactionNum = @reportTransactionNum
+                  WHERE transactionNum = @updateTransactionNum`,
+              )
+              .run({ reportTransactionNum, updateTransactionNum });
+          })();
+          thirdPassDbTransactions.splice(updateTransactionI, 1);
+          transactionNumsToDelete.push(updateTransactionNum);
+        }
+      }
+
       const transactionNumsToUpdate: number[] = [];
-      for (const dbTransaction of secondPassDbTransactions) {
+      for (const dbTransaction of thirdPassDbTransactions) {
         switch (getSyncStatus(dbTransaction, afterSet)) {
           case SyncStatus.BEHIND:
             transactionNumsToDelete.push(dbTransaction.transactionNum);
