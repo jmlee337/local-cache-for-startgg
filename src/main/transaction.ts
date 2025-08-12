@@ -1,4 +1,4 @@
-import { ApiGameData, ApiTransaction, TransactionType } from '../common/types';
+import { ApiGameData } from '../common/types';
 import {
   assignSetStation,
   assignSetStream,

@@ -1189,6 +1189,7 @@ async function tryNextTransaction(id: number, slug: string) {
     updateSyncResultWithSuccess();
     let transaction = getNextTransaction();
     if (transaction) {
+      // eslint-disable-next-line no-constant-condition
       while (true) {
         let updates: ApiSetUpdate[] = [];
         if (transaction.type === TransactionType.RESET) {
@@ -1261,10 +1262,10 @@ async function tryNextTransaction(id: number, slug: string) {
                     transaction.isDQ,
                     transaction.gameData,
                   );
-                } catch (e: any) {
+                } catch (e2: any) {
                   if (
-                    e instanceof ApiError &&
-                    e.gqlErrors.some(
+                    e2 instanceof ApiError &&
+                    e2.gqlErrors.some(
                       (gqlError) =>
                         gqlError.message ===
                         'Cannot report completed set via API.',
@@ -1275,7 +1276,7 @@ async function tryNextTransaction(id: number, slug: string) {
                       ConflictReason.UPDATE_CHANGE_WINNER,
                     );
                   } else {
-                    throw e;
+                    throw e2;
                   }
                 }
               } else {

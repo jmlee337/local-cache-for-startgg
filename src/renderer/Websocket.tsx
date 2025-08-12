@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react';
-import {
-  Box,
-  Button,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  Stack,
-} from '@mui/material';
+import { Box, Button, Dialog, DialogContent, DialogTitle } from '@mui/material';
 import { WebsocketStatus } from '../common/types';
 
 export default function Websocket() {
@@ -34,7 +27,8 @@ export default function Websocket() {
     websocketButton = (
       <Button
         color="error"
-        variant="text"
+        size="large"
+        variant="contained"
         onClick={() => {
           setOpen(true);
         }}
@@ -45,17 +39,18 @@ export default function Websocket() {
   } else if (websocketStatus.port) {
     websocketButton = (
       <Button
+        size="large"
         variant="text"
         onClick={() => {
           setOpen(true);
         }}
       >
-        Websocket Port: {websocketStatus.port}
+        Websocket: {websocketStatus.port}
       </Button>
     );
   }
   return (
-    <Stack direction="row" alignItems="center">
+    <>
       {websocketButton}
       <Dialog
         open={open}
@@ -74,6 +69,6 @@ export default function Websocket() {
           </Box>
         </DialogContent>
       </Dialog>
-    </Stack>
+    </>
   );
 }

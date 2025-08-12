@@ -27,6 +27,7 @@ export default function Conflicts() {
       <>
         <Button
           color="warning"
+          size="large"
           variant="contained"
           onClick={() => {
             setOpen(true);

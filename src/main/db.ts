@@ -213,7 +213,75 @@ export function dbInit(window: BrowserWindow) {
   return init ? init.transactionNum + 1 : 1;
 }
 
+function getEntrantName(id: number): string | null {
+  const maybeEntrant = db!
+    .prepare('SELECT * FROM entrants WHERE id = @id')
+    .get({ id }) as DbEntrant | undefined;
+  if (!maybeEntrant) {
+    return null;
+  }
+
+  return maybeEntrant.participant2Id
+    ? maybeEntrant.name
+    : maybeEntrant.participant1GamerTag;
+}
+
 let currentTournamentId = 0;
+export function getConflicts() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const conflictTransactions = db
+    .prepare(
+      `SELECT *
+        FROM transactions
+        WHERE tournamentId = @currentTournamentId
+          AND isConflict = 1
+          AND reason NOT IN (${ConflictReason.REPORT_COMPLETED})
+        ORDER BY transactionNum ASC`,
+    )
+    .all({ currentTournamentId }) as DbTransaction[];
+  const setIds = conflictTransactions.map((transaction) => transaction.setId);
+  const sets = db
+    .prepare(
+      `SELECT *
+        FROM sets
+        WHERE id IN (${setIds.join(', ')})`,
+    )
+    .all() as DbSet[];
+  const idToSet = new Map(sets.map((set) => [set.id, set]));
+  const rendererConflicts = conflictTransactions.map(
+    (transaction): RendererConflict => {
+      if (transaction.reason === null) {
+        throw new Error(
+          `conflict transaction without reason: ${transaction.transactionNum}`,
+        );
+      }
+      const set = idToSet.get(transaction.setId);
+      if (!set) {
+        throw new Error(
+          `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
+        );
+      }
+      let winnerName: string | null = null;
+      if (set.entrant1Id && set.winnerId === set.entrant1Id) {
+        winnerName = getEntrantName(set.entrant1Id);
+      } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
+        winnerName = getEntrantName(set.entrant2Id);
+      }
+      return {
+        fullRoundText: set.fullRoundText,
+        identifier: set.identifier,
+        transactionNum: transaction.transactionNum,
+        type: transaction.type,
+        reason: transaction.reason,
+        winnerName,
+      };
+    },
+  );
+  return rendererConflicts;
+}
 export function getTournamentId() {
   return currentTournamentId;
 }
@@ -515,19 +583,6 @@ function applyMutations(set: DbSet) {
   ).forEach((setMutation) => {
     applyMutation(set, setMutation);
   });
-}
-
-function getEntrantName(id: number): string | null {
-  const maybeEntrant = db!
-    .prepare('SELECT * FROM entrants WHERE id = @id')
-    .get({ id }) as DbEntrant | undefined;
-  if (!maybeEntrant) {
-    return null;
-  }
-
-  return maybeEntrant.participant2Id
-    ? maybeEntrant.name
-    : maybeEntrant.participant1GamerTag;
 }
 
 function getRendererStation(id: number): RendererStation | null {
@@ -2047,7 +2102,7 @@ function getSyncStatus(
   | { syncStatus: SyncStatus.AHEAD | SyncStatus.BEHIND }
   | { syncStatus: SyncStatus.CONFLICT; reason: ConflictReason } {
   switch (dbTransaction.type) {
-    case TransactionType.RESET:
+    case TransactionType.RESET: {
       if (afterSet.state === 1) {
         return { syncStatus: SyncStatus.BEHIND };
       }
@@ -2083,6 +2138,7 @@ function getSyncStatus(
         };
       }
       return { syncStatus: SyncStatus.AHEAD };
+    }
     case TransactionType.ASSIGN_STATION:
       return {
         syncStatus:
@@ -2110,39 +2166,43 @@ function getSyncStatus(
         if (afterSet.state !== 3) {
           return { syncStatus: SyncStatus.AHEAD };
         }
-      } else {
-        // update, afterSet completed
-        if (afterSet.winnerId !== dbTransaction.winnerId) {
-          return {
-            syncStatus: SyncStatus.CONFLICT,
-            reason: ConflictReason.UPDATE_CHANGE_WINNER,
-          };
-        }
-        if (afterSet.hasStageData === 1) {
-          const apiTransaction = toApiTransaction(dbTransaction);
-          if (apiTransaction.type !== TransactionType.REPORT) {
-            throw new Error('unreachable');
-          }
-          if (
-            apiTransaction.gameData.length > 0 &&
-            apiTransaction.gameData.every((game) => game.stageId !== undefined)
-          ) {
-            return {
-              syncStatus: SyncStatus.CONFLICT,
-              reason: ConflictReason.UPDATE_STAGE_DATA,
-            };
-          }
-          return { syncStatus: SyncStatus.BEHIND };
+        // should be unreachable
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.REPORT_COMPLETED,
+        };
+      }
+      // update, afterSet completed
+      if (afterSet.winnerId !== dbTransaction.winnerId) {
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.UPDATE_CHANGE_WINNER,
+        };
+      }
+      if (afterSet.hasStageData === 1) {
+        const apiTransaction = toApiTransaction(dbTransaction);
+        if (apiTransaction.type !== TransactionType.REPORT) {
+          throw new Error('unreachable');
         }
         if (
-          afterSet.entrant1Score !== -1 &&
-          afterSet.entrant2Score !== -1 &&
-          dbTransaction.isDQ === 1
+          apiTransaction.gameData.length > 0 &&
+          apiTransaction.gameData.every((game) => game.stageId !== undefined)
         ) {
-          return { syncStatus: SyncStatus.BEHIND };
+          return {
+            syncStatus: SyncStatus.CONFLICT,
+            reason: ConflictReason.UPDATE_STAGE_DATA,
+          };
         }
-        return { syncStatus: SyncStatus.AHEAD };
+        return { syncStatus: SyncStatus.BEHIND };
       }
+      if (
+        afterSet.entrant1Score !== -1 &&
+        afterSet.entrant2Score !== -1 &&
+        dbTransaction.isDQ === 1
+      ) {
+        return { syncStatus: SyncStatus.BEHIND };
+      }
+      return { syncStatus: SyncStatus.AHEAD };
     default:
       throw new Error(`unknown transaction type: ${dbTransaction.type}`);
   }
@@ -2175,62 +2235,6 @@ export function deleteTransaction(transactionNum: number) {
       )
       .run({ transactionNum });
   })();
-}
-
-export function getConflicts() {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  const conflictTransactions = db
-    .prepare(
-      `SELECT *
-        FROM transactions
-        WHERE tournamentId = @currentTournamentId
-          AND isConflict = 1
-          AND reason NOT IN (${ConflictReason.REPORT_COMPLETED})
-        ORDER BY transactionNum ASC`,
-    )
-    .all({ currentTournamentId }) as DbTransaction[];
-  const setIds = conflictTransactions.map((transaction) => transaction.setId);
-  const sets = db
-    .prepare(
-      `SELECT *
-        FROM sets
-        WHERE id IN (${setIds.join(', ')})`,
-    )
-    .all() as DbSet[];
-  const idToSet = new Map(sets.map((set) => [set.id, set]));
-  const rendererConflicts = conflictTransactions.map(
-    (transaction): RendererConflict => {
-      if (transaction.reason === null) {
-        throw new Error(
-          `conflict transaction without reason: ${transaction.transactionNum}`,
-        );
-      }
-      const set = idToSet.get(transaction.setId);
-      if (!set) {
-        throw new Error(
-          `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
-        );
-      }
-      let winnerName: string | null = null;
-      if (set.entrant1Id && set.winnerId === set.entrant1Id) {
-        winnerName = getEntrantName(set.entrant1Id);
-      } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
-        winnerName = getEntrantName(set.entrant2Id);
-      }
-      return {
-        fullRoundText: set.fullRoundText,
-        identifier: set.identifier,
-        transactionNum: transaction.transactionNum,
-        type: transaction.type,
-        reason: transaction.reason,
-        winnerName,
-      };
-    },
-  );
-  return rendererConflicts;
 }
 
 export function updateEventSets(
@@ -2312,6 +2316,7 @@ export function updateEventSets(
             dbTransaction.type === TransactionType.ASSIGN_STREAM)
         ) {
           transactionNumsToDelete.push(dbTransaction.transactionNum);
+          // eslint-disable-next-line no-continue
           continue;
         }
         if (dbTransaction.type === TransactionType.RESET) {
@@ -2335,6 +2340,7 @@ export function updateEventSets(
         const dbTransaction = resetStationStreamCoalescedDbTransactions[i];
         if (foundReport && dbTransaction.type === TransactionType.START) {
           transactionNumsToDelete.push(dbTransaction.transactionNum);
+          // eslint-disable-next-line no-continue
           continue;
         }
         if (dbTransaction.type === TransactionType.REPORT) {
@@ -2401,6 +2407,7 @@ export function updateEventSets(
           dbTransaction.isUpdate
         ) {
           transactionNumsToDelete.push(dbTransaction.transactionNum);
+          // eslint-disable-next-line no-continue
           continue;
         }
         if (

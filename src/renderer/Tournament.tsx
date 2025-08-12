@@ -17,6 +17,7 @@ import {
 } from '@mui/icons-material';
 import {
   Alert,
+  AppBar,
   Box,
   Button,
   CircularProgress,
@@ -31,6 +32,7 @@ import {
   ListItemText,
   Stack,
   TextField,
+  Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material';
@@ -538,707 +540,725 @@ export default function Tournament() {
   }
 
   return (
-    <Stack>
-      <Stack direction="row" alignItems="center">
-        <InputBase
-          disabled
-          size="small"
-          value={
-            tournament
-              ? `${tournament.slug} (${tournament.id})`
-              : 'Set tournament'
-          }
-          style={{ flexGrow: 1, height: '48px' }}
-        />
-        <Tooltip placement="left" title="Set tournament">
-          <IconButton
-            onClick={() => {
-              refresh();
-              setOpen(true);
-            }}
-          >
-            <Edit />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-      <Stack direction="row" justifyContent="space-between" gap="8px">
-        <Stack direction="row">
-          <Sync />
-          <Websocket />
-          <Conflicts />
-          <FatalError />
-        </Stack>
-        <Settings showError={showError} />
-        <Dialog
-          fullWidth
-          open={open}
-          onClose={() => {
-            setOpen(false);
-          }}
-          PaperProps={{
-            style: { height: 'calc(100% - 64px)' },
+    <>
+      <AppBar position="fixed" style={{ backgroundColor: 'white' }}>
+        <Toolbar
+          disableGutters
+          style={{
+            justifyContent: 'space-between',
+            gap: '8px',
+            paddingRight: '8px',
           }}
         >
-          <DialogTitle
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              paddingRight: '32px',
+          <Stack direction="row" alignItems="center" marginLeft="-3px">
+            <Sync />
+            <Websocket />
+            <Conflicts />
+            <FatalError />
+          </Stack>
+          <Settings showError={showError} />
+        </Toolbar>
+      </AppBar>
+      <Toolbar />
+      <Stack marginTop="8px">
+        <Stack direction="row" alignItems="center">
+          <InputBase
+            disabled
+            size="small"
+            value={
+              tournament
+                ? `${tournament.slug} (${tournament.id})`
+                : 'Set tournament'
+            }
+            style={{ flexGrow: 1 }}
+          />
+          <Tooltip placement="left" title="Set tournament">
+            <IconButton
+              onClick={() => {
+                refresh();
+                setOpen(true);
+              }}
+            >
+              <Edit />
+            </IconButton>
+          </Tooltip>
+          <Dialog
+            fullWidth
+            open={open}
+            onClose={() => {
+              setOpen(false);
+            }}
+            PaperProps={{
+              style: { height: 'calc(100% - 64px)' },
             }}
           >
-            Set tournament
-            <Tooltip title="Refresh">
-              <IconButton
-                disabled={gettingAdminedTournaments}
-                onClick={refresh}
-              >
-                {gettingAdminedTournaments ? (
-                  <CircularProgress size="24px" />
-                ) : (
-                  <Refresh />
-                )}
-              </IconButton>
-            </Tooltip>
-          </DialogTitle>
-          <DialogContent>
-            {localTournaments.length > 0 && (
-              <>
-                <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
-                  Local tournaments
-                </Box>
-                {localTournaments.map((localTournament) => (
-                  <LocalTournamentItemButton
-                    key={localTournament.id}
-                    localTournament={localTournament}
-                    set={set}
-                    setLocalTournaments={setLocalTournaments}
-                    showError={showError}
-                  />
-                ))}
-              </>
-            )}
-            <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
-              Fetch from start.gg
-            </Box>
-            <form
+            <DialogTitle
               style={{
-                alignItems: 'center',
                 display: 'flex',
-                margin: '8px 4px',
-                gap: '8px',
+                justifyContent: 'space-between',
+                paddingRight: '32px',
               }}
-              onSubmit={async (event: FormEvent<HTMLFormElement>) => {
-                const target = event.target as typeof event.target & {
-                  slug: { value: string };
-                };
-                const newSlug = target.slug.value;
-                event.preventDefault();
-                event.stopPropagation();
-                if (newSlug) {
-                  await get(newSlug);
+            >
+              Set tournament
+              <Tooltip title="Refresh">
+                <IconButton
+                  disabled={gettingAdminedTournaments}
+                  onClick={refresh}
+                >
+                  {gettingAdminedTournaments ? (
+                    <CircularProgress size="24px" />
+                  ) : (
+                    <Refresh />
+                  )}
+                </IconButton>
+              </Tooltip>
+            </DialogTitle>
+            <DialogContent>
+              {localTournaments.length > 0 && (
+                <>
+                  <Box
+                    sx={{ typography: (theme) => theme.typography.subtitle2 }}
+                  >
+                    Local tournaments
+                  </Box>
+                  {localTournaments.map((localTournament) => (
+                    <LocalTournamentItemButton
+                      key={localTournament.id}
+                      localTournament={localTournament}
+                      set={set}
+                      setLocalTournaments={setLocalTournaments}
+                      showError={showError}
+                    />
+                  ))}
+                </>
+              )}
+              <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
+                Fetch from start.gg
+              </Box>
+              <form
+                style={{
+                  alignItems: 'center',
+                  display: 'flex',
+                  margin: '8px 4px',
+                  gap: '8px',
+                }}
+                onSubmit={async (event: FormEvent<HTMLFormElement>) => {
+                  const target = event.target as typeof event.target & {
+                    slug: { value: string };
+                  };
+                  const newSlug = target.slug.value;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (newSlug) {
+                    await get(newSlug);
+                  }
+                }}
+              >
+                <TextField
+                  autoFocus
+                  label="Tournament Slug"
+                  name="slug"
+                  placeholder="super-smash-con-2023"
+                  size="small"
+                  variant="outlined"
+                />
+                <Button
+                  disabled={settingTournament}
+                  endIcon={
+                    settingTournament && <CircularProgress size="24px" />
+                  }
+                  type="submit"
+                  variant="contained"
+                >
+                  Get!
+                </Button>
+              </form>
+              {adminedTournamentsError.length > 0 && (
+                <Alert severity="error" style={{ marginTop: '8px' }}>
+                  {adminedTournamentsError}
+                </Alert>
+              )}
+              {adminedTournaments.map((adminedTournament) => (
+                <ListItemButton
+                  key={adminedTournament.slug}
+                  onClick={async () => {
+                    await get(adminedTournament.slug);
+                  }}
+                >
+                  <ListItemText>{adminedTournament.name}</ListItemText>
+                </ListItemButton>
+              ))}
+            </DialogContent>
+          </Dialog>
+        </Stack>
+        {tournament && tournament.events.length > 0 && (
+          <List>
+            {tournament.events.map((event) => (
+              <EventListItem
+                key={event.id}
+                event={event}
+                reportSet={(newReportSet: RendererSet) => {
+                  setReportWinnerId(newReportSet.winnerId ?? 0);
+                  setReportIsDq(
+                    newReportSet.entrant1Score === -1 ||
+                      newReportSet.entrant2Score === -1,
+                  );
+                  setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
+                  setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
+                  setReportSet(newReportSet);
+                  setReportDialogOpen(true);
+                }}
+                showError={showError}
+              />
+            ))}
+          </List>
+        )}
+        <Dialog
+          open={reportDialogOpen}
+          onClose={() => {
+            setReportDialogOpen(false);
+          }}
+        >
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            padding="16px 24px"
+          >
+            <Typography variant="h6">
+              {reportSet?.fullRoundText} ({reportSet?.identifier})
+            </Typography>
+            <Stack direction="row" alignItems="center" spacing="8px">
+              {reportSet?.hasStageData === 1 && (
+                <Tooltip title="Games and stages reported">
+                  <StadiumOutlined />
+                </Tooltip>
+              )}
+              {reportSet?.station && (
+                <Typography variant="body1">
+                  Station {reportSet?.station?.number}
+                </Typography>
+              )}
+              {reportSet?.stream && (
+                <Tooltip
+                  title={`${reportSet?.stream.streamSource} ${reportSet?.stream.streamName}`}
+                >
+                  <Tv />
+                </Tooltip>
+              )}
+              <Typography variant="caption">({reportSet?.id})</Typography>
+            </Stack>
+          </Stack>
+          <DialogContent style={{ paddingTop: 0 }}>
+            <Stack
+              alignItems="center"
+              sx={{ typography: (theme) => theme.typography.body2 }}
+            >
+              <Stack direction="row" alignItems="center">
+                <Box
+                  overflow="hidden"
+                  textOverflow="ellipsis"
+                  whiteSpace="nowrap"
+                  width="176px"
+                >
+                  {reportSet?.entrant1Name}
+                </Box>
+                <Button
+                  disabled={reportSet?.state === 3}
+                  variant={
+                    reportIsDq && reportWinnerId === reportSet?.entrant2Id
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                    setReportIsDq(true);
+                    setReportEntrant1Score(0);
+                    setReportEntrant2Score(0);
+                  }}
+                >
+                  DQ
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant1Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq &&
+                    !(
+                      reportEntrant2Score === 0 &&
+                      (reportWinnerId === reportSet?.entrant1Id ||
+                        reportWinnerId === reportSet?.entrant2Id)
+                    ) &&
+                    reportEntrant1Score === 0
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(
+                      reportEntrant2Score > 0 ? reportSet!.entrant2Id! : 0,
+                    );
+                    setReportIsDq(false);
+                    setReportEntrant1Score(0);
+                  }}
+                >
+                  0
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                      reportEntrant2Score >= 1) ||
+                      (reportSet?.winnerId === reportSet?.entrant2Id &&
+                        reportEntrant2Score <= 1) ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant1Score === 1
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant2Score > 1) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else if (reportEntrant2Score < 1) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant1Score(1);
+                  }}
+                >
+                  1
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                      reportEntrant2Score >= 2) ||
+                      (reportSet?.winnerId === reportSet?.entrant2Id &&
+                        reportEntrant2Score <= 2) ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant1Score === 2
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant2Score > 2) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else if (reportEntrant2Score < 2) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant1Score(2);
+                  }}
+                >
+                  2
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant2Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant1Score === 3
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant2Score > 3) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else if (reportEntrant2Score < 3) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant1Score(3);
+                  }}
+                >
+                  3
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant2Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    reportWinnerId === reportSet?.entrant1Id
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                    setReportIsDq(false);
+                    setReportEntrant1Score(0);
+                    setReportEntrant2Score(0);
+                  }}
+                >
+                  W
+                </Button>
+              </Stack>
+              <Stack direction="row" alignItems="center">
+                <Box
+                  overflow="hidden"
+                  textOverflow="ellipsis"
+                  whiteSpace="nowrap"
+                  width="176px"
+                >
+                  {reportSet?.entrant2Name}
+                </Box>
+                <Button
+                  disabled={reportSet?.state === 3}
+                  variant={
+                    reportIsDq && reportWinnerId === reportSet?.entrant1Id
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(reportSet!.entrant1Id!);
+                    setReportIsDq(true);
+                    setReportEntrant1Score(0);
+                    setReportEntrant2Score(0);
+                  }}
+                >
+                  DQ
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant2Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq &&
+                    !(
+                      reportEntrant1Score === 0 &&
+                      (reportWinnerId === reportSet?.entrant1Id ||
+                        reportWinnerId === reportSet?.entrant2Id)
+                    ) &&
+                    reportEntrant2Score === 0
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(
+                      reportEntrant1Score > 0 ? reportSet!.entrant1Id! : 0,
+                    );
+                    setReportIsDq(false);
+                    setReportEntrant2Score(0);
+                  }}
+                >
+                  0
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                      reportEntrant1Score >= 1) ||
+                      (reportSet?.winnerId === reportSet?.entrant1Id &&
+                        reportEntrant1Score <= 1) ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant2Score === 1
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant1Score > 1) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else if (reportEntrant1Score < 1) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant2Score(1);
+                  }}
+                >
+                  1
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                      reportEntrant1Score >= 2) ||
+                      (reportSet?.winnerId === reportSet?.entrant1Id &&
+                        reportEntrant1Score <= 2) ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant2Score === 2
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant1Score > 2) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else if (reportEntrant1Score < 2) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant2Score(2);
+                  }}
+                >
+                  2
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant1Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    !reportIsDq && reportEntrant2Score === 3
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    if (reportEntrant1Score > 3) {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                    } else if (reportEntrant1Score < 3) {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                    } else {
+                      setReportWinnerId(0);
+                    }
+                    setReportIsDq(false);
+                    setReportEntrant2Score(3);
+                  }}
+                >
+                  3
+                </Button>
+                <Button
+                  disabled={
+                    reportSet?.state === 3 &&
+                    (reportSet?.winnerId === reportSet?.entrant1Id ||
+                      reportSet?.hasStageData === 1)
+                  }
+                  variant={
+                    reportWinnerId === reportSet?.entrant2Id
+                      ? 'contained'
+                      : 'text'
+                  }
+                  onClick={() => {
+                    setReportWinnerId(reportSet!.entrant2Id!);
+                    setReportIsDq(false);
+                    setReportEntrant1Score(0);
+                    setReportEntrant2Score(0);
+                  }}
+                >
+                  W
+                </Button>
+              </Stack>
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <IconButton
+              color="primary"
+              disabled={choosing}
+              size="small"
+              onClick={async () => {
+                setStationStreamDialogOpen(true);
+              }}
+            >
+              {choosing ? <CircularProgress size="24px" /> : <Tv />}
+            </IconButton>
+            <IconButton
+              color="error"
+              disabled={reportSet?.state === 1 || resetting}
+              onClick={async () => {
+                setResetting(true);
+                try {
+                  await window.electron.resetSet(reportSet!.id);
+                  setReportDialogOpen(false);
+                } catch (e: any) {
+                  showError(e instanceof Error ? e.message : e);
+                } finally {
+                  setResetting(false);
                 }
               }}
             >
-              <TextField
-                autoFocus
-                label="Tournament Slug"
-                name="slug"
-                placeholder="super-smash-con-2023"
-                size="small"
-                variant="outlined"
-              />
-              <Button
-                disabled={settingTournament}
-                endIcon={settingTournament && <CircularProgress size="24px" />}
-                type="submit"
-                variant="contained"
-              >
-                Get!
-              </Button>
-            </form>
-            {adminedTournamentsError.length > 0 && (
-              <Alert severity="error" style={{ marginTop: '8px' }}>
-                {adminedTournamentsError}
-              </Alert>
-            )}
-            {adminedTournaments.map((adminedTournament) => (
-              <ListItemButton
-                key={adminedTournament.slug}
-                onClick={async () => {
-                  await get(adminedTournament.slug);
-                }}
-              >
-                <ListItemText>{adminedTournament.name}</ListItemText>
-              </ListItemButton>
-            ))}
-          </DialogContent>
-        </Dialog>
-      </Stack>
-      {tournament && tournament.events.length > 0 && (
-        <List>
-          {tournament.events.map((event) => (
-            <EventListItem
-              key={event.id}
-              event={event}
-              reportSet={(newReportSet: RendererSet) => {
-                setReportWinnerId(newReportSet.winnerId ?? 0);
-                setReportIsDq(
-                  newReportSet.entrant1Score === -1 ||
-                    newReportSet.entrant2Score === -1,
-                );
-                setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
-                setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
-                setReportSet(newReportSet);
-                setReportDialogOpen(true);
+              {resetting ? <CircularProgress size="24px" /> : <RestartAlt />}
+            </IconButton>
+            <IconButton
+              color="primary"
+              disabled={
+                starting || !(reportSet?.state === 1 || reportSet?.state === 6)
+              }
+              onClick={async () => {
+                setStarting(true);
+                try {
+                  await window.electron.startSet(reportSet!.id);
+                  setReportDialogOpen(false);
+                } catch (e: any) {
+                  showError(e instanceof Error ? e.message : e);
+                } finally {
+                  setStarting(false);
+                }
               }}
-              showError={showError}
-            />
-          ))}
-        </List>
-      )}
-      <Dialog
-        open={reportDialogOpen}
-        onClose={() => {
-          setReportDialogOpen(false);
-        }}
-      >
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          padding="16px 24px"
+            >
+              {starting ? <CircularProgress size="24px" /> : <HourglassTop />}
+            </IconButton>
+            <Button
+              variant="contained"
+              disabled={
+                (reportSet?.state === 3 &&
+                  (updateUnchanged || reportSet?.hasStageData === 1)) ||
+                reporting ||
+                !reportWinnerId
+              }
+              endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
+              onClick={async () => {
+                setReporting(true);
+                try {
+                  await window.electron.reportSet(
+                    reportSet!.id,
+                    reportWinnerId,
+                    reportIsDq,
+                    reportGameData,
+                  );
+                  setReportDialogOpen(false);
+                } catch (e: any) {
+                  showError(e instanceof Error ? e.message : e);
+                } finally {
+                  setReporting(false);
+                }
+              }}
+            >
+              Report
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={stationStreamDialogOpen}
+          onClose={() => {
+            setStationStreamDialogOpen(false);
+          }}
         >
-          <Typography variant="h6">
-            {reportSet?.fullRoundText} ({reportSet?.identifier})
-          </Typography>
-          <Stack direction="row" alignItems="center" spacing="8px">
-            {reportSet?.hasStageData === 1 && (
-              <Tooltip title="Games and stages reported">
-                <StadiumOutlined />
-              </Tooltip>
+          <DialogContent>
+            {tournament && tournament.streams.length > 0 && (
+              <>
+                {reportSet?.stream && (
+                  <ListItemButton
+                    disabled={choosing}
+                    disableGutters
+                    style={{ marginTop: '8px' }}
+                    onClick={async () => {
+                      setChoosing(true);
+                      try {
+                        await window.electron.assignSetStream(reportSet!.id, 0);
+                        setStationStreamDialogOpen(false);
+                        setReportDialogOpen(false);
+                      } catch (e: any) {
+                        showError(e instanceof Error ? e.message : e);
+                      } finally {
+                        setChoosing(false);
+                      }
+                    }}
+                  >
+                    <ListItemText>
+                      Remove from {reportSet!.stream.streamName}
+                    </ListItemText>
+                  </ListItemButton>
+                )}
+                <List disablePadding>
+                  {tournament.streams
+                    .filter((stream) => stream.id !== reportSet?.stream?.id)
+                    .map((stream) => (
+                      <ListItemButton
+                        disabled={choosing}
+                        key={stream.id}
+                        disableGutters
+                        onClick={async () => {
+                          setChoosing(true);
+                          try {
+                            await window.electron.assignSetStream(
+                              reportSet!.id,
+                              stream.id,
+                            );
+                            setStationStreamDialogOpen(false);
+                            setReportDialogOpen(false);
+                          } catch (e: any) {
+                            showError(e instanceof Error ? e.message : e);
+                          } finally {
+                            setChoosing(false);
+                          }
+                        }}
+                      >
+                        <ListItemText>{stream.streamName}</ListItemText>
+                      </ListItemButton>
+                    ))}
+                </List>
+              </>
             )}
-            {reportSet?.station && (
-              <Typography variant="body1">
-                Station {reportSet?.station?.number}
-              </Typography>
-            )}
-            {reportSet?.stream && (
-              <Tooltip
-                title={`${reportSet?.stream.streamSource} ${reportSet?.stream.streamName}`}
-              >
-                <Tv />
-              </Tooltip>
-            )}
-            <Typography variant="caption">({reportSet?.id})</Typography>
-          </Stack>
-        </Stack>
-        <DialogContent style={{ paddingTop: 0 }}>
-          <Stack
-            alignItems="center"
-            sx={{ typography: (theme) => theme.typography.body2 }}
-          >
-            <Stack direction="row" alignItems="center">
-              <Box
-                overflow="hidden"
-                textOverflow="ellipsis"
-                whiteSpace="nowrap"
-                width="176px"
-              >
-                {reportSet?.entrant1Name}
-              </Box>
-              <Button
-                disabled={reportSet?.state === 3}
-                variant={
-                  reportIsDq && reportWinnerId === reportSet?.entrant2Id
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(reportSet!.entrant2Id!);
-                  setReportIsDq(true);
-                  setReportEntrant1Score(0);
-                  setReportEntrant2Score(0);
-                }}
-              >
-                DQ
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant1Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq &&
-                  !(
-                    reportEntrant2Score === 0 &&
-                    (reportWinnerId === reportSet?.entrant1Id ||
-                      reportWinnerId === reportSet?.entrant2Id)
-                  ) &&
-                  reportEntrant1Score === 0
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(
-                    reportEntrant2Score > 0 ? reportSet!.entrant2Id! : 0,
-                  );
-                  setReportIsDq(false);
-                  setReportEntrant1Score(0);
-                }}
-              >
-                0
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                    reportEntrant2Score >= 1) ||
-                    (reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant2Score <= 1) ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant1Score === 1
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant2Score > 1) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else if (reportEntrant2Score < 1) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant1Score(1);
-                }}
-              >
-                1
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                    reportEntrant2Score >= 2) ||
-                    (reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant2Score <= 2) ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant1Score === 2
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant2Score > 2) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else if (reportEntrant2Score < 2) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant1Score(2);
-                }}
-              >
-                2
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant2Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant1Score === 3
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant2Score > 3) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else if (reportEntrant2Score < 3) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant1Score(3);
-                }}
-              >
-                3
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant2Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  reportWinnerId === reportSet?.entrant1Id
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(reportSet!.entrant1Id!);
-                  setReportIsDq(false);
-                  setReportEntrant1Score(0);
-                  setReportEntrant2Score(0);
-                }}
-              >
-                W
-              </Button>
-            </Stack>
-            <Stack direction="row" alignItems="center">
-              <Box
-                overflow="hidden"
-                textOverflow="ellipsis"
-                whiteSpace="nowrap"
-                width="176px"
-              >
-                {reportSet?.entrant2Name}
-              </Box>
-              <Button
-                disabled={reportSet?.state === 3}
-                variant={
-                  reportIsDq && reportWinnerId === reportSet?.entrant1Id
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(reportSet!.entrant1Id!);
-                  setReportIsDq(true);
-                  setReportEntrant1Score(0);
-                  setReportEntrant2Score(0);
-                }}
-              >
-                DQ
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant2Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq &&
-                  !(
-                    reportEntrant1Score === 0 &&
-                    (reportWinnerId === reportSet?.entrant1Id ||
-                      reportWinnerId === reportSet?.entrant2Id)
-                  ) &&
-                  reportEntrant2Score === 0
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(
-                    reportEntrant1Score > 0 ? reportSet!.entrant1Id! : 0,
-                  );
-                  setReportIsDq(false);
-                  setReportEntrant2Score(0);
-                }}
-              >
-                0
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                    reportEntrant1Score >= 1) ||
-                    (reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant1Score <= 1) ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant2Score === 1
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant1Score > 1) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else if (reportEntrant1Score < 1) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant2Score(1);
-                }}
-              >
-                1
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                    reportEntrant1Score >= 2) ||
-                    (reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant1Score <= 2) ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant2Score === 2
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant1Score > 2) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else if (reportEntrant1Score < 2) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant2Score(2);
-                }}
-              >
-                2
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant1Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  !reportIsDq && reportEntrant2Score === 3
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  if (reportEntrant1Score > 3) {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                  } else if (reportEntrant1Score < 3) {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                  } else {
-                    setReportWinnerId(0);
-                  }
-                  setReportIsDq(false);
-                  setReportEntrant2Score(3);
-                }}
-              >
-                3
-              </Button>
-              <Button
-                disabled={
-                  reportSet?.state === 3 &&
-                  (reportSet?.winnerId === reportSet?.entrant1Id ||
-                    reportSet?.hasStageData === 1)
-                }
-                variant={
-                  reportWinnerId === reportSet?.entrant2Id
-                    ? 'contained'
-                    : 'text'
-                }
-                onClick={() => {
-                  setReportWinnerId(reportSet!.entrant2Id!);
-                  setReportIsDq(false);
-                  setReportEntrant1Score(0);
-                  setReportEntrant2Score(0);
-                }}
-              >
-                W
-              </Button>
-            </Stack>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <IconButton
-            color="primary"
-            disabled={choosing}
-            size="small"
-            onClick={async () => {
-              setStationStreamDialogOpen(true);
-            }}
-          >
-            {choosing ? <CircularProgress size="24px" /> : <Tv />}
-          </IconButton>
-          <IconButton
-            color="error"
-            disabled={reportSet?.state === 1 || resetting}
-            onClick={async () => {
-              setResetting(true);
-              try {
-                await window.electron.resetSet(reportSet!.id);
-                setReportDialogOpen(false);
-              } catch (e: any) {
-                showError(e instanceof Error ? e.message : e);
-              } finally {
-                setResetting(false);
-              }
-            }}
-          >
-            {resetting ? <CircularProgress size="24px" /> : <RestartAlt />}
-          </IconButton>
-          <IconButton
-            color="primary"
-            disabled={
-              starting || !(reportSet?.state === 1 || reportSet?.state === 6)
-            }
-            onClick={async () => {
-              setStarting(true);
-              try {
-                await window.electron.startSet(reportSet!.id);
-                setReportDialogOpen(false);
-              } catch (e: any) {
-                showError(e instanceof Error ? e.message : e);
-              } finally {
-                setStarting(false);
-              }
-            }}
-          >
-            {starting ? <CircularProgress size="24px" /> : <HourglassTop />}
-          </IconButton>
-          <Button
-            variant="contained"
-            disabled={
-              (reportSet?.state === 3 &&
-                (updateUnchanged || reportSet?.hasStageData === 1)) ||
-              reporting ||
-              !reportWinnerId
-            }
-            endIcon={reporting ? <CircularProgress size="24px" /> : undefined}
-            onClick={async () => {
-              setReporting(true);
-              try {
-                await window.electron.reportSet(
-                  reportSet!.id,
-                  reportWinnerId,
-                  reportIsDq,
-                  reportGameData,
-                );
-                setReportDialogOpen(false);
-              } catch (e: any) {
-                showError(e instanceof Error ? e.message : e);
-              } finally {
-                setReporting(false);
-              }
-            }}
-          >
-            Report
-          </Button>
-        </DialogActions>
-      </Dialog>
-      <Dialog
-        open={stationStreamDialogOpen}
-        onClose={() => {
-          setStationStreamDialogOpen(false);
-        }}
-      >
-        <DialogContent>
-          {tournament && tournament.streams.length > 0 && (
-            <>
-              {reportSet?.stream && (
-                <ListItemButton
-                  disabled={choosing}
-                  disableGutters
-                  style={{ marginTop: '8px' }}
-                  onClick={async () => {
-                    setChoosing(true);
-                    try {
-                      await window.electron.assignSetStream(reportSet!.id, 0);
-                      setStationStreamDialogOpen(false);
-                      setReportDialogOpen(false);
-                    } catch (e: any) {
-                      showError(e instanceof Error ? e.message : e);
-                    } finally {
-                      setChoosing(false);
-                    }
+            {tournament && tournament.stations.length > 0 && (
+              <>
+                {reportSet?.station && (
+                  <ListItemText
+                    style={{ padding: '12px 0', margin: '8px 0 0' }}
+                  >
+                    Assigned to station {reportSet!.station.number}
+                  </ListItemText>
+                )}
+                <List
+                  disablePadding
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'row',
+                    flexWrap: 'wrap',
                   }}
                 >
-                  <ListItemText>
-                    Remove from {reportSet!.stream.streamName}
-                  </ListItemText>
-                </ListItemButton>
-              )}
-              <List disablePadding>
-                {tournament.streams
-                  .filter((stream) => stream.id !== reportSet?.stream?.id)
-                  .map((stream) => (
-                    <ListItemButton
-                      disabled={choosing}
-                      key={stream.id}
-                      disableGutters
-                      onClick={async () => {
-                        setChoosing(true);
-                        try {
-                          await window.electron.assignSetStream(
-                            reportSet!.id,
-                            stream.id,
-                          );
-                          setStationStreamDialogOpen(false);
-                          setReportDialogOpen(false);
-                        } catch (e: any) {
-                          showError(e instanceof Error ? e.message : e);
-                        } finally {
-                          setChoosing(false);
-                        }
-                      }}
-                    >
-                      <ListItemText>{stream.streamName}</ListItemText>
-                    </ListItemButton>
-                  ))}
-              </List>
-            </>
-          )}
-          {tournament && tournament.stations.length > 0 && (
-            <>
-              {reportSet?.station && (
-                <ListItemText style={{ padding: '12px 0', margin: '8px 0 0' }}>
-                  Assigned to station {reportSet!.station.number}
-                </ListItemText>
-              )}
-              <List
-                disablePadding
-                style={{
-                  display: 'flex',
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                }}
-              >
-                {tournament.stations
-                  .filter((station) => station.id !== reportSet?.station?.id)
-                  .map((station) => (
-                    <ListItemButton
-                      disabled={choosing}
-                      key={station.id}
-                      style={{ flexGrow: 0 }}
-                      onClick={async () => {
-                        setChoosing(true);
-                        try {
-                          await window.electron.assignSetStation(
-                            reportSet!.id,
-                            station.id,
-                          );
-                          setStationStreamDialogOpen(false);
-                          setReportDialogOpen(false);
-                        } catch (e: any) {
-                          showError(e instanceof Error ? e.message : e);
-                        } finally {
-                          setChoosing(false);
-                        }
-                      }}
-                    >
-                      <ListItemText>{station.number}</ListItemText>
-                    </ListItemButton>
-                  ))}
-              </List>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-      <ErrorDialog
-        open={errorDialogOpen}
-        error={error}
-        close={() => {
-          setErrorDialogOpen(false);
-        }}
-      />
-    </Stack>
+                  {tournament.stations
+                    .filter((station) => station.id !== reportSet?.station?.id)
+                    .map((station) => (
+                      <ListItemButton
+                        disabled={choosing}
+                        key={station.id}
+                        style={{ flexGrow: 0 }}
+                        onClick={async () => {
+                          setChoosing(true);
+                          try {
+                            await window.electron.assignSetStation(
+                              reportSet!.id,
+                              station.id,
+                            );
+                            setStationStreamDialogOpen(false);
+                            setReportDialogOpen(false);
+                          } catch (e: any) {
+                            showError(e instanceof Error ? e.message : e);
+                          } finally {
+                            setChoosing(false);
+                          }
+                        }}
+                      >
+                        <ListItemText>{station.number}</ListItemText>
+                      </ListItemButton>
+                    ))}
+                </List>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+        <ErrorDialog
+          open={errorDialogOpen}
+          error={error}
+          close={() => {
+            setErrorDialogOpen(false);
+          }}
+        />
+      </Stack>
+    </>
   );
 }
