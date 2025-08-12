@@ -8,6 +8,8 @@ import {
   EmojiEvents,
   Group,
   HourglassTop,
+  KeyboardArrowDown,
+  KeyboardArrowRight,
   NotificationsActive,
   Refresh,
   RestartAlt,
@@ -44,6 +46,7 @@ import {
   AdminedTournament,
   ApiError,
   RendererEvent,
+  RendererPool,
   RendererSet,
   RendererTournament,
 } from '../common/types';
@@ -140,7 +143,6 @@ function SetListItemButton({
   }
   return (
     <ListItemButton
-      disabled={!set.entrant1Name || !set.entrant2Name}
       style={{
         backgroundColor: set.state === 3 ? '#eeeeee' : undefined,
         flexGrow: 0,
@@ -205,6 +207,89 @@ function SetListItemButton({
   );
 }
 
+function PoolListItem({
+  pool,
+  reportSet,
+}: {
+  pool: RendererPool;
+  reportSet: (set: RendererSet) => void;
+}) {
+  const completedSets = pool.sets.filter((set) => set.state === 3);
+  const openSets = pool.sets.filter((set) => set.state !== 3);
+  const [completedOpen, setCompletedOpen] = useState(openSets.length === 0);
+
+  return (
+    <Box marginLeft="16px">
+      <ListItemButton
+        disabled={completedSets.length === 0}
+        style={{ justifyContent: 'space-between', opacity: 1 }}
+        onClick={() => {
+          setCompletedOpen(!completedOpen);
+        }}
+      >
+        <ListItemText style={{ flexGrow: 0 }}>
+          {pool.name} <Typography variant="caption">({pool.id})</Typography>
+        </ListItemText>
+        {completedSets.length > 0 && completedOpen ? (
+          <Tooltip title="Hide completed sets">
+            <KeyboardArrowDown />
+          </Tooltip>
+        ) : (
+          <Tooltip title="Show completed sets">
+            <KeyboardArrowRight />
+          </Tooltip>
+        )}
+      </ListItemButton>
+      {completedSets.length > 0 && (
+        <Collapse in={completedOpen}>
+          <Stack
+            direction="row"
+            flexWrap="wrap"
+            gap="8px"
+            marginLeft="16px"
+            marginTop="8px"
+          >
+            {completedSets
+              .sort((a, b) => {
+                if (a.round === b.round) {
+                  if (a.identifier.length === b.identifier.length) {
+                    return a.identifier.localeCompare(b.identifier);
+                  }
+                  return a.identifier.length - b.identifier.length;
+                }
+                return a.ordinal - b.ordinal;
+              })
+              .map((set) => (
+                <SetListItemButton
+                  key={set.id}
+                  set={set}
+                  reportSet={reportSet}
+                />
+              ))}
+          </Stack>
+        </Collapse>
+      )}
+      {pool.sets.length > 0 && (
+        <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
+          {openSets
+            .sort((a, b) => {
+              if (a.round === b.round) {
+                if (a.identifier.length === b.identifier.length) {
+                  return a.identifier.localeCompare(b.identifier);
+                }
+                return a.identifier.length - b.identifier.length;
+              }
+              return a.ordinal - b.ordinal;
+            })
+            .map((set) => (
+              <SetListItemButton key={set.id} set={set} reportSet={reportSet} />
+            ))}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
 function EventListItem({
   event,
   reportSet,
@@ -256,7 +341,7 @@ function EventListItem({
       </ListItem>
       {event.phases.length > 0 &&
         event.phases.map((phase) => (
-          <Box key={phase.id} marginLeft="32px">
+          <Box key={phase.id} marginLeft="16px">
             <ListItem disablePadding>
               <ListItemText>
                 {phase.name}{' '}
@@ -265,40 +350,7 @@ function EventListItem({
             </ListItem>
             {phase.pools.length > 0 &&
               phase.pools.map((pool) => (
-                <Box key={pool.id} marginLeft="32px">
-                  <ListItem disablePadding>
-                    <ListItemText>
-                      {pool.name}{' '}
-                      <Typography variant="caption">({pool.id})</Typography>
-                    </ListItemText>
-                  </ListItem>
-                  {pool.sets.length > 0 && (
-                    <Stack
-                      direction="row"
-                      flexWrap="wrap"
-                      gap="16px"
-                      marginLeft="32px"
-                    >
-                      {pool.sets
-                        .sort((a, b) => {
-                          if (a.round === b.round) {
-                            if (a.identifier.length === b.identifier.length) {
-                              return a.identifier.localeCompare(b.identifier);
-                            }
-                            return a.identifier.length - b.identifier.length;
-                          }
-                          return a.ordinal - b.ordinal;
-                        })
-                        .map((set) => (
-                          <SetListItemButton
-                            key={set.id}
-                            set={set}
-                            reportSet={reportSet}
-                          />
-                        ))}
-                    </Stack>
-                  )}
-                </Box>
+                <PoolListItem key={pool.id} pool={pool} reportSet={reportSet} />
               ))}
           </Box>
         ))}
@@ -811,7 +863,11 @@ export default function Tournament() {
                   {reportSet?.entrant1Name}
                 </Box>
                 <Button
-                  disabled={reportSet?.state === 3}
+                  disabled={
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    reportSet?.state === 3
+                  }
                   variant={
                     reportIsDq && reportWinnerId === reportSet?.entrant2Id
                       ? 'contained'
@@ -828,9 +884,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant1Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant1Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq &&
@@ -855,12 +913,14 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant2Score >= 1) ||
-                      (reportSet?.winnerId === reportSet?.entrant2Id &&
-                        reportEntrant2Score <= 1) ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                        reportEntrant2Score >= 1) ||
+                        (reportSet?.winnerId === reportSet?.entrant2Id &&
+                          reportEntrant2Score <= 1) ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 1
@@ -883,12 +943,14 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                      reportEntrant2Score >= 2) ||
-                      (reportSet?.winnerId === reportSet?.entrant2Id &&
-                        reportEntrant2Score <= 2) ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                        reportEntrant2Score >= 2) ||
+                        (reportSet?.winnerId === reportSet?.entrant2Id &&
+                          reportEntrant2Score <= 2) ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 2
@@ -911,9 +973,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant2Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant2Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 3
@@ -936,9 +1000,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant2Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant2Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant1Id
@@ -965,7 +1031,11 @@ export default function Tournament() {
                   {reportSet?.entrant2Name}
                 </Box>
                 <Button
-                  disabled={reportSet?.state === 3}
+                  disabled={
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    reportSet?.state === 3
+                  }
                   variant={
                     reportIsDq && reportWinnerId === reportSet?.entrant1Id
                       ? 'contained'
@@ -982,9 +1052,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant2Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant2Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq &&
@@ -1009,12 +1081,14 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant1Score >= 1) ||
-                      (reportSet?.winnerId === reportSet?.entrant1Id &&
-                        reportEntrant1Score <= 1) ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                        reportEntrant1Score >= 1) ||
+                        (reportSet?.winnerId === reportSet?.entrant1Id &&
+                          reportEntrant1Score <= 1) ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 1
@@ -1037,12 +1111,14 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                      reportEntrant1Score >= 2) ||
-                      (reportSet?.winnerId === reportSet?.entrant1Id &&
-                        reportEntrant1Score <= 2) ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                        reportEntrant1Score >= 2) ||
+                        (reportSet?.winnerId === reportSet?.entrant1Id &&
+                          reportEntrant1Score <= 2) ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 2
@@ -1065,9 +1141,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant1Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant1Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 3
@@ -1090,9 +1168,11 @@ export default function Tournament() {
                 </Button>
                 <Button
                   disabled={
-                    reportSet?.state === 3 &&
-                    (reportSet?.winnerId === reportSet?.entrant1Id ||
-                      reportSet?.hasStageData === 1)
+                    !reportSet?.entrant1Id ||
+                    !reportSet?.entrant2Id ||
+                    (reportSet?.state === 3 &&
+                      (reportSet?.winnerId === reportSet?.entrant1Id ||
+                        reportSet?.hasStageData === 1))
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant2Id
@@ -1142,7 +1222,10 @@ export default function Tournament() {
             <IconButton
               color="primary"
               disabled={
-                starting || !(reportSet?.state === 1 || reportSet?.state === 6)
+                starting ||
+                !reportSet?.entrant1Id ||
+                !reportSet?.entrant2Id ||
+                !(reportSet?.state === 1 || reportSet?.state === 6)
               }
               onClick={async () => {
                 setStarting(true);
@@ -1161,6 +1244,8 @@ export default function Tournament() {
             <Button
               variant="contained"
               disabled={
+                !reportSet?.entrant1Id ||
+                !reportSet?.entrant2Id ||
                 (reportSet?.state === 3 &&
                   (updateUnchanged || reportSet?.hasStageData === 1)) ||
                 reporting ||
