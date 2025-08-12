@@ -46,6 +46,7 @@ import {
   AdminedTournament,
   ApiError,
   RendererEvent,
+  RendererPhase,
   RendererPool,
   RendererSet,
   RendererTournament,
@@ -216,40 +217,96 @@ function PoolListItem({
 }) {
   const completedSets = pool.sets.filter((set) => set.state === 3);
   const openSets = pool.sets.filter((set) => set.state !== 3);
+  const [open, setOpen] = useState(false);
   const [completedOpen, setCompletedOpen] = useState(openSets.length === 0);
 
   return (
     <Box marginLeft="16px">
       <ListItemButton
-        disabled={completedSets.length === 0}
-        style={{ justifyContent: 'space-between', opacity: 1 }}
+        disableGutters
+        style={{
+          justifyContent: 'space-between',
+          marginRight: '-8px',
+          padding: '0 16px 0 0',
+        }}
         onClick={() => {
-          setCompletedOpen(!completedOpen);
+          setOpen(!open);
         }}
       >
         <ListItemText style={{ flexGrow: 0 }}>
           {pool.name} <Typography variant="caption">({pool.id})</Typography>
         </ListItemText>
-        {completedSets.length > 0 && completedOpen ? (
-          <Tooltip title="Hide completed sets">
+        {open ? (
+          <Tooltip title="Hide sets">
             <KeyboardArrowDown />
           </Tooltip>
         ) : (
-          <Tooltip title="Show completed sets">
+          <Tooltip title="Show sets">
             <KeyboardArrowRight />
           </Tooltip>
         )}
       </ListItemButton>
-      {completedSets.length > 0 && (
-        <Collapse in={completedOpen}>
-          <Stack
-            direction="row"
-            flexWrap="wrap"
-            gap="8px"
-            marginLeft="16px"
-            marginTop="8px"
-          >
-            {completedSets
+      <Collapse in={open}>
+        {completedSets.length > 0 && (
+          <>
+            <ListItemButton
+              disableGutters
+              style={{
+                justifyContent: 'space-between',
+                marginLeft: '16px',
+                marginRight: '-8px',
+                padding: '0 16px 0 0',
+              }}
+              onClick={() => {
+                setCompletedOpen(!completedOpen);
+              }}
+            >
+              <ListItemText style={{ flexGrow: 0 }}>
+                <Typography variant="caption">completed</Typography>
+              </ListItemText>
+              {completedSets.length > 0 &&
+                (completedOpen ? (
+                  <Tooltip title="Hide completed sets">
+                    <KeyboardArrowDown />
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Show completed sets">
+                    <KeyboardArrowRight />
+                  </Tooltip>
+                ))}
+            </ListItemButton>
+            <Collapse in={completedOpen}>
+              <Stack
+                direction="row"
+                flexWrap="wrap"
+                gap="8px"
+                marginLeft="16px"
+                marginTop="8px"
+              >
+                {completedSets
+                  .sort((a, b) => {
+                    if (a.round === b.round) {
+                      if (a.identifier.length === b.identifier.length) {
+                        return a.identifier.localeCompare(b.identifier);
+                      }
+                      return a.identifier.length - b.identifier.length;
+                    }
+                    return a.ordinal - b.ordinal;
+                  })
+                  .map((set) => (
+                    <SetListItemButton
+                      key={set.id}
+                      set={set}
+                      reportSet={reportSet}
+                    />
+                  ))}
+              </Stack>
+            </Collapse>
+          </>
+        )}
+        {pool.sets.length > 0 && (
+          <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
+            {openSets
               .sort((a, b) => {
                 if (a.round === b.round) {
                   if (a.identifier.length === b.identifier.length) {
@@ -267,25 +324,53 @@ function PoolListItem({
                 />
               ))}
           </Stack>
-        </Collapse>
-      )}
-      {pool.sets.length > 0 && (
-        <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
-          {openSets
-            .sort((a, b) => {
-              if (a.round === b.round) {
-                if (a.identifier.length === b.identifier.length) {
-                  return a.identifier.localeCompare(b.identifier);
-                }
-                return a.identifier.length - b.identifier.length;
-              }
-              return a.ordinal - b.ordinal;
-            })
-            .map((set) => (
-              <SetListItemButton key={set.id} set={set} reportSet={reportSet} />
-            ))}
-        </Stack>
-      )}
+        )}
+      </Collapse>
+    </Box>
+  );
+}
+
+function PhaseListItem({
+  phase,
+  reportSet,
+}: {
+  phase: RendererPhase;
+  reportSet: (set: RendererSet) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Box marginLeft="16px">
+      <ListItemButton
+        disableGutters
+        style={{
+          justifyContent: 'space-between',
+          marginRight: '-8px',
+          padding: '0 16px 0 0',
+        }}
+        onClick={() => {
+          setOpen(!open);
+        }}
+      >
+        <ListItemText>
+          {phase.name} <Typography variant="caption">({phase.id})</Typography>
+        </ListItemText>
+        {open ? (
+          <Tooltip title="Hide pools">
+            <KeyboardArrowDown />
+          </Tooltip>
+        ) : (
+          <Tooltip title="Show pools">
+            <KeyboardArrowRight />
+          </Tooltip>
+        )}
+      </ListItemButton>
+      <Collapse in={open}>
+        {phase.pools.length > 0 &&
+          phase.pools.map((pool) => (
+            <PoolListItem key={pool.id} pool={pool} reportSet={reportSet} />
+          ))}
+      </Collapse>
     </Box>
   );
 }
@@ -341,18 +426,7 @@ function EventListItem({
       </ListItem>
       {event.phases.length > 0 &&
         event.phases.map((phase) => (
-          <Box key={phase.id} marginLeft="16px">
-            <ListItem disablePadding>
-              <ListItemText>
-                {phase.name}{' '}
-                <Typography variant="caption">({phase.id})</Typography>
-              </ListItemText>
-            </ListItem>
-            {phase.pools.length > 0 &&
-              phase.pools.map((pool) => (
-                <PoolListItem key={pool.id} pool={pool} reportSet={reportSet} />
-              ))}
-          </Box>
+          <PhaseListItem key={phase.id} phase={phase} reportSet={reportSet} />
         ))}
     </>
   );
