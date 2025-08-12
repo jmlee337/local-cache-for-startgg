@@ -48,6 +48,7 @@ import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
+import Conflicts from './Conflicts';
 
 function SetEntrant({
   entrantName,
@@ -564,6 +565,7 @@ export default function Tournament() {
         <Stack direction="row">
           <Sync />
           <Websocket />
+          <Conflicts />
           <FatalError />
         </Stack>
         <Settings showError={showError} />

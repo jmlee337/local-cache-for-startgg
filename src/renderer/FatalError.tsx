@@ -35,7 +35,7 @@ export default function FatalError() {
             setOpen(true);
           }}
         >
-          start.gg Error
+          Error!
         </Button>
         <Dialog
           open={open}

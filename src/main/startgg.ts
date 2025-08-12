@@ -123,7 +123,7 @@ function updateWithFatalError(e: Error) {
     }
   }
   fatalErrorMessage = `${messagePrefix}${e.message}`;
-  mainWindow!.webContents.send('fatalError', fatalErrorMessage);
+  mainWindow?.webContents.send('fatalError', fatalErrorMessage);
 }
 
 let consecutiveErrors = 0;
@@ -146,15 +146,15 @@ function updateSyncResultWithError(e: ApiError) {
     syncResult.errorSinceMs = nowMs;
   }
   consecutiveErrors += 1;
-  mainWindow!.webContents.send('syncResult', syncResult);
+  mainWindow?.webContents.send('syncResult', syncResult);
 }
 function updateSyncResultWithSuccess() {
   syncResult.success = true;
   syncResult.lastSuccessMs = Date.now();
   consecutiveErrors = 0;
   fatalErrorMessage = '';
-  mainWindow!.webContents.send('fatalError', fatalErrorMessage);
-  mainWindow!.webContents.send('syncResult', syncResult);
+  mainWindow?.webContents.send('fatalError', fatalErrorMessage);
+  mainWindow?.webContents.send('syncResult', syncResult);
 }
 
 const GET_ADMINED_TOURNAMENTS_QUERY = `

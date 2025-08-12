@@ -1,6 +1,6 @@
 import DatabaseContstructor, { Database } from 'better-sqlite3';
 import path from 'path';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { mkdirSync } from 'fs';
 import {
   AdminedTournament,
@@ -27,6 +27,8 @@ import {
   RendererStation,
   RendererStream,
   SyncState,
+  ConflictReason,
+  RendererConflict,
 } from '../common/types';
 
 enum SyncStatus {
@@ -36,7 +38,9 @@ enum SyncStatus {
 }
 
 let db: Database | undefined;
-export function dbInit() {
+let mainWindow: BrowserWindow | undefined;
+export function dbInit(window: BrowserWindow) {
+  mainWindow = window;
   const userDataPath = app.getPath('userData');
   mkdirSync(userDataPath, { recursive: true });
   db = new DatabaseContstructor(path.join(userDataPath, 'db.sqlite3'));
@@ -179,7 +183,8 @@ export function dbInit() {
       winnerId INTEGER,
       isDQ INTEGER,
       isUpdate INTEGER,
-      isConflict INTEGER
+      isConflict INTEGER,
+      reason INTEGER
     )`,
   ).run();
   db.prepare(
@@ -214,6 +219,7 @@ export function getTournamentId() {
 }
 export function setTournamentId(newTournamentId: number) {
   currentTournamentId = newTournamentId;
+  mainWindow?.webContents.send('conflict', getConflicts());
 }
 
 const TOURNAMENT_UPSERT_SQL =
@@ -622,6 +628,7 @@ function insertTransaction(
           ? 1
           : null,
       isConflict: null,
+      reason: null,
     };
     db!
       .prepare(
@@ -2036,11 +2043,13 @@ function getSyncStatus(
   dbTransaction: DbTransaction,
   afterSet: DbSet,
   containsReset: boolean,
-) {
+):
+  | { syncStatus: SyncStatus.AHEAD | SyncStatus.BEHIND }
+  | { syncStatus: SyncStatus.CONFLICT; reason: ConflictReason } {
   switch (dbTransaction.type) {
     case TransactionType.RESET:
       if (afterSet.state === 1) {
-        return SyncStatus.BEHIND;
+        return { syncStatus: SyncStatus.BEHIND };
       }
       const dependentSets = db!
         .prepare(
@@ -2068,34 +2077,46 @@ function getSyncStatus(
         }
       }
       if (dependentSets.some((dbSet) => dbSet.state !== 1)) {
-        return SyncStatus.CONFLICT;
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.RESET_DEPENDENT_SETS,
+        };
       }
-      return SyncStatus.AHEAD;
+      return { syncStatus: SyncStatus.AHEAD };
     case TransactionType.ASSIGN_STATION:
-      return afterSet.stationId === dbTransaction.stationId
-        ? SyncStatus.BEHIND
-        : SyncStatus.AHEAD;
+      return {
+        syncStatus:
+          afterSet.stationId === dbTransaction.stationId
+            ? SyncStatus.BEHIND
+            : SyncStatus.AHEAD,
+      };
     case TransactionType.ASSIGN_STREAM:
-      return afterSet.streamId === dbTransaction.streamId
-        ? SyncStatus.BEHIND
-        : SyncStatus.AHEAD;
+      return {
+        syncStatus:
+          afterSet.streamId === dbTransaction.streamId
+            ? SyncStatus.BEHIND
+            : SyncStatus.AHEAD,
+      };
     case TransactionType.START:
       if (containsReset || afterSet.state === 1 || afterSet.state === 6) {
-        return SyncStatus.AHEAD;
+        return { syncStatus: SyncStatus.AHEAD };
       }
-      return SyncStatus.BEHIND;
+      return { syncStatus: SyncStatus.BEHIND };
     case TransactionType.REPORT:
       if (containsReset) {
-        return SyncStatus.AHEAD;
+        return { syncStatus: SyncStatus.AHEAD };
       }
       if (dbTransaction.isUpdate === null) {
         if (afterSet.state !== 3) {
-          return SyncStatus.AHEAD;
+          return { syncStatus: SyncStatus.AHEAD };
         }
       } else if (afterSet.state === 3) {
         // update
         if (afterSet.winnerId !== dbTransaction.winnerId) {
-          return SyncStatus.CONFLICT;
+          return {
+            syncStatus: SyncStatus.CONFLICT,
+            reason: ConflictReason.UPDATE_WINNER_ID,
+          };
         }
         if (afterSet.hasStageData === 1) {
           const apiTransaction = toApiTransaction(dbTransaction);
@@ -2106,20 +2127,26 @@ function getSyncStatus(
             apiTransaction.gameData.length > 0 &&
             apiTransaction.gameData.every((game) => game.stageId !== undefined)
           ) {
-            return SyncStatus.CONFLICT;
+            return {
+              syncStatus: SyncStatus.CONFLICT,
+              reason: ConflictReason.UPDATE_STAGE_DATA,
+            };
           }
-          return SyncStatus.BEHIND;
+          return { syncStatus: SyncStatus.BEHIND };
         }
         if (
           afterSet.entrant1Score !== -1 &&
           afterSet.entrant2Score !== -1 &&
           dbTransaction.isDQ === 1
         ) {
-          return SyncStatus.BEHIND;
+          return { syncStatus: SyncStatus.BEHIND };
         }
-        return SyncStatus.AHEAD;
+        return { syncStatus: SyncStatus.AHEAD };
       }
-      return SyncStatus.CONFLICT;
+      return {
+        syncStatus: SyncStatus.CONFLICT,
+        reason: ConflictReason.UPDATE_WINNER_ID,
+      };
     default:
       throw new Error(`unknown transaction type: ${dbTransaction.type}`);
   }
@@ -2152,6 +2179,60 @@ export function deleteTransaction(transactionNum: number) {
       )
       .run({ transactionNum });
   })();
+}
+
+export function getConflicts() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const conflictTransactions = db
+    .prepare(
+      `SELECT *
+        FROM transactions
+        WHERE tournamentId = @currentTournamentId AND isConflict = 1
+        ORDER BY transactionNum ASC`,
+    )
+    .all({ currentTournamentId }) as DbTransaction[];
+  const setIds = conflictTransactions.map((transaction) => transaction.setId);
+  const sets = db
+    .prepare(
+      `SELECT *
+        FROM sets
+        WHERE id IN (${setIds.join(', ')})`,
+    )
+    .all() as DbSet[];
+  const idToSet = new Map(sets.map((set) => [set.id, set]));
+  const rendererConflicts = conflictTransactions.map(
+    (transaction): RendererConflict => {
+      if (transaction.reason === null) {
+        throw new Error(
+          `conflict transaction without reason: ${transaction.transactionNum}`,
+        );
+      }
+      const set = idToSet.get(transaction.setId);
+      if (!set) {
+        throw new Error(
+          `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
+        );
+      }
+      let winnerName: string | null = null;
+      if (set.entrant1Id && set.winnerId === set.entrant1Id) {
+        winnerName = getEntrantName(set.entrant1Id);
+      } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
+        winnerName = getEntrantName(set.entrant2Id);
+      }
+      return {
+        fullRoundText: set.fullRoundText,
+        identifier: set.identifier,
+        transactionNum: transaction.transactionNum,
+        type: transaction.type,
+        reason: transaction.reason,
+        winnerName,
+      };
+    },
+  );
+  return rendererConflicts;
 }
 
 export function updateEventSets(
@@ -2405,14 +2486,13 @@ export function updateEventSets(
       }
 
       const aheadTransactionNums: number[] = [];
-      const conflictTransactionNums: number[] = [];
+      const conflicts: {
+        transactionNum: number;
+        reason: ConflictReason;
+      }[] = [];
       for (const dbTransaction of updateCoalescedDbTransactions) {
-        const syncStatus = getSyncStatus(
-          dbTransaction,
-          afterSet,
-          containsReset,
-        );
-        switch (syncStatus) {
+        const statusObj = getSyncStatus(dbTransaction, afterSet, containsReset);
+        switch (statusObj.syncStatus) {
           case SyncStatus.AHEAD:
             aheadTransactionNums.push(dbTransaction.transactionNum);
             break;
@@ -2420,26 +2500,32 @@ export function updateEventSets(
             transactionNumsToDelete.push(dbTransaction.transactionNum);
             break;
           case SyncStatus.CONFLICT:
-            conflictTransactionNums.push(dbTransaction.transactionNum);
+            conflicts.push({
+              transactionNum: dbTransaction.transactionNum,
+              reason: statusObj.reason,
+            });
             break;
           default:
-            throw new Error(`unknown SyncStatus: ${syncStatus}`);
+            throw new Error('unknown SyncStatus');
         }
       }
       db!
         .prepare(
           `UPDATE transactions
-          SET isConflict = NULL
+          SET isConflict = NULL, reason = NULL
           WHERE transactionNum IN (${aheadTransactionNums.join(', ')})`,
         )
         .run();
-      db!
-        .prepare(
-          `UPDATE transactions
-            SET isConflict = 1
-            WHERE transactionNum IN (${conflictTransactionNums.join(', ')})`,
-        )
-        .run();
+      conflicts.forEach((conflict) => {
+        db!
+          .prepare(
+            `UPDATE transactions
+              SET isConflict = 1, reason = @reason
+              WHERE transactionNum = @transactionNum`,
+          )
+          .run(conflict);
+      });
+      mainWindow?.webContents.send('conflict', getConflicts());
     }
     transactionNumsToDelete.forEach(deleteTransaction);
   });
@@ -2455,6 +2541,7 @@ export function markTransactionConflict(transactionNum: number) {
       SET isConflict = 1
       WHERE transactionNum = @transactionNum`,
   ).run({ transactionNum });
+  mainWindow?.webContents.send('conflict', getConflicts());
 }
 
 export function getEventPoolIds(id: number): Set<number> {

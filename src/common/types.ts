@@ -7,10 +7,24 @@ export type AdminedTournament = {
   startAt: number;
 };
 
+export enum ConflictReason {
+  RESET_DEPENDENT_SETS,
+  UPDATE_WINNER_ID,
+  UPDATE_STAGE_DATA,
+}
+
 export enum SyncState {
   SYNCED,
   QUEUED,
   LOCAL,
+}
+
+export enum TransactionType {
+  RESET,
+  START,
+  ASSIGN_STATION,
+  ASSIGN_STREAM,
+  REPORT,
 }
 
 export type RendererStation = {
@@ -75,13 +89,14 @@ export type RendererTournament = {
   streams: RendererStream[];
 };
 
-export enum TransactionType {
-  RESET,
-  START,
-  ASSIGN_STATION,
-  ASSIGN_STREAM,
-  REPORT,
-}
+export type RendererConflict = {
+  fullRoundText: string;
+  identifier: string;
+  transactionNum: number;
+  type: TransactionType;
+  reason: ConflictReason;
+  winnerName: string | null;
+};
 
 export type DbStation = {
   id: number;
@@ -268,6 +283,7 @@ export type DbTransaction = {
   isDQ: null | 1;
   isUpdate: null | 1;
   isConflict: null | 1;
+  reason: ConflictReason | null;
 };
 
 export type ApiGameData = {

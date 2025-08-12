@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
   AdminedTournament,
+  RendererConflict,
   RendererTournament,
   SyncResult,
   WebsocketStatus,
@@ -50,6 +51,8 @@ const electronHandler = {
       | null,
   ): Promise<void> =>
     ipcRenderer.invoke('reportSet', id, winnerId, isDQ, entrantScores),
+  getConflicts: (): Promise<RendererConflict[]> =>
+    ipcRenderer.invoke('getConflicts'),
   getFatalErrorMessage: (): Promise<string> =>
     ipcRenderer.invoke('getFatalErrorMessage'),
   getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
@@ -61,6 +64,12 @@ const electronHandler = {
   ) => {
     ipcRenderer.removeAllListeners('adminedTournaments');
     ipcRenderer.on('adminedTournaments', callback);
+  },
+  onConflict: (
+    callback: (event: IpcRendererEvent, conflicts: RendererConflict[]) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('conflict');
+    ipcRenderer.on('conflict', callback);
   },
   onFatalError: (
     callback: (event: IpcRendererEvent, message: string) => void,

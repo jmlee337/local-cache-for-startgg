@@ -20,6 +20,7 @@ import {
 import {
   dbInit,
   deleteTournament,
+  getConflicts,
   getLastTournament,
   getTournament,
   getTournamentId,
@@ -54,7 +55,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     });
   };
 
-  const initTransactionNum = dbInit();
+  const initTransactionNum = dbInit(mainWindow);
   startggInit(mainWindow);
   onTransaction(() => {
     updateClients();
@@ -293,6 +294,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       reportSetTransaction(id, winnerId, isDQ, apiGameData);
     },
   );
+
+  ipcMain.removeHandler('getConflicts');
+  ipcMain.handle('getConflicts', getConflicts);
 
   ipcMain.removeHandler('getFatalErrorMessage');
   ipcMain.handle('getFatalErrorMessage', getFatalErrorMessage);
