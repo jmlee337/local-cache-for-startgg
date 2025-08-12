@@ -17,6 +17,7 @@ import {
   DbStation,
   DbStream,
   SyncState,
+  ConflictReason,
 } from '../common/types';
 import {
   getEventPoolIds,
@@ -1202,7 +1203,10 @@ async function tryNextTransaction(id: number, slug: string) {
                   'Resetting this set will also reset 1 dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
               )
             ) {
-              markTransactionConflict(transaction.transactionNum);
+              markTransactionConflict(
+                transaction.transactionNum,
+                ConflictReason.RESET_DEPENDENT_SETS,
+              );
             } else {
               throw e;
             }
@@ -1250,7 +1254,30 @@ async function tryNextTransaction(id: number, slug: string) {
                     'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
                 )
               ) {
-                markTransactionConflict(transaction.transactionNum);
+                try {
+                  updates = await reportSet(
+                    transaction.setId,
+                    transaction.winnerId,
+                    transaction.isDQ,
+                    transaction.gameData,
+                  );
+                } catch (e: any) {
+                  if (
+                    e instanceof ApiError &&
+                    e.gqlErrors.some(
+                      (gqlError) =>
+                        gqlError.message ===
+                        'Cannot report completed set via API.',
+                    )
+                  ) {
+                    markTransactionConflict(
+                      transaction.transactionNum,
+                      ConflictReason.UPDATE_CHANGE_WINNER,
+                    );
+                  } else {
+                    throw e;
+                  }
+                }
               } else {
                 throw e;
               }
@@ -1271,7 +1298,10 @@ async function tryNextTransaction(id: number, slug: string) {
                     gqlError.message === 'Cannot report completed set via API.',
                 )
               ) {
-                markTransactionConflict(transaction.transactionNum);
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.REPORT_COMPLETED,
+                );
               } else {
                 throw e;
               }

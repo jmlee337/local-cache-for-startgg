@@ -2110,12 +2110,12 @@ function getSyncStatus(
         if (afterSet.state !== 3) {
           return { syncStatus: SyncStatus.AHEAD };
         }
-      } else if (afterSet.state === 3) {
-        // update
+      } else {
+        // update, afterSet completed
         if (afterSet.winnerId !== dbTransaction.winnerId) {
           return {
             syncStatus: SyncStatus.CONFLICT,
-            reason: ConflictReason.UPDATE_WINNER_ID,
+            reason: ConflictReason.UPDATE_CHANGE_WINNER,
           };
         }
         if (afterSet.hasStageData === 1) {
@@ -2143,10 +2143,6 @@ function getSyncStatus(
         }
         return { syncStatus: SyncStatus.AHEAD };
       }
-      return {
-        syncStatus: SyncStatus.CONFLICT,
-        reason: ConflictReason.UPDATE_WINNER_ID,
-      };
     default:
       throw new Error(`unknown transaction type: ${dbTransaction.type}`);
   }
@@ -2485,6 +2481,23 @@ export function updateEventSets(
         }
       }
 
+      // turn update into report
+      if (afterSet.state !== 3) {
+        const updateTransaction = updateCoalescedDbTransactions.find(
+          (dbTransaction) =>
+            dbTransaction.type === TransactionType.REPORT &&
+            dbTransaction.isUpdate === 1,
+        );
+        if (updateTransaction) {
+          db!
+            .prepare(
+              'UPDATE transactions SET isUpdate = NULL WHERE transactionNum = @transactionNum',
+            )
+            .run(updateTransaction);
+          updateTransaction.isUpdate = null;
+        }
+      }
+
       const aheadTransactionNums: number[] = [];
       const conflicts: {
         transactionNum: number;
@@ -2531,16 +2544,19 @@ export function updateEventSets(
   });
 }
 
-export function markTransactionConflict(transactionNum: number) {
+export function markTransactionConflict(
+  transactionNum: number,
+  reason: ConflictReason,
+) {
   if (!db) {
     throw new Error('not init');
   }
 
   db.prepare(
     `UPDATE transactions
-      SET isConflict = 1
+      SET isConflict = 1, reason = @reason
       WHERE transactionNum = @transactionNum`,
-  ).run({ transactionNum });
+  ).run({ transactionNum, reason });
   mainWindow?.webContents.send('conflict', getConflicts());
 }
 

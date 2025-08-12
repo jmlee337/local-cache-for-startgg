@@ -9,7 +9,8 @@ export type AdminedTournament = {
 
 export enum ConflictReason {
   RESET_DEPENDENT_SETS,
-  UPDATE_WINNER_ID,
+  REPORT_COMPLETED,
+  UPDATE_CHANGE_WINNER,
   UPDATE_STAGE_DATA,
 }
 
