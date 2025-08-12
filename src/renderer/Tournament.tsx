@@ -14,6 +14,8 @@ import {
   Router,
   StadiumOutlined,
   Tv,
+  Visibility,
+  VisibilityOff,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -21,6 +23,7 @@ import {
   Box,
   Button,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -463,6 +466,14 @@ export default function Tournament() {
     inner();
   }, []);
 
+  const [unloadedOpen, setUnloadedOpen] = useState(true);
+  const unloadedEvents = tournament
+    ? tournament.events.filter((event) => !event.isLoaded)
+    : [];
+  const loadedEvents = tournament
+    ? tournament.events.filter((event) => event.isLoaded)
+    : [];
+
   const [open, setOpen] = useState(false);
   const [settingTournament, setSettingTournament] = useState(false);
   const [error, setError] = useState('');
@@ -572,7 +583,29 @@ export default function Tournament() {
             }
             style={{ flexGrow: 1 }}
           />
-          <Tooltip placement="left" title="Set tournament">
+          {unloadedEvents.length > 0 &&
+            (unloadedOpen ? (
+              <Tooltip title="Hide unloaded events">
+                <IconButton
+                  onClick={() => {
+                    setUnloadedOpen(false);
+                  }}
+                >
+                  <VisibilityOff />
+                </IconButton>
+              </Tooltip>
+            ) : (
+              <Tooltip title="Show unloaded events">
+                <IconButton
+                  onClick={() => {
+                    setUnloadedOpen(true);
+                  }}
+                >
+                  <Visibility />
+                </IconButton>
+              </Tooltip>
+            ))}
+          <Tooltip title="Set tournament">
             <IconButton
               onClick={() => {
                 refresh();
@@ -691,9 +724,23 @@ export default function Tournament() {
             </DialogContent>
           </Dialog>
         </Stack>
-        {tournament && tournament.events.length > 0 && (
+        {unloadedEvents.length > 0 && (
+          <Collapse in={unloadedOpen}>
+            <List>
+              {unloadedEvents.map((event) => (
+                <EventListItem
+                  key={event.id}
+                  event={event}
+                  reportSet={() => {}}
+                  showError={() => {}}
+                />
+              ))}
+            </List>
+          </Collapse>
+        )}
+        {loadedEvents.length > 0 && (
           <List>
-            {tournament.events.map((event) => (
+            {loadedEvents.map((event) => (
               <EventListItem
                 key={event.id}
                 event={event}
