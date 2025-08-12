@@ -2186,7 +2186,9 @@ export function getConflicts() {
     .prepare(
       `SELECT *
         FROM transactions
-        WHERE tournamentId = @currentTournamentId AND isConflict = 1
+        WHERE tournamentId = @currentTournamentId
+          AND isConflict = 1
+          AND reason NOT IN (${ConflictReason.REPORT_COMPLETED})
         ORDER BY transactionNum ASC`,
     )
     .all({ currentTournamentId }) as DbTransaction[];
