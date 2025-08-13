@@ -1186,7 +1186,7 @@ async function tryNextTransaction(id: number, slug: string) {
       getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
     );
     emitter.emit('transaction');
-    updateSyncResultWithSuccess();
+
     let transaction = getNextTransaction();
     if (transaction) {
       // eslint-disable-next-line no-constant-condition

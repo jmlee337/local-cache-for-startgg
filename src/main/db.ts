@@ -174,6 +174,7 @@ export function dbInit(window: BrowserWindow) {
     `CREATE TABLE IF NOT EXISTS transactions (
       transactionNum INTEGER PRIMARY KEY,
       tournamentId INTEGER NOT NULL,
+      eventId INTEGER NOT NULL,
       type INTEGER NOT NULL,
       setId INTEGER NOT NULL,
       stationId INTEGER,
@@ -646,6 +647,7 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
 function insertTransaction(
   apiTransaction: ApiTransaction,
   tournamentId: number,
+  eventId: number,
   expectedEntrant1Id: number | null,
   expectedEntrant2Id: number | null,
 ) {
@@ -657,6 +659,7 @@ function insertTransaction(
     const dbTransaction: DbTransaction = {
       transactionNum: apiTransaction.transactionNum,
       tournamentId,
+      eventId,
       type: apiTransaction.type,
       setId: apiTransaction.setId,
       stationId:
@@ -690,6 +693,7 @@ function insertTransaction(
         `INSERT INTO transactions (
           transactionNum,
           tournamentId,
+          eventId,
           type,
           setId,
           stationId,
@@ -701,6 +705,7 @@ function insertTransaction(
         ) VALUES (
           @transactionNum,
           @tournamentId,
+          @eventId,
           @type,
           @setId,
           @stationId,
@@ -1060,6 +1065,7 @@ export function resetSet(id: number, transactionNum: number) {
       setId: id,
     },
     set.tournamentId,
+    set.eventId,
     set.entrant1Id,
     set.entrant2Id,
   );
@@ -1138,6 +1144,7 @@ export function startSet(id: number, transactionNum: number) {
       setId: id,
     },
     set.tournamentId,
+    set.eventId,
     set.entrant1Id,
     set.entrant2Id,
   );
@@ -1221,6 +1228,7 @@ export function assignSetStation(
       stationId,
     },
     set.tournamentId,
+    set.eventId,
     set.entrant1Id,
     set.entrant2Id,
   );
@@ -1298,6 +1306,7 @@ export function assignSetStream(
       streamId,
     },
     set.tournamentId,
+    set.eventId,
     set.entrant1Id,
     set.entrant2Id,
   );
@@ -1665,6 +1674,7 @@ export function reportSet(
       isUpdate: state === 3,
     },
     set.tournamentId,
+    set.eventId,
     entrant1Id,
     entrant2Id,
   );
@@ -2277,9 +2287,12 @@ export function updateEventSets(
   (
     db
       .prepare(
-        'SELECT * FROM transactions WHERE tournamentId = @tournamentId ORDER BY transactionNum ASC',
+        `SELECT *
+          FROM transactions
+          WHERE tournamentId = @tournamentId AND eventId = @eventId
+          ORDER BY transactionNum ASC`,
       )
-      .all({ tournamentId }) as DbTransaction[]
+      .all({ tournamentId, eventId }) as DbTransaction[]
   ).forEach((dbTransaction) => {
     const arr = setIdToDbTransactions.get(dbTransaction.setId) ?? [];
     arr.push(dbTransaction);
@@ -2534,8 +2547,8 @@ export function updateEventSets(
       db!
         .prepare(
           `UPDATE transactions
-          SET isConflict = NULL, reason = NULL
-          WHERE transactionNum IN (${aheadTransactionNums.join(', ')})`,
+            SET isConflict = NULL, reason = NULL
+            WHERE transactionNum IN (${aheadTransactionNums.join(', ')})`,
         )
         .run();
       conflicts.forEach((conflict) => {

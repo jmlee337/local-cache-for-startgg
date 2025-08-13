@@ -275,6 +275,7 @@ export type DbTransactionGameData = {
 export type DbTransaction = {
   transactionNum: number;
   tournamentId: number;
+  eventId: number;
   type: TransactionType;
   setId: number;
   stationId: number | null;
