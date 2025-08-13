@@ -1224,13 +1224,27 @@ async function tryNextTransaction(id: number, slug: string) {
           try {
             updates = [await startSet(transaction.setId)];
           } catch (e: any) {
-            if (
-              e instanceof ApiError &&
-              e.gqlErrors.some(
-                (gqlError) => gqlError.message === 'Set is already started',
-              )
-            ) {
-              deleteTransaction(transaction.transactionNum);
+            if (e instanceof ApiError) {
+              if (
+                e.gqlErrors.some(
+                  (gqlError) => gqlError.message === 'Set is already started',
+                )
+              ) {
+                deleteTransaction(transaction.transactionNum);
+              } else if (
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    "This set can't be reported until all entrants are filled",
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.MISSING_ENTRANTS,
+                );
+              } else {
+                throw e;
+              }
             } else {
               throw e;
             }
@@ -1263,18 +1277,32 @@ async function tryNextTransaction(id: number, slug: string) {
                     transaction.gameData,
                   );
                 } catch (e2: any) {
-                  if (
-                    e2 instanceof ApiError &&
-                    e2.gqlErrors.some(
-                      (gqlError) =>
-                        gqlError.message ===
-                        'Cannot report completed set via API.',
-                    )
-                  ) {
-                    markTransactionConflict(
-                      transaction.transactionNum,
-                      ConflictReason.UPDATE_CHANGE_WINNER,
-                    );
+                  if (e2 instanceof ApiError) {
+                    if (
+                      e2.gqlErrors.some(
+                        (gqlError) =>
+                          gqlError.message ===
+                          'Cannot report completed set via API.',
+                      )
+                    ) {
+                      markTransactionConflict(
+                        transaction.transactionNum,
+                        ConflictReason.UPDATE_CHANGE_WINNER,
+                      );
+                    } else if (
+                      e2.gqlErrors.some(
+                        (gqlError) =>
+                          gqlError.message ===
+                          "This set can't be reported until all entrants are filled",
+                      )
+                    ) {
+                      markTransactionConflict(
+                        transaction.transactionNum,
+                        ConflictReason.MISSING_ENTRANTS,
+                      );
+                    } else {
+                      throw e2;
+                    }
                   } else {
                     throw e2;
                   }
@@ -1292,17 +1320,34 @@ async function tryNextTransaction(id: number, slug: string) {
                 transaction.gameData,
               );
             } catch (e: any) {
-              if (
-                e instanceof ApiError &&
-                e.gqlErrors.some(
-                  (gqlError) =>
-                    gqlError.message === 'Cannot report completed set via API.',
-                )
-              ) {
-                markTransactionConflict(
-                  transaction.transactionNum,
-                  ConflictReason.REPORT_COMPLETED,
-                );
+              if (e instanceof ApiError) {
+                if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      'Cannot report completed set via API.',
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.REPORT_COMPLETED,
+                  );
+                } else if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      "This set can't be reported until all entrants are filled",
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.MISSING_ENTRANTS,
+                  );
+                } else {
+                  throw e;
+                }
               } else {
                 throw e;
               }
@@ -1311,8 +1356,10 @@ async function tryNextTransaction(id: number, slug: string) {
         } else {
           throw new Error(`unknown transaciton type: ${transaction.type}`);
         }
-        finalizeTransaction(transaction.transactionNum, updates);
-        emitter.emit('transaction');
+        if (updates.length > 0) {
+          finalizeTransaction(transaction.transactionNum, updates);
+          emitter.emit('transaction');
+        }
         updateSyncResultWithSuccess();
 
         transaction = getNextTransaction();
