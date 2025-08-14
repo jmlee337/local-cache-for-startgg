@@ -754,16 +754,6 @@ export default function Tournament() {
     }
   }
 
-  const [conflict, setConflict] = useState<RendererConflict | null>(null);
-  useEffect(() => {
-    window.electron.onConflict((event, newConflict) => {
-      setConflict(newConflict);
-    });
-    (async () => {
-      setConflict(await window.electron.getConflict());
-    })();
-  }, []);
-
   const [conflictResolve, setConflictResolve] =
     useState<RendererConflictResolve | null>(null);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
@@ -773,6 +763,23 @@ export default function Tournament() {
     );
     setConflictDialogOpen(true);
   };
+
+  const [conflict, setConflict] = useState<RendererConflict | null>(null);
+  useEffect(() => {
+    window.electron.onConflict((event, newConflict) => {
+      if (
+        newConflict === null ||
+        conflict?.transactionNum !== newConflict.transactionNum
+      ) {
+        setConflictResolve(null);
+        setConflictDialogOpen(false);
+      }
+      setConflict(newConflict);
+    });
+    (async () => {
+      setConflict(await window.electron.getConflict());
+    })();
+  }, [conflict]);
 
   return (
     <>
@@ -1577,7 +1584,18 @@ export default function Tournament() {
             setConflictDialogOpen(false);
           }}
         >
-          <DialogTitle>Resolve Conflict</DialogTitle>
+          <Stack
+            direction="row"
+            alignItems="center"
+            padding="16px 24px"
+            spacing="8px"
+          >
+            <Typography variant="h6">Resolve Conflict:</Typography>
+            <Typography variant="body1">
+              {conflictResolve?.eventName}, {conflictResolve?.phaseName}, Pool{' '}
+              {conflictResolve?.poolName}
+            </Typography>
+          </Stack>
           <DialogContent>
             {conflictResolve && (
               <Stack direction="row" spacing="32px" alignItems="start">

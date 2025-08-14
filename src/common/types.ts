@@ -93,13 +93,7 @@ export type RendererTournament = {
 
 export type RendererConflict = {
   setId: number;
-  eventName: string;
-  fullRoundText: string;
-  identifier: string;
   transactionNum: number;
-  type: TransactionType;
-  reason: ConflictReason;
-  winnerName: string | null;
 };
 
 export type RendererConflictLocalSet = {
@@ -109,6 +103,9 @@ export type RendererConflictLocalSet = {
 };
 
 export type RendererConflictResolve = {
+  eventName: string;
+  phaseName: string;
+  poolName: string;
   reason: ConflictReason;
   serverSet: RendererSet;
   localSets: RendererConflictLocalSet[];

@@ -606,6 +606,29 @@ export function getConflictResolve(
   }
   const serverSet = dbSetToRendererSet(set);
 
+  const event = db
+    .prepare('SELECT * FROM events WHERE id = @eventId')
+    .get(set) as DbEvent | undefined;
+  if (!event) {
+    throw new Error(`event: ${set.eventId} not found for set: ${setId}`);
+  }
+
+  const phase = db
+    .prepare('SELECT * FROM phases WHERE id = @phaseId')
+    .get(set) as DbPhase | undefined;
+  if (!phase) {
+    throw new Error(`phase: ${set.phaseId} not found for set: ${setId}`);
+  }
+
+  const pool = db
+    .prepare('SELECT * FROM pools WHERE id = @phaseGroupId')
+    .get(set) as DbPool | undefined;
+  if (!pool) {
+    throw new Error(
+      `phaseGroup: ${set.phaseGroupId} not found for set: ${setId}`,
+    );
+  }
+
   const conflictTransactions = db
     .prepare(
       `SELECT *
@@ -668,6 +691,9 @@ export function getConflictResolve(
   }
 
   return {
+    eventName: event.name,
+    phaseName: phase.name,
+    poolName: pool.name,
     reason: conflictTransactions[0].reason,
     serverSet,
     localSets,
@@ -1828,43 +1854,10 @@ function toRendererConflict(transaction: DbTransaction): RendererConflict {
       `transaction: ${transaction.transactionNum} does not have reason`,
     );
   }
-  if (!db) {
-    throw new Error('not init');
-  }
 
-  const set = db
-    .prepare('SELECT * FROM sets WHERE id = @setId')
-    .get(transaction) as DbSet | undefined;
-  if (!set) {
-    throw new Error(
-      `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
-    );
-  }
-
-  const event = db
-    .prepare('SELECT * FROM events WHERE id = @eventId')
-    .get(transaction) as DbEvent | undefined;
-  if (!event) {
-    throw new Error(
-      `event: ${transaction.eventId} not found for transaction: ${transaction.transactionNum}`,
-    );
-  }
-
-  let winnerName: string | null = null;
-  if (set.entrant1Id && set.winnerId === set.entrant1Id) {
-    winnerName = getEntrantName(set.entrant1Id);
-  } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
-    winnerName = getEntrantName(set.entrant2Id);
-  }
   return {
-    setId: set.id,
-    eventName: event.name,
-    fullRoundText: set.fullRoundText,
-    identifier: set.identifier,
+    setId: transaction.setId,
     transactionNum: transaction.transactionNum,
-    type: transaction.type,
-    reason: transaction.reason,
-    winnerName,
   };
 }
 
@@ -2220,7 +2213,7 @@ export function finalizeTransaction(
 function getSyncStatus(
   dbTransaction: DbTransaction,
   afterSet: DbSet,
-  containsReset: boolean,
+  containsValidReset: boolean,
 ):
   | { syncStatus: SyncStatus.AHEAD | SyncStatus.BEHIND }
   | { syncStatus: SyncStatus.CONFLICT; reason: ConflictReason } {
@@ -2277,19 +2270,18 @@ function getSyncStatus(
             : SyncStatus.AHEAD,
       };
     case TransactionType.START:
-      if (containsReset || afterSet.state === 1 || afterSet.state === 6) {
+      if (containsValidReset || afterSet.state === 1 || afterSet.state === 6) {
         return { syncStatus: SyncStatus.AHEAD };
       }
       return { syncStatus: SyncStatus.BEHIND };
     case TransactionType.REPORT:
-      if (containsReset) {
+      if (containsValidReset) {
         return { syncStatus: SyncStatus.AHEAD };
       }
       if (dbTransaction.isUpdate === null) {
         if (afterSet.state !== 3) {
           return { syncStatus: SyncStatus.AHEAD };
         }
-        // should be unreachable
         return {
           syncStatus: SyncStatus.CONFLICT,
           reason: ConflictReason.REPORT_COMPLETED,
@@ -2633,13 +2625,18 @@ export function updateEventSets(
         }
       }
 
+      let containsValidReset = containsReset;
       const aheadTransactionNums: number[] = [];
       const conflicts: {
         transactionNum: number;
         reason: ConflictReason;
       }[] = [];
       for (const dbTransaction of updateCoalescedDbTransactions) {
-        const statusObj = getSyncStatus(dbTransaction, afterSet, containsReset);
+        const statusObj = getSyncStatus(
+          dbTransaction,
+          afterSet,
+          containsValidReset,
+        );
         switch (statusObj.syncStatus) {
           case SyncStatus.AHEAD:
             aheadTransactionNums.push(dbTransaction.transactionNum);
@@ -2652,6 +2649,9 @@ export function updateEventSets(
               transactionNum: dbTransaction.transactionNum,
               reason: statusObj.reason,
             });
+            if (dbTransaction.type === TransactionType.RESET) {
+              containsValidReset = false;
+            }
             break;
           default:
             throw new Error('unknown SyncStatus');
