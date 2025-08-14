@@ -20,7 +20,8 @@ import {
 import {
   dbInit,
   deleteTournament,
-  getConflicts,
+  getConflict,
+  getConflictResolve,
   getLastTournament,
   getTournament,
   getTournamentId,
@@ -295,8 +296,15 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
-  ipcMain.removeHandler('getConflicts');
-  ipcMain.handle('getConflicts', getConflicts);
+  ipcMain.removeHandler('getConflictResolve');
+  ipcMain.handle(
+    'getConflictResolve',
+    (event: IpcMainInvokeEvent, setId: number, transactionNum: number) =>
+      getConflictResolve(setId, transactionNum),
+  );
+
+  ipcMain.removeHandler('getConflict');
+  ipcMain.handle('getConflict', getConflict);
 
   ipcMain.removeHandler('getFatalErrorMessage');
   ipcMain.handle('getFatalErrorMessage', getFatalErrorMessage);

@@ -29,6 +29,8 @@ import {
   SyncState,
   ConflictReason,
   RendererConflict,
+  RendererConflictResolve,
+  RendererConflictLocalSet,
 } from '../common/types';
 
 enum SyncStatus {
@@ -228,67 +230,11 @@ function getEntrantName(id: number): string | null {
 }
 
 let currentTournamentId = 0;
-export function getConflicts() {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  const conflictTransactions = db
-    .prepare(
-      `SELECT *
-        FROM transactions
-        WHERE tournamentId = @currentTournamentId
-          AND isConflict = 1
-          AND reason NOT IN (${ConflictReason.REPORT_COMPLETED})
-        ORDER BY transactionNum ASC`,
-    )
-    .all({ currentTournamentId }) as DbTransaction[];
-  const setIds = conflictTransactions.map((transaction) => transaction.setId);
-  const sets = db
-    .prepare(
-      `SELECT *
-        FROM sets
-        WHERE id IN (${setIds.join(', ')})`,
-    )
-    .all() as DbSet[];
-  const idToSet = new Map(sets.map((set) => [set.id, set]));
-  const rendererConflicts = conflictTransactions.map(
-    (transaction): RendererConflict => {
-      if (transaction.reason === null) {
-        throw new Error(
-          `conflict transaction without reason: ${transaction.transactionNum}`,
-        );
-      }
-      const set = idToSet.get(transaction.setId);
-      if (!set) {
-        throw new Error(
-          `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
-        );
-      }
-      let winnerName: string | null = null;
-      if (set.entrant1Id && set.winnerId === set.entrant1Id) {
-        winnerName = getEntrantName(set.entrant1Id);
-      } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
-        winnerName = getEntrantName(set.entrant2Id);
-      }
-      return {
-        fullRoundText: set.fullRoundText,
-        identifier: set.identifier,
-        transactionNum: transaction.transactionNum,
-        type: transaction.type,
-        reason: transaction.reason,
-        winnerName,
-      };
-    },
-  );
-  return rendererConflicts;
-}
 export function getTournamentId() {
   return currentTournamentId;
 }
 export function setTournamentId(newTournamentId: number) {
   currentTournamentId = newTournamentId;
-  mainWindow?.webContents.send('conflict', getConflicts());
 }
 
 const TOURNAMENT_UPSERT_SQL =
@@ -641,6 +587,90 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
         : getRendererStream(dbSet.streamId) ?? null,
     hasStageData: dbSet.hasStageData,
     syncState: dbSet.syncState,
+  };
+}
+
+export function getConflictResolve(
+  setId: number,
+  transactionNum: number,
+): RendererConflictResolve {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const set = db
+    .prepare('SELECT * FROM sets WHERE id = @setId')
+    .get({ setId }) as DbSet | undefined;
+  if (!set) {
+    throw new Error(`set: ${setId} not found`);
+  }
+  const serverSet = dbSetToRendererSet(set);
+
+  const conflictTransactions = db
+    .prepare(
+      `SELECT *
+        FROM transactions
+        WHERE setId = @setId AND transactionNum >= @transactionNum
+        ORDER BY transactionNum ASC`,
+    )
+    .all({ setId, transactionNum }) as DbTransaction[];
+  if (
+    conflictTransactions.length === 0 ||
+    conflictTransactions[0].transactionNum !== transactionNum
+  ) {
+    throw new Error(
+      `transaction: ${transactionNum} not found for set: ${setId}`,
+    );
+  }
+  if (conflictTransactions[0].isConflict === null) {
+    throw new Error(`transaction: ${transactionNum} is not conflict`);
+  }
+  if (conflictTransactions[0].reason === null) {
+    throw new Error(
+      `conflict transaction: ${transactionNum} does not have reason`,
+    );
+  }
+
+  const transactionNums = conflictTransactions.map(
+    (transaction) => transaction.transactionNum,
+  );
+  const setMutations = db
+    .prepare(
+      `SELECT *
+        FROM setMutations
+        WHERE setId = @setId
+          AND transactionNum IN (${transactionNums.join(', ')})
+        ORDER BY transactionNum ASC`,
+    )
+    .all({ setId }) as DbSetMutation[];
+  const message = `setMutations not all found for transactionNums: [${transactionNums.join(
+    ', ',
+  )}], actual: [${setMutations
+    .map((setMutation) => setMutation.transactionNum)
+    .join(', ')}]`;
+  if (setMutations.length !== conflictTransactions.length) {
+    throw new Error(message);
+  }
+  setMutations.forEach((setMutation, i) => {
+    if (setMutation.transactionNum !== conflictTransactions[i].transactionNum) {
+      throw new Error(message);
+    }
+  });
+
+  const localSets: RendererConflictLocalSet[] = [];
+  for (let i = 0; i < conflictTransactions.length; i += 1) {
+    applyMutation(set, setMutations[i]);
+    localSets.push({
+      transactionNum: setMutations[i].transactionNum,
+      set: dbSetToRendererSet(set),
+      type: conflictTransactions[i].type,
+    });
+  }
+
+  return {
+    reason: conflictTransactions[0].reason,
+    serverSet,
+    localSets,
   };
 }
 
@@ -1787,6 +1817,80 @@ function canTransactNow(transaction: DbTransaction) {
   }
 }
 
+function toRendererConflict(transaction: DbTransaction): RendererConflict {
+  if (transaction.isConflict === null) {
+    throw new Error(
+      `transaction: ${transaction.transactionNum} is not conflict`,
+    );
+  }
+  if (transaction.reason === null) {
+    throw new Error(
+      `transaction: ${transaction.transactionNum} does not have reason`,
+    );
+  }
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const set = db
+    .prepare('SELECT * FROM sets WHERE id = @setId')
+    .get(transaction) as DbSet | undefined;
+  if (!set) {
+    throw new Error(
+      `set: ${transaction.setId} not found for transaction: ${transaction.transactionNum}`,
+    );
+  }
+
+  const event = db
+    .prepare('SELECT * FROM events WHERE id = @eventId')
+    .get(transaction) as DbEvent | undefined;
+  if (!event) {
+    throw new Error(
+      `event: ${transaction.eventId} not found for transaction: ${transaction.transactionNum}`,
+    );
+  }
+
+  let winnerName: string | null = null;
+  if (set.entrant1Id && set.winnerId === set.entrant1Id) {
+    winnerName = getEntrantName(set.entrant1Id);
+  } else if (set.entrant2Id && set.winnerId === set.entrant2Id) {
+    winnerName = getEntrantName(set.entrant2Id);
+  }
+  return {
+    setId: set.id,
+    eventName: event.name,
+    fullRoundText: set.fullRoundText,
+    identifier: set.identifier,
+    transactionNum: transaction.transactionNum,
+    type: transaction.type,
+    reason: transaction.reason,
+    winnerName,
+  };
+}
+
+export function getConflict(): RendererConflict | null {
+  if (!db) {
+    throw new Error('not init');
+  }
+  if (currentTournamentId === 0) {
+    return null;
+  }
+
+  const transaction = db
+    .prepare(
+      `SELECT *
+      FROM transactions
+      WHERE tournamentId = @currentTournamentId
+      ORDER BY transactionNum ASC
+      LIMIT 1`,
+    )
+    .get({ currentTournamentId }) as DbTransaction | undefined;
+  if (!transaction || transaction.isConflict === null) {
+    return null;
+  }
+  return toRendererConflict(transaction);
+}
+
 export function getNextTransaction() {
   if (!db) {
     throw new Error('not init');
@@ -1805,7 +1909,16 @@ export function getNextTransaction() {
       return null;
     }
     if (transactions[0].isConflict === null) {
+      mainWindow?.webContents.send('conflict', null);
       return toApiTransaction(transactions[0]);
+    }
+    if (transactions[0].reason === ConflictReason.REPORT_COMPLETED) {
+      mainWindow?.webContents.send('conflict', null);
+    } else {
+      mainWindow?.webContents.send(
+        'conflict',
+        toRendererConflict(transactions[0]),
+      );
     }
     const seenSetIds = new Set([transactions[0].setId]);
     for (let i = 1; i < transactions.length; i += 1) {
@@ -2560,7 +2673,6 @@ export function updateEventSets(
           )
           .run(conflict);
       });
-      mainWindow?.webContents.send('conflict', getConflicts());
     }
     transactionNumsToDelete.forEach(deleteTransaction);
   });
@@ -2579,7 +2691,6 @@ export function markTransactionConflict(
       SET isConflict = 1, reason = @reason
       WHERE transactionNum = @transactionNum`,
   ).run({ transactionNum, reason });
-  mainWindow?.webContents.send('conflict', getConflicts());
 }
 
 export function getEventPoolIds(id: number): Set<number> {

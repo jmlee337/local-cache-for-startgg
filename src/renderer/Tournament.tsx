@@ -45,11 +45,15 @@ import { FormEvent, useEffect, useState } from 'react';
 import {
   AdminedTournament,
   ApiError,
+  ConflictReason,
+  RendererConflict,
+  RendererConflictResolve,
   RendererEvent,
   RendererPhase,
   RendererPool,
   RendererSet,
   RendererTournament,
+  TransactionType,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
@@ -57,7 +61,6 @@ import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
-import Conflicts from './Conflicts';
 
 function SetEntrant({
   entrantName,
@@ -87,13 +90,7 @@ function SetEntrant({
   );
 }
 
-function SetListItemButton({
-  set,
-  reportSet,
-}: {
-  set: RendererSet;
-  reportSet: (set: RendererSet) => void;
-}) {
+function SetListItemInner({ set }: { set: RendererSet }) {
   let titleStart = <CloudOff fontSize="small" />;
   if (set.syncState === 1) {
     titleStart = <BackupOutlined fontSize="small" />;
@@ -142,78 +139,110 @@ function SetListItemButton({
       entrant2Score = set.winnerId === set.entrant2Id ? 'W' : 'L';
     }
   }
+
+  return (
+    <Stack alignItems="stretch" width="100%">
+      <Stack direction="row" alignItems="center" gap="4px" width="100%">
+        {titleStart}
+        <Typography flexGrow={1} textAlign="center" variant="caption">
+          {set.fullRoundText} ({set.identifier})
+        </Typography>
+        {titleEnd}
+      </Stack>
+      <Stack
+        direction="row"
+        alignItems="center"
+        gap="8px"
+        sx={{ typography: (theme) => theme.typography.body2 }}
+        width="100%"
+      >
+        <Stack flexGrow={1}>
+          <SetEntrant
+            entrantName={set.entrant1Name}
+            prereqStr={set.entrant1PrereqStr}
+          />
+          <SetEntrant
+            entrantName={set.entrant2Name}
+            prereqStr={set.entrant2PrereqStr}
+          />
+        </Stack>
+        {set.state === 3 && (
+          <Stack flexGrow={0}>
+            <Box textAlign="end" width="16px">
+              {entrant1Score}
+            </Box>
+            <Box textAlign="end" width="16px">
+              {entrant2Score}
+            </Box>
+          </Stack>
+        )}
+        {set.state !== 3 && (set.station || set.stream) && (
+          <Stack flexGrow={0} justifyContent="center">
+            {set.stream ? (
+              <Tooltip
+                title={`${set.stream.streamSource} ${set.stream.streamName}`}
+              >
+                <Tv />
+              </Tooltip>
+            ) : (
+              <Typography variant="body1">{set.station?.number}</Typography>
+            )}
+          </Stack>
+        )}
+      </Stack>
+    </Stack>
+  );
+}
+
+function SetListItemButton({
+  set,
+  conflictTransactionNum,
+  reportSet,
+  resolveConflict,
+}: {
+  set: RendererSet;
+  conflictTransactionNum: number | null;
+  reportSet: (set: RendererSet) => void;
+  resolveConflict: (setId: number, transactionNum: number) => void;
+}) {
+  let backgroundColor: string | undefined;
+  if (conflictTransactionNum !== null) {
+    backgroundColor = '#ed6c02';
+  } else if (set.state === 3) {
+    backgroundColor = '#eeeeee';
+  }
   return (
     <ListItemButton
+      color={conflictTransactionNum !== null ? 'warning' : undefined}
       style={{
-        backgroundColor: set.state === 3 ? '#eeeeee' : undefined,
+        backgroundColor,
         flexGrow: 0,
         opacity: '100%',
         width: '232px',
       }}
       onClick={() => {
-        reportSet(set);
+        if (conflictTransactionNum !== null) {
+          resolveConflict(set.id, conflictTransactionNum);
+        } else {
+          reportSet(set);
+        }
       }}
     >
-      <Stack alignItems="stretch" width="100%">
-        <Stack direction="row" alignItems="center" gap="4px" width="100%">
-          {titleStart}
-          <Typography flexGrow={1} textAlign="center" variant="caption">
-            {set.fullRoundText} ({set.identifier})
-          </Typography>
-          {titleEnd}
-        </Stack>
-        <Stack
-          direction="row"
-          alignItems="center"
-          gap="8px"
-          sx={{ typography: (theme) => theme.typography.body2 }}
-          width="100%"
-        >
-          <Stack flexGrow={1}>
-            <SetEntrant
-              entrantName={set.entrant1Name}
-              prereqStr={set.entrant1PrereqStr}
-            />
-            <SetEntrant
-              entrantName={set.entrant2Name}
-              prereqStr={set.entrant2PrereqStr}
-            />
-          </Stack>
-          {set.state === 3 && (
-            <Stack flexGrow={0}>
-              <Box textAlign="end" width="16px">
-                {entrant1Score}
-              </Box>
-              <Box textAlign="end" width="16px">
-                {entrant2Score}
-              </Box>
-            </Stack>
-          )}
-          {set.state !== 3 && (set.station || set.stream) && (
-            <Stack flexGrow={0} justifyContent="center">
-              {set.stream ? (
-                <Tooltip
-                  title={`${set.stream.streamSource} ${set.stream.streamName}`}
-                >
-                  <Tv />
-                </Tooltip>
-              ) : (
-                <Typography variant="body1">{set.station?.number}</Typography>
-              )}
-            </Stack>
-          )}
-        </Stack>
-      </Stack>
+      <SetListItemInner set={set} />
     </ListItemButton>
   );
 }
 
 function PoolListItem({
   pool,
+  conflict,
   reportSet,
+  resolveConflict,
 }: {
   pool: RendererPool;
+  conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
+  resolveConflict: (setId: number, transactionNum: number) => void;
 }) {
   const completedSets = pool.sets.filter((set) => set.state === 3);
   const openSets = pool.sets.filter((set) => set.state !== 3);
@@ -280,8 +309,7 @@ function PoolListItem({
                 direction="row"
                 flexWrap="wrap"
                 gap="8px"
-                marginLeft="16px"
-                marginTop="8px"
+                margin="8px 0 8px 16px"
               >
                 {completedSets
                   .sort((a, b) => {
@@ -297,7 +325,13 @@ function PoolListItem({
                     <SetListItemButton
                       key={set.id}
                       set={set}
+                      conflictTransactionNum={
+                        conflict && conflict.setId === set.id
+                          ? conflict.transactionNum
+                          : null
+                      }
                       reportSet={reportSet}
+                      resolveConflict={resolveConflict}
                     />
                   ))}
               </Stack>
@@ -320,7 +354,13 @@ function PoolListItem({
                 <SetListItemButton
                   key={set.id}
                   set={set}
+                  conflictTransactionNum={
+                    conflict && conflict.setId === set.id
+                      ? conflict.transactionNum
+                      : null
+                  }
                   reportSet={reportSet}
+                  resolveConflict={resolveConflict}
                 />
               ))}
           </Stack>
@@ -332,10 +372,14 @@ function PoolListItem({
 
 function PhaseListItem({
   phase,
+  conflict,
   reportSet,
+  resolveConflict,
 }: {
   phase: RendererPhase;
+  conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
+  resolveConflict: (setId: number, transactionNum: number) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -368,7 +412,13 @@ function PhaseListItem({
       <Collapse in={open}>
         {phase.pools.length > 0 &&
           phase.pools.map((pool) => (
-            <PoolListItem key={pool.id} pool={pool} reportSet={reportSet} />
+            <PoolListItem
+              key={pool.id}
+              pool={pool}
+              conflict={conflict}
+              reportSet={reportSet}
+              resolveConflict={resolveConflict}
+            />
           ))}
       </Collapse>
     </Box>
@@ -377,11 +427,15 @@ function PhaseListItem({
 
 function EventListItem({
   event,
+  conflict,
   reportSet,
+  resolveConflict,
   showError,
 }: {
   event: RendererEvent;
+  conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
+  resolveConflict: (setId: number, transactionNum: number) => void;
   showError: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -426,7 +480,13 @@ function EventListItem({
       </ListItem>
       {event.phases.length > 0 &&
         event.phases.map((phase) => (
-          <PhaseListItem key={phase.id} phase={phase} reportSet={reportSet} />
+          <PhaseListItem
+            key={phase.id}
+            phase={phase}
+            conflict={conflict}
+            reportSet={reportSet}
+            resolveConflict={resolveConflict}
+          />
         ))}
     </>
   );
@@ -509,6 +569,23 @@ function LocalTournamentItemButton({
       </Dialog>
     </>
   );
+}
+
+function getDescription(type: TransactionType) {
+  switch (type) {
+    case TransactionType.RESET:
+      return 'Reset';
+    case TransactionType.START:
+      return 'Start';
+    case TransactionType.ASSIGN_STATION:
+      return 'Assign Station';
+    case TransactionType.ASSIGN_STREAM:
+      return 'Assign Stream';
+    case TransactionType.REPORT:
+      return 'Report';
+    default:
+      throw new Error(`unknown type: ${type}`);
+  }
 }
 
 export default function Tournament() {
@@ -676,6 +753,26 @@ export default function Tournament() {
     }
   }
 
+  const [conflict, setConflict] = useState<RendererConflict | null>(null);
+  useEffect(() => {
+    window.electron.onConflict((event, newConflict) => {
+      setConflict(newConflict);
+    });
+    (async () => {
+      setConflict(await window.electron.getConflict());
+    })();
+  }, []);
+
+  const [conflictResolve, setConflictResolve] =
+    useState<RendererConflictResolve | null>(null);
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const openConflictDialog = async (setId: number, transactionNum: number) => {
+    setConflictResolve(
+      await window.electron.getConflictResolve(setId, transactionNum),
+    );
+    setConflictDialogOpen(true);
+  };
+
   return (
     <>
       <AppBar position="fixed" style={{ backgroundColor: 'white' }}>
@@ -690,7 +787,18 @@ export default function Tournament() {
           <Stack direction="row" alignItems="center" marginLeft="-3px">
             <Sync />
             <Websocket />
-            <Conflicts />
+            {conflict && (
+              <Button
+                color="warning"
+                size="large"
+                variant="contained"
+                onClick={() => {
+                  openConflictDialog(conflict.setId, conflict.transactionNum);
+                }}
+              >
+                Conflict!
+              </Button>
+            )}
             <FatalError />
           </Stack>
           <Settings showError={showError} />
@@ -857,7 +965,9 @@ export default function Tournament() {
                 <EventListItem
                   key={event.id}
                   event={event}
+                  conflict={conflict}
                   reportSet={() => {}}
+                  resolveConflict={() => {}}
                   showError={() => {}}
                 />
               ))}
@@ -870,6 +980,7 @@ export default function Tournament() {
               <EventListItem
                 key={event.id}
                 event={event}
+                conflict={conflict}
                 reportSet={(newReportSet: RendererSet) => {
                   setReportWinnerId(newReportSet.winnerId ?? 0);
                   setReportIsDq(
@@ -881,6 +992,7 @@ export default function Tournament() {
                   setReportSet(newReportSet);
                   setReportDialogOpen(true);
                 }}
+                resolveConflict={openConflictDialog}
                 showError={showError}
               />
             ))}
@@ -1454,6 +1566,59 @@ export default function Tournament() {
                     ))}
                 </List>
               </>
+            )}
+          </DialogContent>
+        </Dialog>
+        <Dialog
+          maxWidth="md"
+          open={conflictDialogOpen}
+          onClose={() => {
+            setConflictDialogOpen(false);
+          }}
+        >
+          <DialogTitle>Resolve Conflict</DialogTitle>
+          <DialogContent>
+            {conflictResolve && (
+              <Stack direction="row" spacing="32px" alignItems="start">
+                <Stack flexShrink={0}>
+                  <Typography variant="body1">Server</Typography>
+                  <SetListItemInner set={conflictResolve.serverSet} />
+                </Stack>
+                <Stack spacing="16px" alignItems="start" flexShrink={0}>
+                  {conflictResolve.localSets.map((localSet) => (
+                    <Box>
+                      <Typography variant="body1">
+                        {getDescription(localSet.type)}
+                      </Typography>
+                      <SetListItemInner
+                        key={localSet.transactionNum}
+                        set={localSet.set}
+                      />
+                    </Box>
+                  ))}
+                </Stack>
+                <Stack spacing="8px" alignItems="stretch">
+                  {conflictResolve.reason ===
+                    ConflictReason.RESET_DEPENDENT_SETS && (
+                    <Button color="warning" variant="contained">
+                      Reset dependent sets
+                    </Button>
+                  )}
+                  {conflictResolve.reason ===
+                    ConflictReason.MISSING_ENTRANTS && (
+                    <Button variant="contained">Report dependency sets</Button>
+                  )}
+                  {conflictResolve.reason ===
+                    ConflictReason.UPDATE_CHANGE_WINNER && (
+                    <Button color="warning" variant="contained">
+                      Reset set
+                    </Button>
+                  )}
+                  <Button color="error" variant="contained">
+                    Abandon {getDescription(conflictResolve.localSets[0].type)}
+                  </Button>
+                </Stack>
+              </Stack>
             )}
           </DialogContent>
         </Dialog>
