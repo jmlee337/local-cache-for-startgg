@@ -218,7 +218,8 @@ function SetListItemButton({
         backgroundColor,
         flexGrow: 0,
         opacity: '100%',
-        width: '232px',
+        padding: '8px',
+        width: '228px',
       }}
       onClick={() => {
         if (conflictTransactionNum !== null) {
