@@ -213,9 +213,9 @@ function SetListItemButton({
   }
   return (
     <ListItemButton
-      color={conflictTransactionNum !== null ? 'warning' : undefined}
       style={{
         backgroundColor,
+        color: conflictTransactionNum !== null ? '#fff' : undefined,
         flexGrow: 0,
         opacity: '100%',
         padding: '8px',
@@ -783,7 +783,7 @@ export default function Tournament() {
 
   return (
     <>
-      <AppBar position="fixed" style={{ backgroundColor: 'white' }}>
+      <AppBar position="fixed" style={{ backgroundColor: '#fff' }}>
         <Toolbar
           disableGutters
           style={{
@@ -1600,21 +1600,35 @@ export default function Tournament() {
             {conflictResolve && (
               <Stack direction="row" spacing="32px" alignItems="start">
                 <Stack flexShrink={0}>
-                  <Typography variant="body1">Server</Typography>
+                  <Typography variant="body2">Server</Typography>
                   <SetListItemInner set={conflictResolve.serverSet} />
                 </Stack>
                 <Stack spacing="16px" alignItems="start" flexShrink={0}>
-                  {conflictResolve.localSets.map((localSet) => (
-                    <Box>
-                      <Typography variant="body1">
-                        {getDescription(localSet.type)}
-                      </Typography>
-                      <SetListItemInner
-                        key={localSet.transactionNum}
-                        set={localSet.set}
-                      />
-                    </Box>
-                  ))}
+                  <div
+                    style={{
+                      backgroundColor: '#ed6c02',
+                      color: '#fff',
+                      margin: '-8px',
+                      padding: '8px',
+                    }}
+                  >
+                    <Typography variant="body2">
+                      Local {getDescription(conflictResolve.localSets[0].type)}
+                    </Typography>
+                    <SetListItemInner set={conflictResolve.localSets[0].set} />
+                  </div>
+                  {conflictResolve.localSets.length > 1 &&
+                    conflictResolve.localSets.slice(1).map((localSet) => (
+                      <Box>
+                        <Typography variant="body2">
+                          Local {getDescription(localSet.type)}
+                        </Typography>
+                        <SetListItemInner
+                          key={localSet.transactionNum}
+                          set={localSet.set}
+                        />
+                      </Box>
+                    ))}
                 </Stack>
                 <Stack spacing="8px" alignItems="stretch">
                   {conflictResolve.reason ===
