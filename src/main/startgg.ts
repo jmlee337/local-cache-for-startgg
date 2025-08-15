@@ -1200,8 +1200,12 @@ async function tryNextTransaction(id: number, slug: string) {
               e instanceof ApiError &&
               e.gqlErrors.some(
                 (gqlError) =>
-                  gqlError.message ===
-                  'Resetting this set will also reset 1 dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
+                  gqlError.message.startsWith(
+                    'Resetting this set will also reset ',
+                  ) &&
+                  gqlError.message.endsWith(
+                    ' dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
+                  ),
               )
             ) {
               markTransactionConflict(

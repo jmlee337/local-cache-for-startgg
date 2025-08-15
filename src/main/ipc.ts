@@ -314,7 +314,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('preemptReset', (event: IpcMainInvokeEvent, setId: number) => {
     const transactionNum = preemptTransactionNum;
     preemptTransactionNum -= 1;
-    const ret = resetSet(setId, transactionNum);
+    const ret = resetSet(setId, transactionNum, /* preempt */ true);
     updateClients();
     maybeTryNow(ret.tournamentId);
   });

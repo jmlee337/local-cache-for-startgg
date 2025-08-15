@@ -823,7 +823,11 @@ type ResetProgressionSet = {
   tournamentId: number;
   entrantNum: 1 | 2;
 };
-export function resetSet(id: number, transactionNum: number) {
+export function resetSet(
+  id: number,
+  transactionNum: number,
+  preempt: boolean = false,
+) {
   if (!db) {
     throw new Error('not init');
   }
@@ -843,6 +847,7 @@ export function resetSet(id: number, transactionNum: number) {
   let wProgressionSet: ResetProgressionSet | undefined;
   let lProgressionSet: ResetProgressionSet | undefined;
   if (set.state === 3) {
+    const dependentSetIds: number[] = [];
     const { wProgressionSeedId, lProgressionSeedId } = set;
     const maybeAssignProgression = (
       setId: number,
@@ -908,29 +913,30 @@ export function resetSet(id: number, transactionNum: number) {
       }
       applyMutations(dbSet);
       if (dbSet.state !== 1) {
-        throw new Error(`Cannot reset due to dependent sets: ${id}`);
-      }
-      if (dbSet.entrant1PrereqId === id) {
-        maybeAssignProgression(
-          dbSet.id,
-          dbSet.phaseGroupId,
-          dbSet.phaseId,
-          dbSet.eventId,
-          dbSet.tournamentId,
-          1,
-          dbSet.entrant1PrereqCondition,
-        );
-      }
-      if (dbSet.entrant2PrereqId === id) {
-        maybeAssignProgression(
-          dbSet.id,
-          dbSet.phaseGroupId,
-          dbSet.phaseId,
-          dbSet.eventId,
-          dbSet.tournamentId,
-          2,
-          dbSet.entrant2PrereqCondition,
-        );
+        dependentSetIds.push(dbSet.id);
+      } else {
+        if (dbSet.entrant1PrereqId === id) {
+          maybeAssignProgression(
+            dbSet.id,
+            dbSet.phaseGroupId,
+            dbSet.phaseId,
+            dbSet.eventId,
+            dbSet.tournamentId,
+            1,
+            dbSet.entrant1PrereqCondition,
+          );
+        }
+        if (dbSet.entrant2PrereqId === id) {
+          maybeAssignProgression(
+            dbSet.id,
+            dbSet.phaseGroupId,
+            dbSet.phaseId,
+            dbSet.eventId,
+            dbSet.tournamentId,
+            2,
+            dbSet.entrant2PrereqCondition,
+          );
+        }
       }
     });
     if (wProgressionSeedId) {
@@ -947,17 +953,18 @@ export function resetSet(id: number, transactionNum: number) {
         }
         applyMutations(affectedSet);
         if (affectedSet.state !== 1) {
-          throw new Error(`Cannot reset due to dependent sets: ${id}`);
+          dependentSetIds.push(affectedSet.id);
+        } else {
+          wProgressionSet = {
+            id: affectedSet.id,
+            phaseGroupId: affectedSet.phaseGroupId,
+            phaseId: affectedSet.phaseId,
+            eventId: affectedSet.eventId,
+            tournamentId: affectedSet.tournamentId,
+            entrantNum:
+              affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
+          };
         }
-        wProgressionSet = {
-          id: affectedSet.id,
-          phaseGroupId: affectedSet.phaseGroupId,
-          phaseId: affectedSet.phaseId,
-          eventId: affectedSet.eventId,
-          tournamentId: affectedSet.tournamentId,
-          entrantNum:
-            affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
-        };
       }
     }
     if (lProgressionSeedId) {
@@ -974,18 +981,24 @@ export function resetSet(id: number, transactionNum: number) {
         }
         applyMutations(affectedSet);
         if (affectedSet.state !== 1) {
-          throw new Error(`Cannot reset due to dependent sets: ${id}`);
+          dependentSetIds.push(affectedSet.id);
+        } else {
+          lProgressionSet = {
+            id: affectedSet.id,
+            phaseGroupId: affectedSet.phaseGroupId,
+            phaseId: affectedSet.phaseId,
+            eventId: affectedSet.eventId,
+            tournamentId: affectedSet.tournamentId,
+            entrantNum:
+              affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
+          };
         }
-        lProgressionSet = {
-          id: affectedSet.id,
-          phaseGroupId: affectedSet.phaseGroupId,
-          phaseId: affectedSet.phaseId,
-          eventId: affectedSet.eventId,
-          tournamentId: affectedSet.tournamentId,
-          entrantNum:
-            affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
-        };
       }
+    }
+    if (!preempt && dependentSetIds.length > 0) {
+      throw new Error(
+        `Cannot reset due to dependent set(s): ${dependentSetIds.join(', ')}`,
+      );
     }
   }
 
