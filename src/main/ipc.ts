@@ -28,6 +28,7 @@ import {
   getTournament,
   getTournamentId,
   getTournaments,
+  resetSet,
   setAutoSync,
   setTournamentId,
 } from './db';
@@ -58,7 +59,8 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     });
   };
 
-  const initTransactionNum = dbInit(mainWindow);
+  const initTransactionNums = dbInit(mainWindow);
+  let preemptTransactionNum = initTransactionNums.low;
   startggInit(mainWindow);
   onTransaction(() => {
     updateClients();
@@ -92,7 +94,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     ? (store.get('autoSync') as boolean)
     : true;
   setAutoSync(autoSync);
-  initTransaction(initTransactionNum, updateClients);
+  initTransaction(initTransactionNums.high, updateClients);
   ipcMain.removeHandler('getAutoSync');
   ipcMain.handle('getAutoSync', () => autoSync);
 
@@ -303,9 +305,19 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'deleteTransaction',
     (event: IpcMainInvokeEvent, transactionNum: number) => {
       const tournamentId = deleteTransaction(transactionNum);
+      updateClients();
       maybeTryNow(tournamentId);
     },
   );
+
+  ipcMain.removeHandler('preemptReset');
+  ipcMain.handle('preemptReset', (event: IpcMainInvokeEvent, setId: number) => {
+    const transactionNum = preemptTransactionNum;
+    preemptTransactionNum -= 1;
+    const ret = resetSet(setId, transactionNum);
+    updateClients();
+    maybeTryNow(ret.tournamentId);
+  });
 
   ipcMain.removeHandler('getConflictResolve');
   ipcMain.handle(

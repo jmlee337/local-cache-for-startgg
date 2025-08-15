@@ -5,7 +5,6 @@ import {
   CloudOff,
   Download,
   Edit,
-  EmojiEvents,
   Group,
   HourglassTop,
   KeyboardArrowDown,
@@ -14,6 +13,7 @@ import {
   Refresh,
   RestartAlt,
   Router,
+  Stadium,
   StadiumOutlined,
   Tv,
   Visibility,
@@ -107,12 +107,11 @@ function SetListItemInner({ set }: { set: RendererSet }) {
       />
     );
   } else if (set.state === 3) {
-    titleEnd = (
-      <EmojiEvents
-        fontSize="small"
-        style={{ marginLeft: '3px', marginRight: '-3px' }}
-      />
-    );
+    if (set.hasStageData) {
+      titleEnd = (
+        <Stadium fontSize="small" style={{ margin: '-2px -5px 2px 5px' }} />
+      );
+    }
   } else if (set.state === 6) {
     titleEnd = (
       <NotificationsActive
@@ -1643,9 +1642,24 @@ export default function Tournament() {
                   )}
                   {conflictResolve.reason ===
                     ConflictReason.UPDATE_CHANGE_WINNER && (
-                    <Button color="warning" variant="contained">
+                    <Button
+                      color="warning"
+                      variant="contained"
+                      onClick={() => {
+                        if (conflict) {
+                          window.electron.preemptReset(conflict.setId);
+                          setConflictDialogOpen(false);
+                        }
+                      }}
+                    >
                       Reset set
                     </Button>
+                  )}
+                  {conflictResolve.reason ===
+                    ConflictReason.UPDATE_STAGE_DATA && (
+                    <Typography variant="caption">
+                      Would remove game/stage data
+                    </Typography>
                   )}
                   <Button
                     color="error"

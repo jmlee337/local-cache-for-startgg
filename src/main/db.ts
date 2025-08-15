@@ -208,12 +208,17 @@ export function dbInit(window: BrowserWindow) {
       characterId INTEGER NOT NULL
     )`,
   ).run();
-  const init = db
-    .prepare(
-      'SELECT transactionNum FROM transactions ORDER BY transactionNum DESC LIMIT 1',
-    )
-    .get() as { transactionNum: number } | undefined;
-  return init ? init.transactionNum + 1 : 1;
+
+  const highTransaction = db
+    .prepare('SELECT * FROM transactions ORDER BY transactionNum DESC LIMIT 1')
+    .get() as DbTransaction | undefined;
+  const lowTransaction = db
+    .prepare('SELECT * FROM transactions ORDER BY transactionNum ASC LIMIT 1')
+    .get() as DbTransaction | undefined;
+  return {
+    low: (lowTransaction?.transactionNum ?? 0) - 1,
+    high: (highTransaction?.transactionNum ?? 0) + 1,
+  };
 }
 
 function getEntrantName(id: number): string | null {
