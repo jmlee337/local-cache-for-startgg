@@ -52,6 +52,8 @@ const electronHandler = {
       | null,
   ): Promise<void> =>
     ipcRenderer.invoke('reportSet', id, winnerId, isDQ, entrantScores),
+  deleteTransaction: (transactionNum: number): Promise<void> =>
+    ipcRenderer.invoke('deleteTransaction', transactionNum),
   getConflictResolve: (
     setId: number,
     transactionNum: number,

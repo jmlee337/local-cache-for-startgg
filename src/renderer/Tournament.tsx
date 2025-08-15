@@ -1647,7 +1647,18 @@ export default function Tournament() {
                       Reset set
                     </Button>
                   )}
-                  <Button color="error" variant="contained">
+                  <Button
+                    color="error"
+                    variant="contained"
+                    onClick={() => {
+                      if (conflict) {
+                        window.electron.deleteTransaction(
+                          conflict.transactionNum,
+                        );
+                        setConflictDialogOpen(false);
+                      }
+                    }}
+                  >
                     Abandon {getDescription(conflictResolve.localSets[0].type)}
                   </Button>
                 </Stack>

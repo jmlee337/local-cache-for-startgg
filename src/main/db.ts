@@ -2325,12 +2325,13 @@ export function deleteTransaction(transactionNum: number) {
     throw new Error('not init');
   }
 
+  let transaction: DbTransaction | undefined;
   db.transaction(() => {
-    db!
+    transaction = db!
       .prepare(
-        'DELETE FROM transactions WHERE transactionNum = @transactionNum',
+        'DELETE FROM transactions WHERE transactionNum = @transactionNum RETURNING *',
       )
-      .run({ transactionNum });
+      .get({ transactionNum }) as DbTransaction | undefined;
     db!
       .prepare(
         'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
@@ -2347,6 +2348,8 @@ export function deleteTransaction(transactionNum: number) {
       )
       .run({ transactionNum });
   })();
+
+  return transaction!.tournamentId;
 }
 
 export function updateEventSets(

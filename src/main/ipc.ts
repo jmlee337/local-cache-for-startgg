@@ -16,10 +16,12 @@ import {
   startRefreshingTournament,
   setApiKey,
   startggInit,
+  maybeTryNow,
 } from './startgg';
 import {
   dbInit,
   deleteTournament,
+  deleteTransaction,
   getConflict,
   getConflictResolve,
   getLastTournament,
@@ -293,6 +295,15 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
         }
       }
       reportSetTransaction(id, winnerId, isDQ, apiGameData);
+    },
+  );
+
+  ipcMain.removeHandler('deleteTransaction');
+  ipcMain.handle(
+    'deleteTransaction',
+    (event: IpcMainInvokeEvent, transactionNum: number) => {
+      const tournamentId = deleteTransaction(transactionNum);
+      maybeTryNow(tournamentId);
     },
   );
 
