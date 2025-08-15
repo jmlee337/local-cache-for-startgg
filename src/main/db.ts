@@ -1899,11 +1899,18 @@ export function getNextTransaction() {
       )
       .all({ currentTournamentId }) as DbTransaction[];
     if (transactions.length === 0) {
+      mainWindow?.webContents.send('conflict', null);
       return null;
     }
     if (transactions[0].isConflict === null) {
       mainWindow?.webContents.send('conflict', null);
       return toApiTransaction(transactions[0]);
+    }
+    for (let i = 1; i < transactions.length; i += 1) {
+      if (canTransactNow(transactions[i])) {
+        mainWindow?.webContents.send('conflict', null);
+        return toApiTransaction(transactions[i]);
+      }
     }
     if (transactions[0].reason === ConflictReason.REPORT_COMPLETED) {
       mainWindow?.webContents.send('conflict', null);
@@ -1912,16 +1919,6 @@ export function getNextTransaction() {
         'conflict',
         toRendererConflict(transactions[0]),
       );
-    }
-    const seenSetIds = new Set([transactions[0].setId]);
-    for (let i = 1; i < transactions.length; i += 1) {
-      const transaction = transactions[i];
-      if (!seenSetIds.has(transaction.setId)) {
-        seenSetIds.add(transaction.setId);
-        if (canTransactNow(transactions[i])) {
-          return toApiTransaction(transactions[i]);
-        }
-      }
     }
   } else {
     // todo: store manuallyReleased somewhere and read it here
