@@ -318,7 +318,13 @@ function PoolListItem({
           )}
         </ListItemButton>
         {winnersSets.length > 0 && (
-          <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
+          <Stack
+            direction="row"
+            flexWrap="wrap"
+            gap="8px"
+            marginLeft="16px"
+            marginRight="32px"
+          >
             {winnersSets
               .sort((a, b) => {
                 if (a.identifier.length === b.identifier.length) {
@@ -349,6 +355,7 @@ function PoolListItem({
             flexWrap="wrap"
             gap="8px"
             marginLeft="16px"
+            marginRight="32px"
             marginTop="8px"
           >
             {losersSets
