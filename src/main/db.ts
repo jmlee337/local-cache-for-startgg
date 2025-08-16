@@ -1273,6 +1273,10 @@ export function startSet(id: number, transactionNum: number) {
       transactionNum,
       statePresent,
       state,
+      entrant1IdPresent,
+      entrant1Id,
+      entrant2IdPresent,
+      entrant2Id,
       updatedAt
     ) VALUES (
       @id,
@@ -1283,6 +1287,10 @@ export function startSet(id: number, transactionNum: number) {
       @transactionNum,
       1,
       @state,
+      1,
+      @entrant1Id,
+      1,
+      @entrant2Id,
       @updatedAt
     )`,
   ).run({
@@ -1293,6 +1301,8 @@ export function startSet(id: number, transactionNum: number) {
     tournamentId: set.tournamentId,
     transactionNum,
     state: set.state,
+    entrant1Id,
+    entrant2Id,
     updatedAt: Date.now() / 1000,
   });
   insertTransaction(
@@ -1699,8 +1709,12 @@ export function reportSet(
           transactionNum,
           statePresent,
           state,
+          entrant1IdPresent,
+          entrant1Id,
           entrant1ScorePresent,
           entrant1Score,
+          entrant2IdPresent,
+          entrant2Id,
           entrant2ScorePresent,
           entrant2Score,
           winnerIdPresent,
@@ -1718,7 +1732,11 @@ export function reportSet(
           1,
           @state,
           1,
+          @entrant1Id,
+          1,
           @entrant1Score,
+          1,
+          @entrant2Id,
           1,
           @entrant2Score,
           1,
@@ -1736,7 +1754,9 @@ export function reportSet(
         tournamentId: set.tournamentId,
         transactionNum,
         state: set.state,
+        entrant1Id,
         entrant1Score: set.entrant1Score,
+        entrant2Id,
         entrant2Score: set.entrant2Score,
         winnerId: set.winnerId,
         hasStageData: set.hasStageData,
@@ -2009,14 +2029,10 @@ export function getNextTransaction() {
       mainWindow?.webContents.send('conflict', null);
       return null;
     }
-    if (transactions[0].isConflict === null) {
-      mainWindow?.webContents.send('conflict', null);
-      return toApiTransaction(transactions[0]);
-    }
-    for (let i = 1; i < transactions.length; i += 1) {
-      if (canTransactNow(transactions[i])) {
+    for (const transaction of transactions) {
+      if (canTransactNow(transaction)) {
         mainWindow?.webContents.send('conflict', null);
-        return toApiTransaction(transactions[i]);
+        return toApiTransaction(transaction);
       }
     }
     if (transactions[0].reason === ConflictReason.REPORT_COMPLETED) {
@@ -2318,6 +2334,7 @@ function getSyncStatus(
   dbTransaction: DbTransaction,
   afterSet: DbSet,
   containsValidReset: boolean,
+  setMutations: DbSetMutation[],
 ):
   | { syncStatus: SyncStatus.AHEAD | SyncStatus.BEHIND }
   | { syncStatus: SyncStatus.CONFLICT; reason: ConflictReason } {
@@ -2378,12 +2395,41 @@ function getSyncStatus(
             ? SyncStatus.BEHIND
             : SyncStatus.AHEAD,
       };
-    case TransactionType.START:
+    case TransactionType.START: {
+      const mutationSet: DbSet = { ...afterSet };
+      for (const setMutation of setMutations) {
+        if (setMutation.transactionNum > dbTransaction.transactionNum) {
+          break;
+        }
+        applyMutation(mutationSet, setMutation);
+      }
+      if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.MISSING_ENTRANTS,
+        };
+      }
+
       if (containsValidReset || afterSet.state === 1 || afterSet.state === 6) {
         return { syncStatus: SyncStatus.AHEAD };
       }
       return { syncStatus: SyncStatus.BEHIND };
-    case TransactionType.REPORT:
+    }
+    case TransactionType.REPORT: {
+      const mutationSet: DbSet = { ...afterSet };
+      for (const setMutation of setMutations) {
+        if (setMutation.transactionNum > dbTransaction.transactionNum) {
+          break;
+        }
+        applyMutation(mutationSet, setMutation);
+      }
+      if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.MISSING_ENTRANTS,
+        };
+      }
+
       if (containsValidReset) {
         return { syncStatus: SyncStatus.AHEAD };
       }
@@ -2427,6 +2473,7 @@ function getSyncStatus(
         return { syncStatus: SyncStatus.BEHIND };
       }
       return { syncStatus: SyncStatus.AHEAD };
+    }
     default:
       throw new Error(`unknown transaction type: ${dbTransaction.type}`);
   }
@@ -2737,6 +2784,17 @@ export function updateEventSets(
         }
       }
 
+      const setMutations = db!
+        .prepare(
+          `SELECT *
+          FROM setMutations
+          WHERE setId = @setId
+            AND transactionNum NOT IN (${dbTransactions
+              .map((transaction) => transaction.transactionNum)
+              .join(', ')})
+          ORDER BY transactionNum ASC`,
+        )
+        .all({ setId }) as DbSetMutation[];
       let containsValidReset = containsReset;
       const aheadTransactionNums: number[] = [];
       const conflicts: {
@@ -2748,6 +2806,7 @@ export function updateEventSets(
           dbTransaction,
           afterSet,
           containsValidReset,
+          setMutations,
         );
         switch (statusObj.syncStatus) {
           case SyncStatus.AHEAD:
@@ -2755,6 +2814,9 @@ export function updateEventSets(
             break;
           case SyncStatus.BEHIND:
             transactionNumsToDelete.push(dbTransaction.transactionNum);
+            if (dbTransaction.type === TransactionType.RESET) {
+              containsValidReset = false;
+            }
             break;
           case SyncStatus.CONFLICT:
             conflicts.push({
