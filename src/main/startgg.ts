@@ -938,34 +938,52 @@ const UPDATE_SET_INNER = `
       updatedAt
       winnerId
 `;
+function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
+  const games = Array.isArray(set.games) ? (set.games as any[]) : [];
+  const entrant1 = set.slots[0].entrant;
+  const standing1 = set.slots[0].standing;
+  const entrant2 = set.slots[1].entrant;
+  const standing2 = set.slots[1].standing;
+  return {
+    id: set.id,
+    state: set.state,
+    entrant1Id: entrant1 ? entrant1.id : null,
+    entrant1Score: standing1 ? standing1.stats.score.value : null,
+    entrant2Id: entrant2 ? entrant2.id : null,
+    entrant2Score: standing2 ? standing2.stats.score.value : null,
+    winnerId: set.winnerId,
+    updatedAt: set.updatedAt,
+    stationId: set.station?.id ?? null,
+    streamId: set.stream?.id ?? null,
+    hasStageData:
+      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
+  };
+}
+
 const RESET_SET_MUTATION = `
   mutation resetSet($setId: ID!) {
     resetSet(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function resetSet(setId: number): Promise<ApiSetUpdate> {
+const RESET_SET_RECURSIVE_MUTATION = `
+  mutation resetSet($setId: ID!) {
+    resetSet(setId: $setId, resetDependentSets: true) {${UPDATE_SET_INNER}}
+  }
+`;
+async function resetSet(
+  setId: number,
+  recursive: boolean,
+): Promise<ApiSetUpdate> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, RESET_SET_MUTATION, { setId });
-  const games = Array.isArray(data.resetSet.games)
-    ? (data.resetSet.games as any[])
-    : [];
-  return {
-    id: data.resetSet.id,
-    state: data.resetSet.state,
-    entrant1Id: data.resetSet.slots[0].entrant.id,
-    entrant1Score: data.resetSet.slots[0].standing.stats.score.value,
-    entrant2Id: data.resetSet.slots[1].entrant.id,
-    entrant2Score: data.resetSet.slots[1].standing.stats.score.values,
-    winnerId: data.resetSet.winnerId,
-    updatedAt: data.resetSet.updatedAt,
-    stationId: data.resetSet.station?.id ?? null,
-    streamId: data.resetSet.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-  };
+  const data = await fetchGql(
+    apiKey,
+    recursive ? RESET_SET_RECURSIVE_MUTATION : RESET_SET_MUTATION,
+    { setId },
+  );
+  return updateSetToApiSetUpdate(data.resetSet);
 }
 
 const ASSIGN_SET_STATION_MUTATION = `
@@ -985,23 +1003,7 @@ async function assignSetStation(
     setId,
     stationId,
   });
-  const games = Array.isArray(data.assignStation.games)
-    ? (data.assignStation.games as any[])
-    : [];
-  return {
-    id: data.assignStation.id,
-    state: data.assignStation.state,
-    entrant1Id: data.assignStation.slots[0].entrant.id,
-    entrant1Score: data.assignStation.slots[0].standing.stats.score.value,
-    entrant2Id: data.assignStation.slots[1].entrant.id,
-    entrant2Score: data.assignStation.slots[1].standing.stats.score.values,
-    winnerId: data.assignStation.winnerId,
-    updatedAt: data.assignStation.updatedAt,
-    stationId: data.assignStation.station?.id ?? null,
-    streamId: data.assignStation.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-  };
+  return updateSetToApiSetUpdate(data.assignStation);
 }
 
 const ASSIGN_SET_STREAM_MUTATION = `
@@ -1021,23 +1023,7 @@ async function assignSetStream(
     setId,
     streamId,
   });
-  const games = Array.isArray(data.assignStream.games)
-    ? (data.assignStream.games as any[])
-    : [];
-  return {
-    id: data.assignStream.id,
-    state: data.assignStream.state,
-    entrant1Id: data.assignStream.slots[0].entrant.id,
-    entrant1Score: data.assignStream.slots[0].standing.stats.score.value,
-    entrant2Id: data.assignStream.slots[1].entrant.id,
-    entrant2Score: data.assignStream.slots[1].standing.stats.score.values,
-    winnerId: data.assignStream.winnerId,
-    updatedAt: data.assignStream.updatedAt,
-    stationId: data.assignStream.station?.id ?? null,
-    streamId: data.assignStream.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-  };
+  return updateSetToApiSetUpdate(data.assignStream);
 }
 
 const START_SET_MUTATION = `
@@ -1051,23 +1037,7 @@ async function startSet(setId: number): Promise<ApiSetUpdate> {
   }
 
   const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
-  const games = Array.isArray(data.markSetInProgress.games)
-    ? (data.markSetInProgress.games as any[])
-    : [];
-  return {
-    id: data.markSetInProgress.id,
-    state: data.markSetInProgress.state,
-    entrant1Id: data.markSetInProgress.slots[0].entrant.id,
-    entrant1Score: data.markSetInProgress.slots[0].standing.stats.score.value,
-    entrant2Id: data.markSetInProgress.slots[1].entrant.id,
-    entrant2Score: data.markSetInProgress.slots[1].standing.stats.score.values,
-    winnerId: data.markSetInProgress.winnerId,
-    updatedAt: data.markSetInProgress.updatedAt,
-    stationId: data.markSetInProgress.station?.id ?? null,
-    streamId: data.markSetInProgress.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-  };
+  return updateSetToApiSetUpdate(data.markSetInProgress);
 }
 
 const REPORT_SET_MUTATION = `
@@ -1096,27 +1066,7 @@ async function reportSet(
     isDQ,
     gameData,
   });
-  return (data.reportBracketSet as any[]).map((set): ApiSetUpdate => {
-    const entrant1 = set.slots[0].entrant;
-    const standing1 = set.slots[0].standing;
-    const entrant2 = set.slots[1].entrant;
-    const standing2 = set.slots[1].standing;
-    const games = Array.isArray(set.games) ? (set.games as any[]) : [];
-    return {
-      id: set.id,
-      state: set.state,
-      entrant1Id: entrant1 ? entrant1.id : null,
-      entrant1Score: standing1 ? standing1.stats.score.value : null,
-      entrant2Id: entrant2 ? entrant2.id : null,
-      entrant2Score: standing2 ? standing2.stats.score.value : null,
-      winnerId: set.winnerId,
-      updatedAt: set.updatedAt,
-      stationId: set.station?.id ?? null,
-      streamId: set.stream?.id ?? null,
-      hasStageData:
-        games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-    };
-  });
+  return (data.reportBracketSet as any[]).map(updateSetToApiSetUpdate);
 }
 
 const UPDATE_SET_MUTATION = `
@@ -1145,26 +1095,7 @@ async function updateSet(
     isDQ,
     gameData,
   });
-  const set = data.updateBracketSet;
-  const entrant1 = set.slots[0].entrant;
-  const standing1 = set.slots[0].standing;
-  const entrant2 = set.slots[1].entrant;
-  const standing2 = set.slots[1].standing;
-  const games = Array.isArray(set.games) ? (set.games as any[]) : [];
-  return {
-    id: set.id,
-    state: set.state,
-    entrant1Id: entrant1 ? entrant1.id : null,
-    entrant1Score: standing1 ? standing1.stats.score.value : null,
-    entrant2Id: entrant2 ? entrant2.id : null,
-    entrant2Score: standing2 ? standing2.stats.score.value : null,
-    winnerId: set.winnerId,
-    updatedAt: set.updatedAt,
-    stationId: set.station?.id ?? null,
-    streamId: set.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
-  };
+  return updateSetToApiSetUpdate(data.updateBracketSet);
 }
 
 const emitter = new EventEmitter();
@@ -1194,7 +1125,9 @@ async function tryNextTransaction(id: number, slug: string) {
         let updates: ApiSetUpdate[] = [];
         if (transaction.type === TransactionType.RESET) {
           try {
-            updates = [await resetSet(transaction.setId)];
+            updates = [
+              await resetSet(transaction.setId, transaction.isRecursive),
+            ];
           } catch (e: any) {
             if (
               e instanceof ApiError &&
@@ -1357,11 +1290,18 @@ async function tryNextTransaction(id: number, slug: string) {
               }
             }
           }
-        } else {
-          throw new Error(`unknown transaciton type: ${transaction.type}`);
         }
         if (updates.length > 0) {
           finalizeTransaction(transaction.transactionNum, updates);
+          if (
+            transaction.type === TransactionType.RESET &&
+            transaction.isRecursive
+          ) {
+            await getApiTournament(slug);
+            await Promise.all(
+              getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
+            );
+          }
           emitter.emit('transaction');
         }
         updateSyncResultWithSuccess();

@@ -28,6 +28,7 @@ import {
   getTournament,
   getTournamentId,
   getTournaments,
+  makeResetRecursive,
   resetSet,
   setAutoSync,
   setTournamentId,
@@ -306,6 +307,15 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     (event: IpcMainInvokeEvent, transactionNum: number) => {
       const tournamentId = deleteTransaction(transactionNum);
       updateClients();
+      maybeTryNow(tournamentId);
+    },
+  );
+
+  ipcMain.removeHandler('makeResetRecursive');
+  ipcMain.handle(
+    'makeResetRecursive',
+    (event: IpcMainInvokeEvent, transactionNum: number) => {
+      const tournamentId = makeResetRecursive(transactionNum);
       maybeTryNow(tournamentId);
     },
   );

@@ -54,6 +54,8 @@ const electronHandler = {
     ipcRenderer.invoke('reportSet', id, winnerId, isDQ, entrantScores),
   deleteTransaction: (transactionNum: number): Promise<void> =>
     ipcRenderer.invoke('deleteTransaction', transactionNum),
+  makeResetRecursive: (transactionNum: number): Promise<void> =>
+    ipcRenderer.invoke('makeResetRecursive', transactionNum),
   preemptReset: (setId: number): Promise<void> =>
     ipcRenderer.invoke('preemptReset', setId),
   getConflictResolve: (

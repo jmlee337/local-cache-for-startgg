@@ -1598,9 +1598,26 @@ export default function Tournament() {
           <DialogContent>
             {conflictResolve && (
               <Stack direction="row" spacing="32px" alignItems="start">
-                <Stack flexShrink={0}>
-                  <Typography variant="body2">Server</Typography>
-                  <SetListItemInner set={conflictResolve.serverSet} />
+                <Stack spacing="16px" alignItems="start" flexShrink={0}>
+                  <Box>
+                    <Typography variant="body2">Server</Typography>
+                    <SetListItemInner set={conflictResolve.serverSets[0]} />
+                  </Box>
+                  {conflictResolve.serverSets.length > 1 &&
+                    conflictResolve.serverSets.slice(1).map((serverSet) => (
+                      <Box>
+                        <SetListItemInner key={serverSet.id} set={serverSet} />
+                      </Box>
+                    ))}
+                  {conflictResolve.serverSets.length === 1 &&
+                    conflictResolve.reason ===
+                      ConflictReason.RESET_DEPENDENT_SETS && (
+                      <Typography variant="caption">
+                        Try reopening this dialog
+                        <br />
+                        to see dependent sets
+                      </Typography>
+                    )}
                 </Stack>
                 <Stack spacing="16px" alignItems="start" flexShrink={0}>
                   <div
@@ -1618,21 +1635,29 @@ export default function Tournament() {
                   </div>
                   {conflictResolve.localSets.length > 1 &&
                     conflictResolve.localSets.slice(1).map((localSet) => (
-                      <Box>
+                      <Box key={localSet.transactionNum}>
                         <Typography variant="body2">
                           Local {getDescription(localSet.type)}
                         </Typography>
-                        <SetListItemInner
-                          key={localSet.transactionNum}
-                          set={localSet.set}
-                        />
+                        <SetListItemInner set={localSet.set} />
                       </Box>
                     ))}
                 </Stack>
                 <Stack spacing="8px" alignItems="stretch">
                   {conflictResolve.reason ===
                     ConflictReason.RESET_DEPENDENT_SETS && (
-                    <Button color="warning" variant="contained">
+                    <Button
+                      color="error"
+                      variant="contained"
+                      onClick={() => {
+                        if (conflict) {
+                          window.electron.makeResetRecursive(
+                            conflict.transactionNum,
+                          );
+                          setConflictDialogOpen(false);
+                        }
+                      }}
+                    >
                       Reset dependent sets
                     </Button>
                   )}

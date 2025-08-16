@@ -179,6 +179,7 @@ export function dbInit(window: BrowserWindow) {
       eventId INTEGER NOT NULL,
       type INTEGER NOT NULL,
       setId INTEGER NOT NULL,
+      isRecursive INTEGER,
       stationId INTEGER,
       streamId INTEGER,
       expectedEntrant1Id INTEGER,
@@ -595,6 +596,66 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
   };
 }
 
+function findResetDependentSets(set: DbSet) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dependentSets = db
+    .prepare(
+      `SELECT *
+        FROM sets
+        WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id`,
+    )
+    .all(set) as DbSet[];
+  if (set.wProgressionSeedId) {
+    const affectedSet = db
+      .prepare(
+        `SELECT *
+          FROM sets
+          WHERE eventId = @eventId
+            AND (
+              entrant1PrereqId = @wProgressionSeedId
+                OR entrant2PrereqId = @wProgressionSeedId
+            )`,
+      )
+      .get(set) as DbSet | undefined;
+    if (affectedSet) {
+      dependentSets.push(affectedSet);
+    }
+  }
+  if (set.lProgressionSeedId) {
+    const affectedSet = db
+      .prepare(
+        `SELECT *
+          FROM sets
+          WHERE eventId = @eventId
+            AND (
+              entrant1PrereqId = @lProgressionSeedId
+                OR entrant2PrereqId = @lProgressionSeedId
+            )`,
+      )
+      .get(set) as DbSet | undefined;
+    if (affectedSet) {
+      dependentSets.push(affectedSet);
+    }
+  }
+
+  const recursiveDependentSets: DbSet[] = [];
+  const allDependentSets: DbSet[] = [];
+  dependentSets.forEach((dependentSet) => {
+    if (dependentSet.state === 3) {
+      recursiveDependentSets.push(dependentSet);
+    } else if (dependentSet.state !== 1) {
+      allDependentSets.push(dependentSet);
+    }
+  });
+  recursiveDependentSets.forEach((dependentSet) => {
+    allDependentSets.push(...findResetDependentSets(dependentSet));
+  });
+  return allDependentSets;
+}
+
 export function getConflictResolve(
   setId: number,
   transactionNum: number,
@@ -609,7 +670,6 @@ export function getConflictResolve(
   if (!set) {
     throw new Error(`set: ${setId} not found`);
   }
-  const serverSet = dbSetToRendererSet(set);
 
   const event = db
     .prepare('SELECT * FROM events WHERE id = @eventId')
@@ -659,6 +719,16 @@ export function getConflictResolve(
     );
   }
 
+  const serverSets = [dbSetToRendererSet(set)];
+  if (conflictTransactions[0].reason === ConflictReason.RESET_DEPENDENT_SETS) {
+    const dependentSets = findResetDependentSets(set);
+    serverSets.push(
+      ...dependentSets
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map(dbSetToRendererSet),
+    );
+  }
+
   const transactionNums = conflictTransactions.map(
     (transaction) => transaction.transactionNum,
   );
@@ -700,7 +770,7 @@ export function getConflictResolve(
     phaseName: phase.name,
     poolName: pool.name,
     reason: conflictTransactions[0].reason,
-    serverSet,
+    serverSets,
     localSets,
   };
 }
@@ -723,6 +793,11 @@ function insertTransaction(
       eventId,
       type: apiTransaction.type,
       setId: apiTransaction.setId,
+      isRecursive:
+        apiTransaction.type === TransactionType.RESET &&
+        apiTransaction.isRecursive
+          ? 1
+          : null,
       stationId:
         apiTransaction.type === TransactionType.ASSIGN_STATION
           ? apiTransaction.stationId
@@ -1068,6 +1143,8 @@ export function resetSet(
             tournamentId,
             transactionNum,
             requiresUpdateHack,
+            statePresent,
+            state,
             entrant${wProgressionSet.entrantNum}IdPresent,
             entrant${wProgressionSet.entrantNum}Id,
             updatedAt
@@ -1078,6 +1155,8 @@ export function resetSet(
             @eventId,
             @tournamentId,
             @transactionNum,
+            1,
+            1,
             1,
             1,
             null,
@@ -1105,6 +1184,8 @@ export function resetSet(
             tournamentId,
             transactionNum,
             requiresUpdateHack,
+            statePresent,
+            state,
             entrant${lProgressionSet.entrantNum}IdPresent,
             entrant${lProgressionSet.entrantNum}Id,
             updatedAt
@@ -1115,6 +1196,8 @@ export function resetSet(
             @eventId,
             @tournamentId,
             @transactionNum,
+            1,
+            1,
             1,
             1,
             null,
@@ -1137,6 +1220,7 @@ export function resetSet(
       transactionNum,
       type: TransactionType.RESET,
       setId: id,
+      isRecursive: false,
     },
     set.tournamentId,
     set.eventId,
@@ -1786,10 +1870,15 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
       gameNumToSelections.set(dbSelection.gameNum, [selection]);
     }
   });
-  if (
-    dbTransaction.type === TransactionType.RESET ||
-    dbTransaction.type === TransactionType.START
-  ) {
+  if (dbTransaction.type === TransactionType.RESET) {
+    return {
+      transactionNum: dbTransaction.transactionNum,
+      type: dbTransaction.type,
+      setId: dbTransaction.setId,
+      isRecursive: dbTransaction.isRecursive === 1,
+    };
+  }
+  if (dbTransaction.type === TransactionType.START) {
     return {
       transactionNum: dbTransaction.transactionNum,
       type: dbTransaction.type,
@@ -2237,36 +2326,41 @@ function getSyncStatus(
       if (afterSet.state === 1) {
         return { syncStatus: SyncStatus.BEHIND };
       }
-      const dependentSets = db!
-        .prepare(
-          'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
-        )
-        .all({ id: afterSet.id }) as DbSet[];
-      if (afterSet.lProgressionSeedId) {
-        const maybeSet = db!
-          .prepare(
-            'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-          )
-          .get({ seedId: afterSet.lProgressionSeedId }) as DbSet | undefined;
-        if (maybeSet) {
-          dependentSets.push(maybeSet);
-        }
+      if (dbTransaction.isRecursive === 1) {
+        return { syncStatus: SyncStatus.AHEAD };
       }
-      if (afterSet.wProgressionSeedId) {
-        const maybeSet = db!
+      if (afterSet.state === 3) {
+        const dependentSets = db!
           .prepare(
-            'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+            'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
           )
-          .get({ seedId: afterSet.wProgressionSeedId }) as DbSet | undefined;
-        if (maybeSet) {
-          dependentSets.push(maybeSet);
+          .all({ id: afterSet.id }) as DbSet[];
+        if (afterSet.lProgressionSeedId) {
+          const maybeSet = db!
+            .prepare(
+              'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+            )
+            .get({ seedId: afterSet.lProgressionSeedId }) as DbSet | undefined;
+          if (maybeSet) {
+            dependentSets.push(maybeSet);
+          }
         }
-      }
-      if (dependentSets.some((dbSet) => dbSet.state !== 1)) {
-        return {
-          syncStatus: SyncStatus.CONFLICT,
-          reason: ConflictReason.RESET_DEPENDENT_SETS,
-        };
+        if (afterSet.wProgressionSeedId) {
+          const maybeSet = db!
+            .prepare(
+              'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+            )
+            .get({ seedId: afterSet.wProgressionSeedId }) as DbSet | undefined;
+          if (maybeSet) {
+            dependentSets.push(maybeSet);
+          }
+        }
+        if (dependentSets.some((dbSet) => dbSet.state !== 1)) {
+          return {
+            syncStatus: SyncStatus.CONFLICT,
+            reason: ConflictReason.RESET_DEPENDENT_SETS,
+          };
+        }
       }
       return { syncStatus: SyncStatus.AHEAD };
     }
@@ -2394,7 +2488,7 @@ export function updateEventSets(
             stationId = @stationId,
             streamId = @streamId,
             hasStageData = @hasStageData
-          WHERE id = @id AND updatedAt < @updatedAt`,
+          WHERE id = @id AND updatedAt <= @updatedAt`,
       )
       .run(set);
   });
@@ -2709,6 +2803,27 @@ export function markTransactionConflict(
       SET isConflict = 1, reason = @reason
       WHERE transactionNum = @transactionNum`,
   ).run({ transactionNum, reason });
+}
+
+export function makeResetRecursive(transactionNum: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const transaction = db
+    .prepare(
+      `UPDATE transactions
+        SET isRecursive = 1, isConflict = NULL, reason = NULL
+        WHERE transactionNum = @transactionNum AND type = @type
+        RETURNING *`,
+    )
+    .get({ transactionNum, type: TransactionType.RESET }) as
+    | DbTransaction
+    | undefined;
+  if (!transaction) {
+    throw new Error(`no reset transaction found for num: ${transactionNum}`);
+  }
+  return transaction.tournamentId;
 }
 
 export function getEventPoolIds(id: number): Set<number> {

@@ -107,7 +107,7 @@ export type RendererConflictResolve = {
   phaseName: string;
   poolName: string;
   reason: ConflictReason;
-  serverSet: RendererSet;
+  serverSets: RendererSet[];
   localSets: RendererConflictLocalSet[];
 };
 
@@ -289,6 +289,7 @@ export type DbTransaction = {
   eventId: number;
   type: TransactionType;
   setId: number;
+  isRecursive: null | 1;
   stationId: number | null;
   streamId: number | null;
   expectedEntrant1Id: number | null;
@@ -318,7 +319,11 @@ export type ApiTransaction = {
   transactionNum: number;
 } & (
   | {
-      type: TransactionType.RESET | TransactionType.START;
+      type: TransactionType.RESET;
+      isRecursive: boolean;
+    }
+  | {
+      type: TransactionType.START;
     }
   | {
       type: TransactionType.ASSIGN_STATION;
