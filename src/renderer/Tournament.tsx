@@ -63,7 +63,27 @@ import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
 
-const SET_FIXED_WIDTH = '228px';
+const SET_FIXED_WIDTH = '220px';
+
+const CONFLICT_BACKGROUND_COLOR = '#ed6c02';
+const LOSERS_BACKGROUND_COLOR = '#ffebee';
+const LOSERS_BACKGROUND_COLOR_COMPLETED = '#e53935';
+const SET_BACKGROUND_COLOR = '#fafafa';
+const SET_BACKGROUND_COLOR_COMPLETED = '#757575';
+const TEXT_COLOR_LIGHT = '#fff';
+
+function getBackgroundColor(set: RendererSet) {
+  if (set.state === 3) {
+    if (set.round < 0) {
+      return LOSERS_BACKGROUND_COLOR_COMPLETED;
+    }
+    return SET_BACKGROUND_COLOR_COMPLETED;
+  }
+  if (set.round < 0) {
+    return LOSERS_BACKGROUND_COLOR;
+  }
+  return SET_BACKGROUND_COLOR;
+}
 
 function SetEntrant({
   entrantName,
@@ -205,17 +225,17 @@ function SetListItemButton({
   conflictTransactionNum: number | null;
   reportSet: (set: RendererSet) => void;
 }) {
-  let backgroundColor: string | undefined;
-  if (conflictTransactionNum !== null) {
-    backgroundColor = '#ed6c02';
-  } else if (set.state === 3) {
-    backgroundColor = '#eeeeee';
-  }
   return (
     <ListItemButton
       style={{
-        backgroundColor,
-        color: conflictTransactionNum !== null ? '#fff' : undefined,
+        backgroundColor:
+          conflictTransactionNum !== null
+            ? CONFLICT_BACKGROUND_COLOR
+            : getBackgroundColor(set),
+        color:
+          conflictTransactionNum !== null || set.state === 3
+            ? TEXT_COLOR_LIGHT
+            : undefined,
         flexGrow: 0,
         opacity: '100%',
         padding: '8px',
@@ -239,10 +259,11 @@ function PoolListItem({
   conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
 }) {
-  const completedSets = pool.sets.filter((set) => set.state === 3);
-  const openSets = pool.sets.filter((set) => set.state !== 3);
   const [open, setOpen] = useState(false);
-  const [completedOpen, setCompletedOpen] = useState(openSets.length === 0);
+  const [completedOpen, setCompletedOpen] = useState(true);
+
+  const winnersSets = pool.sets.filter((set) => set.round > 0);
+  const losersSets = pool.sets.filter((set) => set.round < 0);
 
   return (
     <Box marginLeft="16px">
@@ -271,52 +292,43 @@ function PoolListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        {completedSets.length > 0 && (
-          <>
-            <ListItemButton
-              disableGutters
-              style={{
-                justifyContent: 'space-between',
-                marginLeft: '16px',
-                marginRight: '-8px',
-                padding: '0 16px 0 0',
-              }}
-              onClick={() => {
-                setCompletedOpen(!completedOpen);
-              }}
-            >
-              <ListItemText style={{ flexGrow: 0 }}>
-                <Typography variant="caption">completed</Typography>
-              </ListItemText>
-              {completedSets.length > 0 &&
-                (completedOpen ? (
-                  <Tooltip title="Hide completed sets">
-                    <KeyboardArrowDown />
-                  </Tooltip>
-                ) : (
-                  <Tooltip title="Show completed sets">
-                    <KeyboardArrowRight />
-                  </Tooltip>
-                ))}
-            </ListItemButton>
-            <Collapse in={completedOpen}>
-              <Stack
-                direction="row"
-                flexWrap="wrap"
-                gap="8px"
-                margin="8px 0 8px 16px"
-              >
-                {completedSets
-                  .sort((a, b) => {
-                    if (a.round === b.round) {
-                      if (a.identifier.length === b.identifier.length) {
-                        return a.identifier.localeCompare(b.identifier);
-                      }
-                      return a.identifier.length - b.identifier.length;
-                    }
-                    return a.ordinal - b.ordinal;
-                  })
-                  .map((set) => (
+        <ListItemButton
+          disableGutters
+          style={{
+            justifyContent: 'space-between',
+            marginLeft: '16px',
+            marginRight: '-8px',
+            padding: '0 16px 0 0',
+          }}
+          onClick={() => {
+            setCompletedOpen(!completedOpen);
+          }}
+        >
+          <ListItemText style={{ flexGrow: 0 }}>
+            <Typography variant="caption">completed</Typography>
+          </ListItemText>
+          {completedOpen ? (
+            <Tooltip title="Hide completed sets">
+              <Visibility />
+            </Tooltip>
+          ) : (
+            <Tooltip title="Show completed sets">
+              <VisibilityOff />
+            </Tooltip>
+          )}
+        </ListItemButton>
+        {winnersSets.length > 0 && (
+          <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
+            {winnersSets
+              .sort((a, b) => {
+                if (a.identifier.length === b.identifier.length) {
+                  return a.identifier.localeCompare(b.identifier);
+                }
+                return a.identifier.length - b.identifier.length;
+              })
+              .map(
+                (set) =>
+                  (completedOpen || set.state !== 3) && (
                     <SetListItemButton
                       key={set.id}
                       set={set}
@@ -327,35 +339,40 @@ function PoolListItem({
                       }
                       reportSet={reportSet}
                     />
-                  ))}
-              </Stack>
-            </Collapse>
-          </>
+                  ),
+              )}
+          </Stack>
         )}
-        {pool.sets.length > 0 && (
-          <Stack direction="row" flexWrap="wrap" gap="8px" marginLeft="16px">
-            {openSets
+        {losersSets.length > 0 && (
+          <Stack
+            direction="row"
+            flexWrap="wrap"
+            gap="8px"
+            marginLeft="16px"
+            marginTop="8px"
+          >
+            {losersSets
               .sort((a, b) => {
-                if (a.round === b.round) {
-                  if (a.identifier.length === b.identifier.length) {
-                    return a.identifier.localeCompare(b.identifier);
-                  }
-                  return a.identifier.length - b.identifier.length;
+                if (a.identifier.length === b.identifier.length) {
+                  return a.identifier.localeCompare(b.identifier);
                 }
-                return a.ordinal - b.ordinal;
+                return a.identifier.length - b.identifier.length;
               })
-              .map((set) => (
-                <SetListItemButton
-                  key={set.id}
-                  set={set}
-                  conflictTransactionNum={
-                    conflict && conflict.setId === set.id
-                      ? conflict.transactionNum
-                      : null
-                  }
-                  reportSet={reportSet}
-                />
-              ))}
+              .map(
+                (set) =>
+                  (completedOpen || set.state !== 3) && (
+                    <SetListItemButton
+                      key={set.id}
+                      set={set}
+                      conflictTransactionNum={
+                        conflict && conflict.setId === set.id
+                          ? conflict.transactionNum
+                          : null
+                      }
+                      reportSet={reportSet}
+                    />
+                  ),
+              )}
           </Stack>
         )}
       </Collapse>
@@ -835,7 +852,7 @@ export default function Tournament() {
                     setUnloadedOpen(false);
                   }}
                 >
-                  <VisibilityOff />
+                  <Visibility />
                 </IconButton>
               </Tooltip>
             ) : (
@@ -845,7 +862,7 @@ export default function Tournament() {
                     setUnloadedOpen(true);
                   }}
                 >
-                  <Visibility />
+                  <VisibilityOff />
                 </IconButton>
               </Tooltip>
             ))}
@@ -1606,7 +1623,18 @@ export default function Tournament() {
                   flexShrink={0}
                   marginLeft="-8px"
                 >
-                  <Box padding="0 8px">
+                  <Box
+                    padding="0 8px"
+                    sx={{
+                      backgroundColor: getBackgroundColor(
+                        conflictResolve.serverSets[0],
+                      ),
+                      color:
+                        conflictResolve.serverSets[0].state === 3
+                          ? TEXT_COLOR_LIGHT
+                          : undefined,
+                    }}
+                  >
                     <Typography variant="body2">Server</Typography>
                     <SetListItemInner set={conflictResolve.serverSets[0]} />
                   </Box>
@@ -1625,7 +1653,16 @@ export default function Tournament() {
                           }
                         />
                       ) : (
-                        <Box padding="0 8px">
+                        <Box
+                          padding="0 8px"
+                          sx={{
+                            backgroundColor: getBackgroundColor(serverSet),
+                            color:
+                              serverSet.state === 3
+                                ? TEXT_COLOR_LIGHT
+                                : undefined,
+                          }}
+                        >
                           <SetListItemInner
                             key={serverSet.id}
                             set={serverSet}
@@ -1649,12 +1686,10 @@ export default function Tournament() {
                   flexShrink={0}
                   padding="0 8px"
                 >
-                  <div
-                    style={{
-                      backgroundColor: '#ed6c02',
-                      boxSizing: 'border-box',
-                      color: '#fff',
-                      margin: '-8px',
+                  <Box
+                    sx={{
+                      backgroundColor: CONFLICT_BACKGROUND_COLOR,
+                      color: TEXT_COLOR_LIGHT,
                       padding: '8px',
                       width: SET_FIXED_WIDTH,
                     }}
@@ -1663,11 +1698,21 @@ export default function Tournament() {
                       Local {getDescription(conflictResolve.localSets[0].type)}
                     </Typography>
                     <SetListItemInner set={conflictResolve.localSets[0].set} />
-                  </div>
+                  </Box>
                   <div style={{ marginTop: '8px' }} />
                   {conflictResolve.localSets.length > 1 &&
                     conflictResolve.localSets.slice(1).map((localSet) => (
-                      <Box key={localSet.transactionNum}>
+                      <Box
+                        key={localSet.transactionNum}
+                        sx={{
+                          backgroundColor: getBackgroundColor(localSet.set),
+                          color:
+                            localSet.set.state === 3
+                              ? TEXT_COLOR_LIGHT
+                              : undefined,
+                          padding: '8px',
+                        }}
+                      >
                         <Typography variant="body2">
                           Local {getDescription(localSet.type)}
                         </Typography>
