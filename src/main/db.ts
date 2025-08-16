@@ -646,7 +646,8 @@ function findResetDependentSets(set: DbSet) {
   dependentSets.forEach((dependentSet) => {
     if (dependentSet.state === 3) {
       recursiveDependentSets.push(dependentSet);
-    } else if (dependentSet.state !== 1) {
+    }
+    if (dependentSet.state !== 1) {
       allDependentSets.push(dependentSet);
     }
   });
@@ -654,6 +655,76 @@ function findResetDependentSets(set: DbSet) {
     allDependentSets.push(...findResetDependentSets(dependentSet));
   });
   return allDependentSets;
+}
+
+function findEntrantDependencySets(set: DbSet): DbSet[] {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dependencySetIds = new Set<number>();
+  const dependencySets: DbSet[] = [];
+  if (set.entrant1PrereqType === 'set') {
+    const dependencySet = db
+      .prepare('SELECT * FROM sets WHERE id = @entrant1PrereqId')
+      .get(set) as DbSet | undefined;
+    if (dependencySet && dependencySet.state !== 3) {
+      dependencySetIds.add(dependencySet.id);
+      dependencySets.push(dependencySet);
+    }
+  } else if (set.entrant1PrereqType === 'seed') {
+    const dependencySet = db
+      .prepare(
+        `SELECT *
+          FROM sets
+          WHERE eventId = @eventId
+            AND (
+              wProgressionSeedId = @entrant1PrereqId
+                OR lProgressionSeedId = @entrant1PrereqId
+            )`,
+      )
+      .get(set) as DbSet | undefined;
+    if (dependencySet && dependencySet.state !== 3) {
+      dependencySetIds.add(dependencySet.id);
+      dependencySets.push(dependencySet);
+    }
+  }
+  if (set.entrant2PrereqType === 'set') {
+    const dependencySet = db
+      .prepare('SELECT * FROM sets WHERE id = @entrant2PrereqId')
+      .get(set) as DbSet | undefined;
+    if (dependencySet && dependencySet.state !== 3) {
+      dependencySetIds.add(dependencySet.id);
+      dependencySets.push(dependencySet);
+    }
+  } else if (set.entrant2PrereqType === 'seed') {
+    const dependencySet = db
+      .prepare(
+        `SELECT *
+          FROM sets
+          WHERE eventId = @eventId
+            AND (
+              wProgressionSeedId = @entrant2PrereqId
+                OR lProgressionSeedId = @entrant2PrereqId
+            )`,
+      )
+      .get(set) as DbSet | undefined;
+    if (dependencySet && dependencySet.state !== 3) {
+      dependencySetIds.add(dependencySet.id);
+      dependencySets.push(dependencySet);
+    }
+  }
+
+  const recursiveDependencySets = dependencySets.flatMap(
+    findEntrantDependencySets,
+  );
+  recursiveDependencySets.forEach((recursiveDependencySet) => {
+    if (!dependencySetIds.has(recursiveDependencySet.id)) {
+      dependencySetIds.add(recursiveDependencySet.id);
+      dependencySets.push(recursiveDependencySet);
+    }
+  });
+  return dependencySets;
 }
 
 export function getConflictResolve(
@@ -725,6 +796,20 @@ export function getConflictResolve(
     serverSets.push(
       ...dependentSets
         .sort((a, b) => a.ordinal - b.ordinal)
+        .map(dbSetToRendererSet),
+    );
+  } else if (
+    conflictTransactions[0].reason === ConflictReason.MISSING_ENTRANTS
+  ) {
+    const dependencySets = findEntrantDependencySets(set);
+    serverSets.push(
+      ...dependencySets
+        .sort((a, b) => {
+          if (a.phaseId !== b.phaseId) {
+            return b.phaseId - a.phaseId;
+          }
+          return b.ordinal - a.ordinal;
+        })
         .map(dbSetToRendererSet),
     );
   }

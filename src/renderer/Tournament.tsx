@@ -35,6 +35,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  Paper,
   Stack,
   TextField,
   Toolbar,
@@ -61,6 +62,8 @@ import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
+
+const SET_FIXED_WIDTH = '228px';
 
 function SetEntrant({
   entrantName,
@@ -197,12 +200,10 @@ function SetListItemButton({
   set,
   conflictTransactionNum,
   reportSet,
-  resolveConflict,
 }: {
   set: RendererSet;
   conflictTransactionNum: number | null;
   reportSet: (set: RendererSet) => void;
-  resolveConflict: (setId: number, transactionNum: number) => void;
 }) {
   let backgroundColor: string | undefined;
   if (conflictTransactionNum !== null) {
@@ -218,14 +219,10 @@ function SetListItemButton({
         flexGrow: 0,
         opacity: '100%',
         padding: '8px',
-        width: '228px',
+        width: SET_FIXED_WIDTH,
       }}
       onClick={() => {
-        if (conflictTransactionNum !== null) {
-          resolveConflict(set.id, conflictTransactionNum);
-        } else {
-          reportSet(set);
-        }
+        reportSet(set);
       }}
     >
       <SetListItemInner set={set} />
@@ -237,12 +234,10 @@ function PoolListItem({
   pool,
   conflict,
   reportSet,
-  resolveConflict,
 }: {
   pool: RendererPool;
   conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
-  resolveConflict: (setId: number, transactionNum: number) => void;
 }) {
   const completedSets = pool.sets.filter((set) => set.state === 3);
   const openSets = pool.sets.filter((set) => set.state !== 3);
@@ -331,7 +326,6 @@ function PoolListItem({
                           : null
                       }
                       reportSet={reportSet}
-                      resolveConflict={resolveConflict}
                     />
                   ))}
               </Stack>
@@ -360,7 +354,6 @@ function PoolListItem({
                       : null
                   }
                   reportSet={reportSet}
-                  resolveConflict={resolveConflict}
                 />
               ))}
           </Stack>
@@ -374,12 +367,10 @@ function PhaseListItem({
   phase,
   conflict,
   reportSet,
-  resolveConflict,
 }: {
   phase: RendererPhase;
   conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
-  resolveConflict: (setId: number, transactionNum: number) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -417,7 +408,6 @@ function PhaseListItem({
               pool={pool}
               conflict={conflict}
               reportSet={reportSet}
-              resolveConflict={resolveConflict}
             />
           ))}
       </Collapse>
@@ -429,13 +419,11 @@ function EventListItem({
   event,
   conflict,
   reportSet,
-  resolveConflict,
   showError,
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
-  resolveConflict: (setId: number, transactionNum: number) => void;
   showError: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -485,7 +473,6 @@ function EventListItem({
             phase={phase}
             conflict={conflict}
             reportSet={reportSet}
-            resolveConflict={resolveConflict}
           />
         ))}
     </>
@@ -711,12 +698,28 @@ export default function Tournament() {
   const [starting, setStarting] = useState(false);
 
   const [reportSet, setReportSet] = useState<RendererSet | null>(null);
+  const [reportPreempt, setReportPreempt] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportWinnerId, setReportWinnerId] = useState(0);
   const [reportIsDq, setReportIsDq] = useState(false);
   const [reportEntrant1Score, setReportEntrant1Score] = useState(0);
   const [reportEntrant2Score, setReportEntrant2Score] = useState(0);
   const [reporting, setReporting] = useState(false);
+
+  const reportSetFn = (
+    newReportSet: RendererSet,
+    newReportPreempt: boolean = false,
+  ) => {
+    setReportWinnerId(newReportSet.winnerId ?? 0);
+    setReportIsDq(
+      newReportSet.entrant1Score === -1 || newReportSet.entrant2Score === -1,
+    );
+    setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
+    setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
+    setReportSet(newReportSet);
+    setReportPreempt(newReportPreempt);
+    setReportDialogOpen(true);
+  };
 
   let reportGameData:
     | [
@@ -756,12 +759,6 @@ export default function Tournament() {
   const [conflictResolve, setConflictResolve] =
     useState<RendererConflictResolve | null>(null);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
-  const openConflictDialog = async (setId: number, transactionNum: number) => {
-    setConflictResolve(
-      await window.electron.getConflictResolve(setId, transactionNum),
-    );
-    setConflictDialogOpen(true);
-  };
 
   const [conflict, setConflict] = useState<RendererConflict | null>(null);
   useEffect(() => {
@@ -799,8 +796,14 @@ export default function Tournament() {
                 color="warning"
                 size="large"
                 variant="contained"
-                onClick={() => {
-                  openConflictDialog(conflict.setId, conflict.transactionNum);
+                onClick={async () => {
+                  setConflictResolve(
+                    await window.electron.getConflictResolve(
+                      conflict.setId,
+                      conflict.transactionNum,
+                    ),
+                  );
+                  setConflictDialogOpen(true);
                 }}
               >
                 Conflict!
@@ -974,7 +977,6 @@ export default function Tournament() {
                   event={event}
                   conflict={conflict}
                   reportSet={() => {}}
-                  resolveConflict={() => {}}
                   showError={() => {}}
                 />
               ))}
@@ -988,18 +990,7 @@ export default function Tournament() {
                 key={event.id}
                 event={event}
                 conflict={conflict}
-                reportSet={(newReportSet: RendererSet) => {
-                  setReportWinnerId(newReportSet.winnerId ?? 0);
-                  setReportIsDq(
-                    newReportSet.entrant1Score === -1 ||
-                      newReportSet.entrant2Score === -1,
-                  );
-                  setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
-                  setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
-                  setReportSet(newReportSet);
-                  setReportDialogOpen(true);
-                }}
-                resolveConflict={openConflictDialog}
+                reportSet={reportSetFn}
                 showError={showError}
               />
             ))}
@@ -1387,7 +1378,7 @@ export default function Tournament() {
           <DialogActions>
             <IconButton
               color="primary"
-              disabled={choosing}
+              disabled={choosing || reportPreempt}
               size="small"
               onClick={async () => {
                 setStationStreamDialogOpen(true);
@@ -1397,7 +1388,7 @@ export default function Tournament() {
             </IconButton>
             <IconButton
               color="error"
-              disabled={reportSet?.state === 1 || resetting}
+              disabled={reportSet?.state === 1 || resetting || reportPreempt}
               onClick={async () => {
                 setResetting(true);
                 try {
@@ -1418,7 +1409,8 @@ export default function Tournament() {
                 starting ||
                 !reportSet?.entrant1Id ||
                 !reportSet?.entrant2Id ||
-                !(reportSet?.state === 1 || reportSet?.state === 6)
+                !(reportSet?.state === 1 || reportSet?.state === 6) ||
+                reportPreempt
               }
               onClick={async () => {
                 setStarting(true);
@@ -1448,13 +1440,23 @@ export default function Tournament() {
               onClick={async () => {
                 setReporting(true);
                 try {
-                  await window.electron.reportSet(
-                    reportSet!.id,
-                    reportWinnerId,
-                    reportIsDq,
-                    reportGameData,
-                  );
+                  if (reportPreempt) {
+                    await window.electron.preemptReport(
+                      reportSet!.id,
+                      reportWinnerId,
+                      reportIsDq,
+                      reportGameData,
+                    );
+                  } else {
+                    await window.electron.reportSet(
+                      reportSet!.id,
+                      reportWinnerId,
+                      reportIsDq,
+                      reportGameData,
+                    );
+                  }
                   setReportDialogOpen(false);
+                  setConflictDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
                 } finally {
@@ -1587,7 +1589,7 @@ export default function Tournament() {
             direction="row"
             alignItems="center"
             padding="16px 24px"
-            spacing="8px"
+            gap="8px"
           >
             <Typography variant="h6">Resolve Conflict:</Typography>
             <Typography variant="body1">
@@ -1597,18 +1599,40 @@ export default function Tournament() {
           </Stack>
           <DialogContent>
             {conflictResolve && (
-              <Stack direction="row" spacing="32px" alignItems="start">
-                <Stack spacing="16px" alignItems="start" flexShrink={0}>
-                  <Box>
+              <Stack direction="row" gap="8px" alignItems="start">
+                <Stack
+                  gap="8px"
+                  alignItems="start"
+                  flexShrink={0}
+                  marginLeft="-8px"
+                >
+                  <Box padding="0 8px">
                     <Typography variant="body2">Server</Typography>
                     <SetListItemInner set={conflictResolve.serverSets[0]} />
                   </Box>
                   {conflictResolve.serverSets.length > 1 &&
-                    conflictResolve.serverSets.slice(1).map((serverSet) => (
-                      <Box>
-                        <SetListItemInner key={serverSet.id} set={serverSet} />
-                      </Box>
-                    ))}
+                    conflictResolve.serverSets.slice(1).map((serverSet) =>
+                      conflictResolve.reason ===
+                        ConflictReason.MISSING_ENTRANTS &&
+                      serverSet.entrant1Id &&
+                      serverSet.entrant2Id ? (
+                        <SetListItemButton
+                          key={serverSet.id}
+                          set={serverSet}
+                          conflictTransactionNum={null}
+                          reportSet={(rendererSet) =>
+                            reportSetFn(rendererSet, /* reportPreempt */ true)
+                          }
+                        />
+                      ) : (
+                        <Box padding="0 8px">
+                          <SetListItemInner
+                            key={serverSet.id}
+                            set={serverSet}
+                          />
+                        </Box>
+                      ),
+                    )}
                   {conflictResolve.serverSets.length === 1 &&
                     conflictResolve.reason ===
                       ConflictReason.RESET_DEPENDENT_SETS && (
@@ -1619,13 +1643,15 @@ export default function Tournament() {
                       </Typography>
                     )}
                 </Stack>
-                <Stack spacing="16px" alignItems="start" flexShrink={0}>
+                <Stack gap="16px" alignItems="start" flexShrink={0}>
                   <div
                     style={{
                       backgroundColor: '#ed6c02',
+                      boxSizing: 'border-box',
                       color: '#fff',
                       margin: '-8px',
                       padding: '8px',
+                      width: SET_FIXED_WIDTH,
                     }}
                   >
                     <Typography variant="body2">
@@ -1643,7 +1669,7 @@ export default function Tournament() {
                       </Box>
                     ))}
                 </Stack>
-                <Stack spacing="8px" alignItems="stretch">
+                <Stack gap="8px" alignItems="stretch" marginLeft="8px">
                   {conflictResolve.reason ===
                     ConflictReason.RESET_DEPENDENT_SETS && (
                     <Button
@@ -1663,7 +1689,22 @@ export default function Tournament() {
                   )}
                   {conflictResolve.reason ===
                     ConflictReason.MISSING_ENTRANTS && (
-                    <Button variant="contained">Report dependency sets</Button>
+                    <Paper
+                      elevation={2}
+                      style={{
+                        boxSizing: 'border-box',
+                        padding: '6px 16px',
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        fontWeight="700"
+                        lineHeight="24.5px"
+                        textAlign="center"
+                      >
+                        REPORT DEPENDENCY SETS
+                      </Typography>
+                    </Paper>
                   )}
                   {conflictResolve.reason ===
                     ConflictReason.UPDATE_CHANGE_WINNER && (
@@ -1682,9 +1723,22 @@ export default function Tournament() {
                   )}
                   {conflictResolve.reason ===
                     ConflictReason.UPDATE_STAGE_DATA && (
-                    <Typography variant="caption">
-                      Would remove game/stage data
-                    </Typography>
+                    <Paper
+                      elevation={2}
+                      style={{
+                        boxSizing: 'border-box',
+                        padding: '6px 16px',
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        fontWeight="700"
+                        lineHeight="24.5px"
+                        textAlign="center"
+                      >
+                        WOULD REMOVE STAGE DATA
+                      </Typography>
+                    </Paper>
                   )}
                   <Button
                     color="error"

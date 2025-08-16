@@ -29,6 +29,7 @@ import {
   getTournamentId,
   getTournaments,
   makeResetRecursive,
+  reportSet,
   resetSet,
   setAutoSync,
   setTournamentId,
@@ -328,6 +329,49 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     updateClients();
     maybeTryNow(ret.tournamentId);
   });
+
+  ipcMain.removeHandler('preemptReport');
+  ipcMain.handle(
+    'preemptReport',
+    (
+      event: IpcMainInvokeEvent,
+      id: number,
+      winnerId: number,
+      isDQ: boolean,
+      entrantScores:
+        | [
+            { entrantId: number; score: number },
+            { entrantId: number; score: number },
+          ]
+        | null,
+    ) => {
+      const transactionNum = preemptTransactionNum;
+      preemptTransactionNum -= 1;
+      const apiGameData: ApiGameData[] = [];
+      if (!isDQ && entrantScores !== null) {
+        let gameNum = 1;
+        for (let i = 0; i < entrantScores[0].score; i += 1) {
+          apiGameData.push({
+            gameNum,
+            winnerId: entrantScores[0].entrantId,
+            selections: [],
+          });
+          gameNum += 1;
+        }
+        for (let i = 0; i < entrantScores[1].score; i += 1) {
+          apiGameData.push({
+            gameNum,
+            winnerId: entrantScores[1].entrantId,
+            selections: [],
+          });
+          gameNum += 1;
+        }
+      }
+      const ret = reportSet(id, winnerId, isDQ, apiGameData, transactionNum);
+      updateClients();
+      maybeTryNow(ret.tournamentId);
+    },
+  );
 
   ipcMain.removeHandler('getConflictResolve');
   ipcMain.handle(
