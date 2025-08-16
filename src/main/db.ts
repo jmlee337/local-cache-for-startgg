@@ -834,6 +834,8 @@ function insertTransaction(
           setId,
           stationId,
           streamId,
+          expectedEntrant1Id,
+          expectedEntrant2Id,
           winnerId,
           isDQ,
           isUpdate,
@@ -846,6 +848,8 @@ function insertTransaction(
           @setId,
           @stationId,
           @streamId,
+          @expectedEntrant1Id,
+          @expectedEntrant2Id,
           @winnerId,
           @isDQ,
           @isUpdate,
@@ -2029,7 +2033,11 @@ export function getNextTransaction() {
       mainWindow?.webContents.send('conflict', null);
       return null;
     }
-    for (const transaction of transactions) {
+    if (transactions[0].isConflict === null) {
+      mainWindow?.webContents.send('conflict', null);
+      return toApiTransaction(transactions[0]);
+    }
+    for (const transaction of transactions.slice(1)) {
       if (canTransactNow(transaction)) {
         mainWindow?.webContents.send('conflict', null);
         return toApiTransaction(transaction);
