@@ -605,15 +605,22 @@ function findResetDependentSets(set: DbSet) {
     .prepare(
       `SELECT *
         FROM sets
-        WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id`,
+        WHERE state != 1
+          AND (
+            entrant1PrereqId = @id OR entrant2PrereqId = @id
+          )`,
     )
     .all(set) as DbSet[];
+  const dependentSetIds = new Set(
+    dependentSets.map((dependentSet) => dependentSet.id),
+  );
   if (set.wProgressionSeedId) {
     const affectedSet = db
       .prepare(
         `SELECT *
           FROM sets
           WHERE eventId = @eventId
+            AND state != 1
             AND (
               entrant1PrereqId = @wProgressionSeedId
                 OR entrant2PrereqId = @wProgressionSeedId
@@ -622,6 +629,7 @@ function findResetDependentSets(set: DbSet) {
       .get(set) as DbSet | undefined;
     if (affectedSet) {
       dependentSets.push(affectedSet);
+      dependentSetIds.add(affectedSet.id);
     }
   }
   if (set.lProgressionSeedId) {
@@ -630,6 +638,7 @@ function findResetDependentSets(set: DbSet) {
         `SELECT *
           FROM sets
           WHERE eventId = @eventId
+            AND state != 1
             AND (
               entrant1PrereqId = @lProgressionSeedId
                 OR entrant2PrereqId = @lProgressionSeedId
@@ -638,23 +647,25 @@ function findResetDependentSets(set: DbSet) {
       .get(set) as DbSet | undefined;
     if (affectedSet) {
       dependentSets.push(affectedSet);
+      dependentSetIds.add(affectedSet.id);
     }
   }
 
   const recursiveDependentSets: DbSet[] = [];
-  const allDependentSets: DbSet[] = [];
   dependentSets.forEach((dependentSet) => {
     if (dependentSet.state === 3) {
       recursiveDependentSets.push(dependentSet);
     }
-    if (dependentSet.state !== 1) {
-      allDependentSets.push(dependentSet);
-    }
   });
   recursiveDependentSets.forEach((dependentSet) => {
-    allDependentSets.push(...findResetDependentSets(dependentSet));
+    findResetDependentSets(dependentSet).forEach((recursiveDependentSet) => {
+      if (!dependentSetIds.has(recursiveDependentSet.id)) {
+        dependentSetIds.add(recursiveDependentSet.id);
+        dependentSets.push(recursiveDependentSet);
+      }
+    });
   });
-  return allDependentSets;
+  return dependentSets;
 }
 
 function findEntrantDependencySets(set: DbSet): DbSet[] {
@@ -795,7 +806,12 @@ export function getConflictResolve(
     const dependentSets = findResetDependentSets(set);
     serverSets.push(
       ...dependentSets
-        .sort((a, b) => a.ordinal - b.ordinal)
+        .sort((a, b) => {
+          if (a.phaseId !== b.phaseId) {
+            return a.phaseId - b.phaseId;
+          }
+          return a.ordinal - b.ordinal;
+        })
         .map(dbSetToRendererSet),
     );
   } else if (

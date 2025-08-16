@@ -1602,7 +1602,7 @@ export default function Tournament() {
               <Stack direction="row" gap="8px" alignItems="start">
                 <Stack
                   gap="8px"
-                  alignItems="start"
+                  alignItems="stretch"
                   flexShrink={0}
                   marginLeft="-8px"
                 >
@@ -1643,7 +1643,12 @@ export default function Tournament() {
                       </Typography>
                     )}
                 </Stack>
-                <Stack gap="16px" alignItems="start" flexShrink={0}>
+                <Stack
+                  gap="8px"
+                  alignItems="stretch"
+                  flexShrink={0}
+                  padding="0 8px"
+                >
                   <div
                     style={{
                       backgroundColor: '#ed6c02',
@@ -1659,6 +1664,7 @@ export default function Tournament() {
                     </Typography>
                     <SetListItemInner set={conflictResolve.localSets[0].set} />
                   </div>
+                  <div style={{ marginTop: '8px' }} />
                   {conflictResolve.localSets.length > 1 &&
                     conflictResolve.localSets.slice(1).map((localSet) => (
                       <Box key={localSet.transactionNum}>
