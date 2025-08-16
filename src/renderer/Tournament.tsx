@@ -1613,7 +1613,7 @@ export default function Tournament() {
                     conflictResolve.reason ===
                       ConflictReason.RESET_DEPENDENT_SETS && (
                       <Typography variant="caption">
-                        Try reopening this dialog
+                        Try refreshing tournament
                         <br />
                         to see dependent sets
                       </Typography>
