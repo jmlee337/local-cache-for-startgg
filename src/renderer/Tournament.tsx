@@ -900,6 +900,16 @@ export default function Tournament() {
             }
             style={{ flexGrow: 1 }}
           />
+          <Tooltip title="Set tournament">
+            <IconButton
+              onClick={() => {
+                refresh();
+                setOpen(true);
+              }}
+            >
+              <Edit />
+            </IconButton>
+          </Tooltip>
           {unloadedEvents.length > 0 &&
             (unloadedOpen ? (
               <Tooltip title="Hide unloaded events">
@@ -922,16 +932,6 @@ export default function Tournament() {
                 </IconButton>
               </Tooltip>
             ))}
-          <Tooltip title="Set tournament">
-            <IconButton
-              onClick={() => {
-                refresh();
-                setOpen(true);
-              }}
-            >
-              <Edit />
-            </IconButton>
-          </Tooltip>
           <Dialog
             fullWidth
             open={open}
