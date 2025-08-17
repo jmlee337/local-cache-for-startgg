@@ -560,6 +560,7 @@ function getRendererStream(id: number): RendererStream | null {
   return maybeStream;
 }
 
+const shortRoundTextRegex = /([A-Z]|[0-9])/g;
 function dbSetToRendererSet(dbSet: DbSet): RendererSet {
   const entrant1Name = dbSet.entrant1Id
     ? getEntrantName(dbSet.entrant1Id)
@@ -571,6 +572,10 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
     id: dbSet.id,
     ordinal: dbSet.ordinal,
     fullRoundText: dbSet.fullRoundText,
+    shortRoundText: dbSet.fullRoundText
+      .split('')
+      .filter((c) => c.match(shortRoundTextRegex))
+      .join(''),
     identifier: dbSet.identifier,
     round: dbSet.round,
     state: dbSet.state,
@@ -1526,18 +1531,21 @@ export function assignSetStream(
     throw new Error(`no such set: ${id}`);
   }
 
-  const { tournamentId } = set;
-  const stream = db
-    .prepare(
-      'SELECT * FROM streams WHERE id = @streamId AND tournamentId = @tournamentId',
-    )
-    .get({ streamId, tournamentId }) as DbStream | undefined;
-  if (!stream) {
-    throw new Error(`no such stream: ${streamId}`);
-  }
-
   applyMutations(set);
-  set.streamId = streamId;
+  const { tournamentId } = set;
+  if (streamId !== 0) {
+    const stream = db
+      .prepare(
+        'SELECT * FROM streams WHERE id = @streamId AND tournamentId = @tournamentId',
+      )
+      .get({ streamId, tournamentId }) as DbStream | undefined;
+    if (!stream) {
+      throw new Error(`no such stream: ${streamId}`);
+    }
+    set.streamId = streamId;
+  } else {
+    set.streamId = null;
+  }
 
   db.prepare(
     `INSERT INTO setMutations (

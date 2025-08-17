@@ -44,6 +44,7 @@ export type RendererSet = {
   id: number;
   ordinal: number;
   fullRoundText: string;
+  shortRoundText: string;
   identifier: string;
   round: number;
   state: number;

@@ -63,22 +63,15 @@ import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
 
-const SET_FIXED_WIDTH = '220px';
+const SET_FIXED_WIDTH = '162px';
 
 const CONFLICT_BACKGROUND_COLOR = '#ed6c02';
 const LOSERS_BACKGROUND_COLOR = '#ffebee';
-const LOSERS_BACKGROUND_COLOR_COMPLETED = '#e53935';
 const SET_BACKGROUND_COLOR = '#fafafa';
-const SET_BACKGROUND_COLOR_COMPLETED = '#757575';
+const WINNER_BACKGROUND_HIGHLIGHT = '#42a5f5';
 const TEXT_COLOR_LIGHT = '#fff';
 
 function getBackgroundColor(set: RendererSet) {
-  if (set.state === 3) {
-    if (set.round < 0) {
-      return LOSERS_BACKGROUND_COLOR_COMPLETED;
-    }
-    return SET_BACKGROUND_COLOR_COMPLETED;
-  }
   if (set.round < 0) {
     return LOSERS_BACKGROUND_COLOR;
   }
@@ -102,11 +95,12 @@ function SetEntrant({
   }
   return (
     <Box
+      flexGrow={1}
       overflow="hidden"
       textOverflow="ellipsis"
       whiteSpace="nowrap"
       color={secondary ? '#757575' : undefined}
-      fontWeight={secondary ? undefined : 500}
+      fontStyle={secondary ? 'italic' : undefined}
     >
       {text}
     </Box>
@@ -114,6 +108,13 @@ function SetEntrant({
 }
 
 function SetListItemInner({ set }: { set: RendererSet }) {
+  let color: string | undefined;
+  if (set.state === 2) {
+    color = '#0d8225';
+  } else if (set.state === 6) {
+    color = '#F9A825';
+  }
+
   let titleStart = <CloudOff fontSize="small" />;
   if (set.syncState === 1) {
     titleStart = <BackupOutlined fontSize="small" />;
@@ -126,20 +127,20 @@ function SetListItemInner({ set }: { set: RendererSet }) {
     titleEnd = (
       <HourglassTop
         fontSize="small"
-        style={{ color: '#0d8225', marginLeft: '5px', marginRight: '-5px' }}
+        style={{ marginLeft: '5px', marginRight: '-5px' }}
       />
     );
   } else if (set.state === 3) {
     if (set.hasStageData) {
       titleEnd = (
-        <Stadium fontSize="small" style={{ margin: '-2px -5px 2px 5px' }} />
+        <Stadium fontSize="small" style={{ margin: '-2px -8px 2px 8px' }} />
       );
     }
   } else if (set.state === 6) {
     titleEnd = (
       <NotificationsActive
         fontSize="small"
-        style={{ color: '#ffd500', marginLeft: '2px', marginRight: '-2px' }}
+        style={{ marginLeft: '2px', marginRight: '-2px' }}
       />
     );
   }
@@ -164,40 +165,91 @@ function SetListItemInner({ set }: { set: RendererSet }) {
 
   return (
     <Stack alignItems="stretch" width="100%">
-      <Stack direction="row" alignItems="center" gap="4px" width="100%">
-        {titleStart}
-        <Typography flexGrow={1} textAlign="center" variant="caption">
-          {set.fullRoundText} ({set.identifier})
-        </Typography>
-        {titleEnd}
-      </Stack>
       <Stack
         direction="row"
         alignItems="center"
-        gap="8px"
-        sx={{ typography: (theme) => theme.typography.body2 }}
+        gap="4px"
         width="100%"
+        style={{ color }}
       >
-        <Stack flexGrow={1}>
-          <SetEntrant
-            entrantName={set.entrant1Name}
-            prereqStr={set.entrant1PrereqStr}
-          />
-          <SetEntrant
-            entrantName={set.entrant2Name}
-            prereqStr={set.entrant2PrereqStr}
-          />
-        </Stack>
-        {set.state === 3 && (
-          <Stack flexGrow={0}>
-            <Box textAlign="end" width="16px">
-              {entrant1Score}
-            </Box>
-            <Box textAlign="end" width="16px">
-              {entrant2Score}
-            </Box>
+        {titleStart}
+        <Typography flexGrow={1} textAlign="center" variant="caption">
+          {set.shortRoundText} ({set.identifier})
+        </Typography>
+        {titleEnd}
+      </Stack>
+      <Stack direction="row" alignItems="center" gap="8px" width="100%">
+        <Stack
+          flexGrow={1}
+          sx={{ typography: (theme) => theme.typography.body2 }}
+        >
+          <Stack
+            direction="row"
+            alignItems="center"
+            gap="8px"
+            marginRight="-8px"
+            style={{
+              fontWeight:
+                set.entrant1Id && set.entrant1Id === set.winnerId
+                  ? 700
+                  : undefined,
+            }}
+          >
+            <SetEntrant
+              entrantName={set.entrant1Name}
+              prereqStr={set.entrant1PrereqStr}
+            />
+            {set.state === 3 && (
+              <Box
+                textAlign="center"
+                width="18px"
+                sx={
+                  set.entrant1Id && set.entrant1Id === set.winnerId
+                    ? {
+                        backgroundColor: WINNER_BACKGROUND_HIGHLIGHT,
+                        color: TEXT_COLOR_LIGHT,
+                      }
+                    : undefined
+                }
+              >
+                {entrant1Score}
+              </Box>
+            )}
           </Stack>
-        )}
+          <Stack
+            direction="row"
+            alignItems="center"
+            gap="8px"
+            marginRight="-8px"
+            style={{
+              fontWeight:
+                set.entrant2Id && set.entrant2Id === set.winnerId
+                  ? 700
+                  : undefined,
+            }}
+          >
+            <SetEntrant
+              entrantName={set.entrant2Name}
+              prereqStr={set.entrant2PrereqStr}
+            />
+            {set.state === 3 && (
+              <Box
+                textAlign="center"
+                width="18px"
+                sx={
+                  set.entrant2Id && set.entrant2Id === set.winnerId
+                    ? {
+                        backgroundColor: WINNER_BACKGROUND_HIGHLIGHT,
+                        color: TEXT_COLOR_LIGHT,
+                      }
+                    : undefined
+                }
+              >
+                {entrant2Score}
+              </Box>
+            )}
+          </Stack>
+        </Stack>
         {set.state !== 3 && (set.station || set.stream) && (
           <Stack flexGrow={0} justifyContent="center">
             {set.stream ? (
@@ -232,10 +284,7 @@ function SetListItemButton({
           conflictTransactionNum !== null
             ? CONFLICT_BACKGROUND_COLOR
             : getBackgroundColor(set),
-        color:
-          conflictTransactionNum !== null || set.state === 3
-            ? TEXT_COLOR_LIGHT
-            : undefined,
+        color: conflictTransactionNum !== null ? TEXT_COLOR_LIGHT : undefined,
         flexGrow: 0,
         opacity: '100%',
         padding: '8px',
@@ -1636,10 +1685,6 @@ export default function Tournament() {
                       backgroundColor: getBackgroundColor(
                         conflictResolve.serverSets[0],
                       ),
-                      color:
-                        conflictResolve.serverSets[0].state === 3
-                          ? TEXT_COLOR_LIGHT
-                          : undefined,
                     }}
                   >
                     <Typography variant="body2">Server</Typography>
@@ -1664,10 +1709,6 @@ export default function Tournament() {
                           padding="0 8px"
                           sx={{
                             backgroundColor: getBackgroundColor(serverSet),
-                            color:
-                              serverSet.state === 3
-                                ? TEXT_COLOR_LIGHT
-                                : undefined,
                           }}
                         >
                           <SetListItemInner
@@ -1713,10 +1754,6 @@ export default function Tournament() {
                         key={localSet.transactionNum}
                         sx={{
                           backgroundColor: getBackgroundColor(localSet.set),
-                          color:
-                            localSet.set.state === 3
-                              ? TEXT_COLOR_LIGHT
-                              : undefined,
                           padding: '8px',
                         }}
                       >
