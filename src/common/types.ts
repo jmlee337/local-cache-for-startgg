@@ -240,6 +240,7 @@ export type DbPool = {
   tournamentId: number;
   name: string;
   bracketType: number;
+  state: number;
 };
 
 export type DbPhase = {

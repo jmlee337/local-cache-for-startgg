@@ -651,6 +651,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
               tournamentId,
               name: pool.displayIdentifier,
               bracketType: pool.bracketType,
+              state: pool.state,
             });
             const sets = pool.sets.nodes;
             if (Array.isArray(sets) && sets.length > 0) {
@@ -721,6 +722,7 @@ export async function loadEvent(tournamentId: number, eventId: number) {
           tournamentId,
           name: json.entities.groups.displayIdentifier,
           bracketType: json.entities.groups.groupTypeId,
+          state: json.entities.groups.state,
         };
         // MATCHMAKING (ladder) is not supported
         if (pool.bracketType === 7) {

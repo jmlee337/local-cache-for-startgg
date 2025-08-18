@@ -60,7 +60,15 @@ export function dbInit(window: BrowserWindow) {
     'CREATE TABLE IF NOT EXISTS phases (id INTEGER PRIMARY KEY, eventId INTEGER, tournamentId INTEGERY, name TEXT)',
   ).run();
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS pools (id INTEGER PRIMARY KEY, phaseId INTEGER, eventId INTEGER, tournamentId INTEGER, name TEXT, bracketType INTEGER)',
+    `CREATE TABLE IF NOT EXISTS pools (
+      id INTEGER PRIMARY KEY,
+      phaseId INTEGER,
+      eventId INTEGER,
+      tournamentId INTEGER,
+      name TEXT,
+      bracketType INTEGER,
+      state INTEGER
+    )`,
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS sets (
@@ -293,9 +301,9 @@ export function upsertEvent(
       .prepare(
         `REPLACE INTO
           pools
-            (id, phaseId, eventId, tournamentId, name, bracketType)
+            (id, phaseId, eventId, tournamentId, name, bracketType, state)
           VALUES
-            (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType)`,
+            (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state)`,
       )
       .run(pool);
   });
@@ -476,9 +484,9 @@ export function upsertPool(pool: DbPool, entrants: DbEntrant[], sets: DbSet[]) {
   db.prepare(
     `REPLACE INTO
       pools
-        (id, phaseId, eventId, tournamentId, name, bracketType)
+        (id, phaseId, eventId, tournamentId, name, bracketType, state)
       VALUES
-        (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType)`,
+        (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state)`,
   ).run(pool);
   entrants.forEach((entrant) => {
     db!.prepare(ENTRANT_UPSERT_SQL).run(entrant);
