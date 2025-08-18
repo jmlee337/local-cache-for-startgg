@@ -68,7 +68,7 @@ const SET_FIXED_WIDTH = '162px';
 const CONFLICT_BACKGROUND_COLOR = '#ed6c02';
 const LOSERS_BACKGROUND_COLOR = '#ffebee';
 const SET_BACKGROUND_COLOR = '#fafafa';
-const WINNER_BACKGROUND_HIGHLIGHT = '#42a5f5';
+const WINNER_BACKGROUND_HIGHLIGHT = '#ba68c8';
 const TEXT_COLOR_LIGHT = '#fff';
 
 function getBackgroundColor(set: RendererSet) {
