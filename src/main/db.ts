@@ -1029,162 +1029,161 @@ export function resetSet(
     throw new Error(`set cannot be reset: ${id}`);
   }
 
+  // always check for dependent sets due to CALL state bug
   let wProgressionSet: ResetProgressionSet | undefined;
   let lProgressionSet: ResetProgressionSet | undefined;
-  if (set.state === 3) {
-    const dependentSetIds: number[] = [];
-    const { wProgressionSeedId, lProgressionSeedId } = set;
-    const maybeAssignProgression = (
-      setId: number,
-      phaseGroupId: number,
-      phaseId: number,
-      eventId: number,
-      tournamentId: number,
-      entrantNum: 1 | 2,
-      prereqCondition: string | null,
-    ) => {
-      if (prereqCondition !== 'winner' && prereqCondition !== 'loser') {
-        throw new Error(
-          `prereqCondition was not 'winner' or 'loser': ${prereqCondition}`,
-        );
-      }
-
-      if (prereqCondition === 'winner') {
-        if (wProgressionSet) {
-          throw new Error(
-            `already have wProgressionSet: ${wProgressionSet.id}, found: ${setId}`,
-          );
-        }
-        wProgressionSet = {
-          id: setId,
-          phaseGroupId,
-          phaseId,
-          eventId,
-          tournamentId,
-          entrantNum,
-        };
-      }
-      if (prereqCondition === 'loser') {
-        if (lProgressionSet) {
-          throw new Error(
-            `already have lProgressionSet: ${lProgressionSet.id}, found: ${setId}`,
-          );
-        }
-        lProgressionSet = {
-          id: setId,
-          phaseGroupId,
-          phaseId,
-          eventId,
-          tournamentId,
-          entrantNum,
-        };
-      }
-    };
-    (
-      db
-        .prepare(
-          'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
-        )
-        .all({ id }) as DbSet[]
-    ).forEach((dbSet) => {
-      if (
-        dbSet.entrant1PrereqId === id &&
-        dbSet.entrant2PrereqId === id &&
-        set.winnerId === set.entrant1Id &&
-        set.fullRoundText === 'Grand Final'
-      ) {
-        // no progressions if GF won from winners
-        return;
-      }
-      applyMutations(dbSet);
-      if (dbSet.state !== 1) {
-        dependentSetIds.push(dbSet.id);
-      } else {
-        if (dbSet.entrant1PrereqId === id) {
-          maybeAssignProgression(
-            dbSet.id,
-            dbSet.phaseGroupId,
-            dbSet.phaseId,
-            dbSet.eventId,
-            dbSet.tournamentId,
-            1,
-            dbSet.entrant1PrereqCondition,
-          );
-        }
-        if (dbSet.entrant2PrereqId === id) {
-          maybeAssignProgression(
-            dbSet.id,
-            dbSet.phaseGroupId,
-            dbSet.phaseId,
-            dbSet.eventId,
-            dbSet.tournamentId,
-            2,
-            dbSet.entrant2PrereqCondition,
-          );
-        }
-      }
-    });
-    if (wProgressionSeedId) {
-      const affectedSet = db
-        .prepare(
-          'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-        )
-        .get({ seedId: wProgressionSeedId }) as DbSet | undefined;
-      if (affectedSet) {
-        if (wProgressionSet) {
-          throw new Error(
-            `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
-          );
-        }
-        applyMutations(affectedSet);
-        if (affectedSet.state !== 1) {
-          dependentSetIds.push(affectedSet.id);
-        } else {
-          wProgressionSet = {
-            id: affectedSet.id,
-            phaseGroupId: affectedSet.phaseGroupId,
-            phaseId: affectedSet.phaseId,
-            eventId: affectedSet.eventId,
-            tournamentId: affectedSet.tournamentId,
-            entrantNum:
-              affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
-          };
-        }
-      }
-    }
-    if (lProgressionSeedId) {
-      const affectedSet = db
-        .prepare(
-          'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-        )
-        .get({ seedId: lProgressionSeedId }) as DbSet | undefined;
-      if (affectedSet) {
-        if (lProgressionSet) {
-          throw new Error(
-            `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
-          );
-        }
-        applyMutations(affectedSet);
-        if (affectedSet.state !== 1) {
-          dependentSetIds.push(affectedSet.id);
-        } else {
-          lProgressionSet = {
-            id: affectedSet.id,
-            phaseGroupId: affectedSet.phaseGroupId,
-            phaseId: affectedSet.phaseId,
-            eventId: affectedSet.eventId,
-            tournamentId: affectedSet.tournamentId,
-            entrantNum:
-              affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
-          };
-        }
-      }
-    }
-    if (!preempt && dependentSetIds.length > 0) {
+  const dependentSetIds: number[] = [];
+  const { wProgressionSeedId, lProgressionSeedId } = set;
+  const maybeAssignProgression = (
+    setId: number,
+    phaseGroupId: number,
+    phaseId: number,
+    eventId: number,
+    tournamentId: number,
+    entrantNum: 1 | 2,
+    prereqCondition: string | null,
+  ) => {
+    if (prereqCondition !== 'winner' && prereqCondition !== 'loser') {
       throw new Error(
-        `Cannot reset due to dependent set(s): ${dependentSetIds.join(', ')}`,
+        `prereqCondition was not 'winner' or 'loser': ${prereqCondition}`,
       );
     }
+
+    if (prereqCondition === 'winner') {
+      if (wProgressionSet) {
+        throw new Error(
+          `already have wProgressionSet: ${wProgressionSet.id}, found: ${setId}`,
+        );
+      }
+      wProgressionSet = {
+        id: setId,
+        phaseGroupId,
+        phaseId,
+        eventId,
+        tournamentId,
+        entrantNum,
+      };
+    }
+    if (prereqCondition === 'loser') {
+      if (lProgressionSet) {
+        throw new Error(
+          `already have lProgressionSet: ${lProgressionSet.id}, found: ${setId}`,
+        );
+      }
+      lProgressionSet = {
+        id: setId,
+        phaseGroupId,
+        phaseId,
+        eventId,
+        tournamentId,
+        entrantNum,
+      };
+    }
+  };
+  (
+    db
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
+      )
+      .all({ id }) as DbSet[]
+  ).forEach((dbSet) => {
+    if (
+      dbSet.entrant1PrereqId === id &&
+      dbSet.entrant2PrereqId === id &&
+      set.winnerId === set.entrant1Id &&
+      set.fullRoundText === 'Grand Final'
+    ) {
+      // no progressions if GF won from winners
+      return;
+    }
+    applyMutations(dbSet);
+    if (dbSet.state !== 1) {
+      dependentSetIds.push(dbSet.id);
+    } else {
+      if (dbSet.entrant1PrereqId === id) {
+        maybeAssignProgression(
+          dbSet.id,
+          dbSet.phaseGroupId,
+          dbSet.phaseId,
+          dbSet.eventId,
+          dbSet.tournamentId,
+          1,
+          dbSet.entrant1PrereqCondition,
+        );
+      }
+      if (dbSet.entrant2PrereqId === id) {
+        maybeAssignProgression(
+          dbSet.id,
+          dbSet.phaseGroupId,
+          dbSet.phaseId,
+          dbSet.eventId,
+          dbSet.tournamentId,
+          2,
+          dbSet.entrant2PrereqCondition,
+        );
+      }
+    }
+  });
+  if (wProgressionSeedId) {
+    const affectedSet = db
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+      )
+      .get({ seedId: wProgressionSeedId }) as DbSet | undefined;
+    if (affectedSet) {
+      if (wProgressionSet) {
+        throw new Error(
+          `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
+        );
+      }
+      applyMutations(affectedSet);
+      if (affectedSet.state !== 1) {
+        dependentSetIds.push(affectedSet.id);
+      } else {
+        wProgressionSet = {
+          id: affectedSet.id,
+          phaseGroupId: affectedSet.phaseGroupId,
+          phaseId: affectedSet.phaseId,
+          eventId: affectedSet.eventId,
+          tournamentId: affectedSet.tournamentId,
+          entrantNum:
+            affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
+        };
+      }
+    }
+  }
+  if (lProgressionSeedId) {
+    const affectedSet = db
+      .prepare(
+        'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+      )
+      .get({ seedId: lProgressionSeedId }) as DbSet | undefined;
+    if (affectedSet) {
+      if (lProgressionSet) {
+        throw new Error(
+          `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
+        );
+      }
+      applyMutations(affectedSet);
+      if (affectedSet.state !== 1) {
+        dependentSetIds.push(affectedSet.id);
+      } else {
+        lProgressionSet = {
+          id: affectedSet.id,
+          phaseGroupId: affectedSet.phaseGroupId,
+          phaseId: affectedSet.phaseId,
+          eventId: affectedSet.eventId,
+          tournamentId: affectedSet.tournamentId,
+          entrantNum:
+            affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
+        };
+      }
+    }
+  }
+  if (!preempt && dependentSetIds.length > 0) {
+    throw new Error(
+      `Cannot reset due to dependent set(s): ${dependentSetIds.join(', ')}`,
+    );
   }
 
   set.state = 1;
@@ -2457,44 +2456,44 @@ function getSyncStatus(
   | { syncStatus: SyncStatus.CONFLICT; reason: ConflictReason } {
   switch (dbTransaction.type) {
     case TransactionType.RESET: {
-      if (afterSet.state === 1) {
-        return { syncStatus: SyncStatus.BEHIND };
-      }
       if (dbTransaction.isRecursive === 1) {
         return { syncStatus: SyncStatus.AHEAD };
       }
-      if (afterSet.state === 3) {
-        const dependentSets = db!
+
+      // always check for dependent sets due to CALL state bug
+      const dependentSets = db!
+        .prepare(
+          'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
+        )
+        .all({ id: afterSet.id }) as DbSet[];
+      if (afterSet.lProgressionSeedId) {
+        const maybeSet = db!
           .prepare(
-            'SELECT * FROM sets WHERE entrant1PrereqId = @id OR entrant2PrereqId = @id',
+            'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
           )
-          .all({ id: afterSet.id }) as DbSet[];
-        if (afterSet.lProgressionSeedId) {
-          const maybeSet = db!
-            .prepare(
-              'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-            )
-            .get({ seedId: afterSet.lProgressionSeedId }) as DbSet | undefined;
-          if (maybeSet) {
-            dependentSets.push(maybeSet);
-          }
+          .get({ seedId: afterSet.lProgressionSeedId }) as DbSet | undefined;
+        if (maybeSet) {
+          dependentSets.push(maybeSet);
         }
-        if (afterSet.wProgressionSeedId) {
-          const maybeSet = db!
-            .prepare(
-              'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
-            )
-            .get({ seedId: afterSet.wProgressionSeedId }) as DbSet | undefined;
-          if (maybeSet) {
-            dependentSets.push(maybeSet);
-          }
+      }
+      if (afterSet.wProgressionSeedId) {
+        const maybeSet = db!
+          .prepare(
+            'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+          )
+          .get({ seedId: afterSet.wProgressionSeedId }) as DbSet | undefined;
+        if (maybeSet) {
+          dependentSets.push(maybeSet);
         }
-        if (dependentSets.some((dbSet) => dbSet.state !== 1)) {
-          return {
-            syncStatus: SyncStatus.CONFLICT,
-            reason: ConflictReason.RESET_DEPENDENT_SETS,
-          };
-        }
+      }
+      if (dependentSets.some((dbSet) => dbSet.state !== 1)) {
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.RESET_DEPENDENT_SETS,
+        };
+      }
+      if (afterSet.state === 1) {
+        return { syncStatus: SyncStatus.BEHIND };
       }
       return { syncStatus: SyncStatus.AHEAD };
     }
