@@ -1685,6 +1685,7 @@ export default function Tournament() {
                       backgroundColor: getBackgroundColor(
                         conflictResolve.serverSets[0],
                       ),
+                      width: SET_FIXED_WIDTH,
                     }}
                   >
                     <Typography variant="body2">Server</Typography>
@@ -1709,6 +1710,7 @@ export default function Tournament() {
                           padding="0 8px"
                           sx={{
                             backgroundColor: getBackgroundColor(serverSet),
+                            width: SET_FIXED_WIDTH,
                           }}
                         >
                           <SetListItemInner
@@ -1755,6 +1757,7 @@ export default function Tournament() {
                         sx={{
                           backgroundColor: getBackgroundColor(localSet.set),
                           padding: '8px',
+                          width: SET_FIXED_WIDTH,
                         }}
                       >
                         <Typography variant="body2">
