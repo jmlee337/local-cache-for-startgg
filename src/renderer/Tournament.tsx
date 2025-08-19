@@ -488,21 +488,30 @@ function PhaseListItem({
   );
 }
 
-function EventListItem({
+function LoadedEventListItem({
   event,
   conflict,
   reportSet,
-  showError,
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
   reportSet: (set: RendererSet) => void;
-  showError: (message: string) => void;
 }) {
-  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
   return (
     <>
-      <ListItem disablePadding style={{ justifyContent: 'space-between' }}>
+      <ListItemButton
+        disableGutters
+        style={{
+          justifyContent: 'space-between',
+          marginRight: '-8px',
+          padding: '0 16px 0 0',
+        }}
+        onClick={() => {
+          setOpen(!open);
+        }}
+      >
         <Stack direction="row">
           <ListItemText style={{ marginRight: '8px' }}>
             {event.name} <Typography variant="caption">({event.id})</Typography>
@@ -517,38 +526,77 @@ function EventListItem({
             </Tooltip>
           )}
         </Stack>
-        {loading ? (
-          <CircularProgress size="24px" style={{ padding: '8px' }} />
+        {open ? (
+          <Tooltip title="Hide pools">
+            <KeyboardArrowDown />
+          </Tooltip>
         ) : (
-          <Tooltip title={`Load event: ${event.name}`} placement="left">
-            <IconButton
-              onClick={async () => {
-                setLoading(true);
-                try {
-                  await window.electron.loadEvent(event.id);
-                } catch (e: any) {
-                  const message = e instanceof Error ? e.message : e;
-                  showError(message);
-                } finally {
-                  setLoading(false);
-                }
-              }}
-            >
-              <Download />
-            </IconButton>
+          <Tooltip title="Show pools">
+            <KeyboardArrowRight />
           </Tooltip>
         )}
-      </ListItem>
-      {event.phases.length > 0 &&
-        event.phases.map((phase) => (
-          <PhaseListItem
-            key={phase.id}
-            phase={phase}
-            conflict={conflict}
-            reportSet={reportSet}
-          />
-        ))}
+      </ListItemButton>
+      <Collapse in={open}>
+        {event.phases.length > 0 &&
+          event.phases.map((phase) => (
+            <PhaseListItem
+              key={phase.id}
+              phase={phase}
+              conflict={conflict}
+              reportSet={reportSet}
+            />
+          ))}
+      </Collapse>
     </>
+  );
+}
+
+function UnloadedEventListItem({
+  event,
+  showError,
+}: {
+  event: RendererEvent;
+  showError: (message: string) => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  return (
+    <ListItem disablePadding style={{ justifyContent: 'space-between' }}>
+      <Stack direction="row">
+        <ListItemText style={{ marginRight: '8px' }}>
+          {event.name} <Typography variant="caption">({event.id})</Typography>
+        </ListItemText>
+        {event.isOnline ? (
+          <Tooltip title="Online" placement="right">
+            <Router />
+          </Tooltip>
+        ) : (
+          <Tooltip title="Offline" placement="right">
+            <Group />
+          </Tooltip>
+        )}
+      </Stack>
+      {loading ? (
+        <CircularProgress size="24px" style={{ padding: '8px' }} />
+      ) : (
+        <Tooltip title={`Load event: ${event.name}`} placement="left">
+          <IconButton
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await window.electron.loadEvent(event.id);
+              } catch (e: any) {
+                const message = e instanceof Error ? e.message : e;
+                showError(message);
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            <Download />
+          </IconButton>
+        </Tooltip>
+      )}
+    </ListItem>
   );
 }
 
@@ -1045,12 +1093,10 @@ export default function Tournament() {
           <Collapse in={unloadedOpen}>
             <List>
               {unloadedEvents.map((event) => (
-                <EventListItem
+                <UnloadedEventListItem
                   key={event.id}
                   event={event}
-                  conflict={conflict}
-                  reportSet={() => {}}
-                  showError={() => {}}
+                  showError={showError}
                 />
               ))}
             </List>
@@ -1059,12 +1105,11 @@ export default function Tournament() {
         {loadedEvents.length > 0 && (
           <List>
             {loadedEvents.map((event) => (
-              <EventListItem
+              <LoadedEventListItem
                 key={event.id}
                 event={event}
                 conflict={conflict}
                 reportSet={reportSetFn}
-                showError={showError}
               />
             ))}
           </List>
@@ -1102,7 +1147,7 @@ export default function Tournament() {
                   <Tv />
                 </Tooltip>
               )}
-              <Typography variant="caption">({reportSet?.id})</Typography>
+              <Typography variant="caption">({reportSet?.setId})</Typography>
             </Stack>
           </Stack>
           <DialogContent style={{ paddingTop: 0 }}>
@@ -1451,7 +1496,11 @@ export default function Tournament() {
           <DialogActions>
             <IconButton
               color="primary"
-              disabled={choosing || reportPreempt}
+              disabled={
+                choosing ||
+                reportPreempt ||
+                typeof reportSet?.setId === 'string'
+              }
               size="small"
               onClick={async () => {
                 setStationStreamDialogOpen(true);
@@ -1465,7 +1514,7 @@ export default function Tournament() {
               onClick={async () => {
                 setResetting(true);
                 try {
-                  await window.electron.resetSet(reportSet!.id);
+                  await window.electron.resetSet(reportSet!.setId);
                   setReportDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
@@ -1488,7 +1537,7 @@ export default function Tournament() {
               onClick={async () => {
                 setStarting(true);
                 try {
-                  await window.electron.startSet(reportSet!.id);
+                  await window.electron.startSet(reportSet!.setId);
                   setReportDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
@@ -1515,14 +1564,14 @@ export default function Tournament() {
                 try {
                   if (reportPreempt) {
                     await window.electron.preemptReport(
-                      reportSet!.id,
+                      reportSet!.setId,
                       reportWinnerId,
                       reportIsDq,
                       reportGameData,
                     );
                   } else {
                     await window.electron.reportSet(
-                      reportSet!.id,
+                      reportSet!.setId,
                       reportWinnerId,
                       reportIsDq,
                       reportGameData,
@@ -1558,7 +1607,10 @@ export default function Tournament() {
                     onClick={async () => {
                       setChoosing(true);
                       try {
-                        await window.electron.assignSetStream(reportSet!.id, 0);
+                        await window.electron.assignSetStream(
+                          reportSet!.setId,
+                          0,
+                        );
                         setStationStreamDialogOpen(false);
                         setReportDialogOpen(false);
                       } catch (e: any) {
@@ -1585,7 +1637,7 @@ export default function Tournament() {
                           setChoosing(true);
                           try {
                             await window.electron.assignSetStream(
-                              reportSet!.id,
+                              reportSet!.setId,
                               stream.id,
                             );
                             setStationStreamDialogOpen(false);
@@ -1631,7 +1683,7 @@ export default function Tournament() {
                           setChoosing(true);
                           try {
                             await window.electron.assignSetStation(
-                              reportSet!.id,
+                              reportSet!.setId,
                               station.id,
                             );
                             setStationStreamDialogOpen(false);
@@ -1680,11 +1732,12 @@ export default function Tournament() {
                   marginLeft="-8px"
                 >
                   <Box
-                    padding="0 8px"
+                    padding="8px"
                     sx={{
                       backgroundColor: getBackgroundColor(
                         conflictResolve.serverSets[0],
                       ),
+                      boxSizing: 'border-box',
                       width: SET_FIXED_WIDTH,
                     }}
                   >
@@ -1707,9 +1760,10 @@ export default function Tournament() {
                         />
                       ) : (
                         <Box
-                          padding="0 8px"
+                          padding="8px"
                           sx={{
                             backgroundColor: getBackgroundColor(serverSet),
+                            boxSizing: 'border-box',
                             width: SET_FIXED_WIDTH,
                           }}
                         >
@@ -1720,15 +1774,26 @@ export default function Tournament() {
                         </Box>
                       ),
                     )}
-                  {conflictResolve.serverSets.length === 1 &&
-                    conflictResolve.reason ===
-                      ConflictReason.RESET_DEPENDENT_SETS && (
-                      <Typography variant="caption">
-                        Try refreshing tournament
-                        <br />
-                        to see dependent sets
-                      </Typography>
-                    )}
+                  {conflictResolve.serverSets.length === 1 && (
+                    <>
+                      {conflictResolve.reason ===
+                        ConflictReason.RESET_DEPENDENT_SETS && (
+                        <Typography variant="caption">
+                          Try refreshing tournament
+                          <br />
+                          to see dependent sets
+                        </Typography>
+                      )}
+                      {conflictResolve.reason ===
+                        ConflictReason.MISSING_ENTRANTS && (
+                        <Typography variant="caption">
+                          Try refreshing tournament
+                          <br />
+                          to see dependency sets
+                        </Typography>
+                      )}
+                    </>
+                  )}
                 </Stack>
                 <Stack
                   gap="8px"
@@ -1739,6 +1804,7 @@ export default function Tournament() {
                   <Box
                     sx={{
                       backgroundColor: CONFLICT_BACKGROUND_COLOR,
+                      boxSizing: 'border-box',
                       color: TEXT_COLOR_LIGHT,
                       padding: '8px',
                       width: SET_FIXED_WIDTH,
@@ -1756,6 +1822,7 @@ export default function Tournament() {
                         key={localSet.transactionNum}
                         sx={{
                           backgroundColor: getBackgroundColor(localSet.set),
+                          boxSizing: 'border-box',
                           padding: '8px',
                           width: SET_FIXED_WIDTH,
                         }}
@@ -1810,10 +1877,10 @@ export default function Tournament() {
                       color="warning"
                       variant="contained"
                       onClick={() => {
-                        if (conflict) {
-                          window.electron.preemptReset(conflict.setId);
-                          setConflictDialogOpen(false);
-                        }
+                        window.electron.preemptReset(
+                          conflictResolve.localSets[0].set.setId,
+                        );
+                        setConflictDialogOpen(false);
                       }}
                     >
                       Reset set

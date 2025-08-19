@@ -92,8 +92,8 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'reset-set-response',
             };
-            if (!Number.isInteger(json.id)) {
-              response.err = 'id must be integer';
+            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+              response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
@@ -108,8 +108,8 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'start-set-response',
             };
-            if (!Number.isInteger(json.id)) {
-              response.err = 'id must be integer';
+            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+              response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
@@ -124,8 +124,8 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'assign-set-station-response',
             };
-            if (!Number.isInteger(json.id)) {
-              response.err = 'id must be integer';
+            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+              response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
@@ -148,8 +148,8 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'assign-set-stream-response',
             };
-            if (!Number.isInteger(json.id)) {
-              response.err = 'id must be integer';
+            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+              response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
@@ -172,8 +172,8 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'report-set-response',
             };
-            if (!Number.isInteger(json.id)) {
-              response.err = 'id must be integer';
+            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+              response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }

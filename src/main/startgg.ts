@@ -20,15 +20,10 @@ import {
   ConflictReason,
 } from '../common/types';
 import {
-  getEventPoolIds,
   getPlayer,
-  getPoolSetIds,
-  upsertEvent,
-  upsertPool,
-  upsertPlayer,
   upsertPlayers,
   upsertTournament,
-  updateEventSets,
+  updateEvent,
   upsertStations,
   upsertStreams,
   getLoadedEventIds,
@@ -37,6 +32,7 @@ import {
   getTournamentId,
   deleteTransaction,
   markTransactionConflict,
+  upgradePreviewSets,
 } from './db';
 
 let apiKey = '';
@@ -90,6 +86,17 @@ async function fetchGql(key: string, query: string, variables: any) {
     });
   }
 
+  const deleteSetIds = json.actionRecords?.delete?.sets;
+  const updateSetIds = json.actionRecords?.update?.sets;
+  if (
+    Array.isArray(deleteSetIds) &&
+    deleteSetIds.every((deleteSetId) => typeof deleteSetId === 'string') &&
+    Array.isArray(updateSetIds) &&
+    updateSetIds.every((updateSetId) => Number.isInteger(updateSetId))
+  ) {
+    upgradePreviewSets(deleteSetIds, updateSetIds);
+  }
+
   return json.data;
 }
 
@@ -124,6 +131,9 @@ function updateWithFatalError(e: Error) {
     }
   }
   fatalErrorMessage = `${messagePrefix}${e.message}`;
+  if (e instanceof Error && e.stack) {
+    fatalErrorMessage += `\n${e.stack}`;
+  }
   mainWindow?.webContents.send('fatalError', fatalErrorMessage);
 }
 
@@ -334,7 +344,7 @@ export async function getApiTournament(inSlug: string) {
   }
 }
 
-function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
+function coalescePrereq(set: DbSet, setIdToDbSet: Map<number | string, DbSet>) {
   if (set.entrant1PrereqType === 'bye') {
     if (set.entrant2PrereqType === 'seed') {
       return {
@@ -345,7 +355,7 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
       };
     }
     if (set.entrant2PrereqType === 'set') {
-      const prereqSet = idToSet.get(set.entrant2PrereqId)!;
+      const prereqSet = setIdToDbSet.get(set.entrant2PrereqId)!;
       if (
         prereqSet.entrant1PrereqType !== 'bye' &&
         prereqSet.entrant2PrereqType !== 'bye'
@@ -357,7 +367,7 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
           prereqStr: set.entrant2PrereqStr,
         };
       }
-      return coalescePrereq(prereqSet, idToSet);
+      return coalescePrereq(prereqSet, setIdToDbSet);
     }
   }
   if (set.entrant2PrereqType === 'bye') {
@@ -370,7 +380,7 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
       };
     }
     if (set.entrant1PrereqType === 'set') {
-      const prereqSet = idToSet.get(set.entrant1PrereqId)!;
+      const prereqSet = setIdToDbSet.get(set.entrant1PrereqId)!;
       if (
         prereqSet.entrant1PrereqType !== 'bye' &&
         prereqSet.entrant2PrereqType !== 'bye'
@@ -382,7 +392,7 @@ function coalescePrereq(set: DbSet, idToSet: Map<number, DbSet>) {
           prereqStr: set.entrant1PrereqStr,
         };
       }
-      return coalescePrereq(prereqSet, idToSet);
+      return coalescePrereq(prereqSet, setIdToDbSet);
     }
   }
   throw new Error(
@@ -399,7 +409,7 @@ function dbSetsFromApiSets(
   let roundMax = 0;
   const reachableSets = apiSets.filter((set) => !set.unreachable);
   if (bracketType === 2) {
-    const idToApiSet = new Map<number, any>(
+    const setIdToApiSet = new Map<number, any>(
       reachableSets.map((apiSet) => [apiSet.id, apiSet]),
     );
 
@@ -414,7 +424,7 @@ function dbSetsFromApiSets(
       stack.push(gfs[1]);
       // queue losers finals
       if (gfs[1].entrant2PrereqType === 'set') {
-        losersQueue.push(idToApiSet.get(gfs[1].entrant2PrereqId));
+        losersQueue.push(setIdToApiSet.get(gfs[1].entrant2PrereqId));
       }
     } else {
       reachableSets
@@ -437,7 +447,7 @@ function dbSetsFromApiSets(
         stack.push(curr);
 
         if (curr.entrant1PrereqType === 'set') {
-          const pushSet = idToApiSet.get(curr.entrant1PrereqId);
+          const pushSet = setIdToApiSet.get(curr.entrant1PrereqId);
           if (curr.entrant1PrereqCondition === 'winner') {
             newLosersQueue.push(pushSet);
           } else {
@@ -445,7 +455,7 @@ function dbSetsFromApiSets(
           }
         }
         if (curr.entrant2PrereqType === 'set') {
-          const pushSet = idToApiSet.get(curr.entrant2PrereqId);
+          const pushSet = setIdToApiSet.get(curr.entrant2PrereqId);
           if (curr.entrant2PrereqCondition === 'winner') {
             newLosersQueue.push(pushSet);
           } else {
@@ -468,7 +478,7 @@ function dbSetsFromApiSets(
       .map((apiSet) => apiSet.round)
       .reduce((previous, current) => Math.max(previous, current), 0);
   }
-  const idToDbSet = new Map<number, DbSet>();
+  const setIdToDbSet = new Map<number | string, DbSet>();
   apiSets
     .filter(
       (set) =>
@@ -478,7 +488,8 @@ function dbSetsFromApiSets(
     .map((set): DbSet => {
       const games = Array.isArray(set.games) ? (set.games as any[]) : [];
       return {
-        id: set.id,
+        id: 0, // autoincrement
+        setId: set.id,
         phaseGroupId: set.phaseGroupId,
         phaseId: set.phaseId,
         eventId: set.eventId,
@@ -539,12 +550,12 @@ function dbSetsFromApiSets(
       };
     })
     .forEach((set) => {
-      idToDbSet.set(set.id, set);
+      setIdToDbSet.set(set.setId, set);
     });
 
   // coalesce byes
   const sets: DbSet[] = [];
-  Array.from(idToDbSet.values()).forEach((dbSet) => {
+  Array.from(setIdToDbSet.values()).forEach((dbSet) => {
     if (
       dbSet.entrant1PrereqType === 'bye' ||
       dbSet.entrant2PrereqType === 'bye'
@@ -552,13 +563,13 @@ function dbSetsFromApiSets(
       return;
     }
     if (dbSet.entrant1PrereqType === 'set') {
-      const prereqSet1 = idToDbSet.get(dbSet.entrant1PrereqId)!;
+      const prereqSet1 = setIdToDbSet.get(dbSet.entrant1PrereqId)!;
       if (
         prereqSet1.entrant1PrereqType === 'bye' ||
         prereqSet1.entrant2PrereqType === 'bye'
       ) {
         const { prereqType, prereqId, prereqCondition, prereqStr } =
-          coalescePrereq(prereqSet1, idToDbSet);
+          coalescePrereq(prereqSet1, setIdToDbSet);
         dbSet.entrant1PrereqType = prereqType;
         dbSet.entrant1PrereqId = prereqId;
         dbSet.entrant1PrereqCondition = prereqCondition;
@@ -566,13 +577,13 @@ function dbSetsFromApiSets(
       }
     }
     if (dbSet.entrant2PrereqType === 'set') {
-      const prereqSet2 = idToDbSet.get(dbSet.entrant2PrereqId)!;
+      const prereqSet2 = setIdToDbSet.get(dbSet.entrant2PrereqId)!;
       if (
         prereqSet2.entrant1PrereqType === 'bye' ||
         prereqSet2.entrant2PrereqType === 'bye'
       ) {
         const { prereqType, prereqId, prereqCondition, prereqStr } =
-          coalescePrereq(prereqSet2, idToDbSet);
+          coalescePrereq(prereqSet2, setIdToDbSet);
         dbSet.entrant2PrereqType = prereqType;
         dbSet.entrant2PrereqId = prereqId;
         dbSet.entrant2PrereqCondition = prereqCondition;
@@ -584,92 +595,33 @@ function dbSetsFromApiSets(
   return sets;
 }
 
-const EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY = `
-  query EventPhaseGroupsQuery($eventId: ID) {
-    event(id: $eventId) {
-      id
-      name
-      isOnline
-      phases {
-        id
-        name
-        phaseGroups(query: {page: 1, perPage: 500}) {
-          nodes {
-            id
-            bracketType
-            displayIdentifier
-            sets(page: 1, perPage: 1, filters: {hideEmpty: false, showByes: false}) {
-              nodes {
-                id
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-`;
-export async function loadEvent(tournamentId: number, eventId: number) {
-  if (!apiKey) {
-    throw new Error('Please set API key.');
-  }
-
-  const poolIdsToLoad: number[] = [];
-  const previewSetIds: string[] = [];
+async function refreshEvent(tournamentId: number, eventId: number) {
+  const phases: DbPhase[] = [];
+  const pools: DbPool[] = [];
   try {
-    const data = await fetchGql(
-      apiKey,
-      EVENT_PHASE_GROUP_REPRESENTATIVE_SET_IDS_QUERY,
-      { eventId },
+    const eventResponse = await wrappedFetch(
+      `https://api.smash.gg/event/${eventId}?expand[]=phase&expand[]=groups`,
     );
-    const { event } = data;
-    const { isOnline } = event;
-    const dbEvent: DbEvent = {
-      id: event.id,
-      name: event.name,
-      isOnline: isOnline ? 1 : 0,
-      tournamentId,
-    };
-    const dbPhases: DbPhase[] = [];
-    const dbPools: DbPool[] = [];
-    const { phases } = event;
-    if (Array.isArray(phases)) {
-      phases.forEach((phase) => {
-        dbPhases.push({
-          id: phase.id,
-          eventId,
-          tournamentId,
-          name: phase.name,
-        });
-        const pools = phase.phaseGroups.nodes;
-        if (Array.isArray(pools)) {
-          pools.forEach((pool) => {
-            dbPools.push({
-              id: pool.id,
-              phaseId: phase.id,
-              eventId,
-              tournamentId,
-              name: pool.displayIdentifier,
-              bracketType: pool.bracketType,
-              state: pool.state,
-            });
-            const sets = pool.sets.nodes;
-            if (Array.isArray(sets) && sets.length > 0) {
-              const setId = sets[0].id;
-              if (!isOnline) {
-                poolIdsToLoad.push(pool.id);
-                if (typeof setId === 'string' && setId.startsWith('preview')) {
-                  previewSetIds.push(setId);
-                }
-              } else if (isOnline && typeof setId === 'number') {
-                poolIdsToLoad.push(pool.id);
-              }
-            }
-          });
-        }
+    const json = await eventResponse.json();
+    json.entities.phase.forEach((phase: any) => {
+      phases.push({
+        id: phase.id,
+        eventId,
+        tournamentId,
+        name: phase.name,
       });
-    }
-    upsertEvent(dbEvent, dbPhases, dbPools);
+    });
+    json.entities.groups.forEach((group: any) => {
+      pools.push({
+        id: group.id,
+        phaseId: group.phaseId,
+        eventId,
+        tournamentId,
+        name: group.displayIdentifier,
+        bracketType: group.groupTypeId,
+        state: group.state,
+      });
+    });
     updateSyncResultWithSuccess();
   } catch (e: any) {
     if (isRetryableApiError(e)) {
@@ -680,90 +632,32 @@ export async function loadEvent(tournamentId: number, eventId: number) {
     throw e;
   }
 
-  if (previewSetIds.length > 0) {
-    const inner = previewSetIds
-      .map(
-        (previewSetId, i) => `
-          m${i}: reportBracketSet(setId: "${previewSetId}") {
-            id
-          }`,
-      )
-      .join('');
-    const query = `mutation StartPhaseGroups {${inner}\n}`;
-    try {
-      await fetchGql(apiKey, query, {});
-      updateSyncResultWithSuccess();
-    } catch (e: any) {
-      if (
-        !(e instanceof ApiError) ||
-        !e.gqlErrors[0].message.startsWith('Your query complexity is too high.')
-      ) {
-        if (isRetryableApiError(e)) {
-          updateSyncResultWithError(e);
-        } else {
-          updateWithFatalError(e);
-        }
-        throw e;
-      }
-    }
-  }
-
+  const idToEntrant = new Map<number, DbEntrant>();
+  const sets: DbSet[] = [];
   try {
     await Promise.all(
-      poolIdsToLoad.map(async (id) => {
-        const response = await wrappedFetch(
-          `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
-        );
-        const json = await response.json();
-        const pool: DbPool = {
-          id,
-          phaseId: json.entities.groups.phaseId,
-          eventId,
-          tournamentId,
-          name: json.entities.groups.displayIdentifier,
-          bracketType: json.entities.groups.groupTypeId,
-          state: json.entities.groups.state,
-        };
-        // MATCHMAKING (ladder) is not supported
-        if (pool.bracketType === 7) {
-          return;
-        }
-
-        // entrants first pass
-        const entrants: DbEntrant[] = [];
-        const entrantsToUpdate = new Map<number, DbEntrant>();
-        const missingPlayerIds: {
-          playerId: number;
-          playerNum: 1 | 2;
-          entrantId: number;
-        }[] = [];
-        if (Array.isArray(json.entities.entrants)) {
+      pools
+        .map((pool) => pool.id)
+        .map(async (id) => {
+          const response = await wrappedFetch(
+            `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
+          );
+          const json = await response.json();
           (json.entities.entrants as any[]).forEach((entrant) => {
             const participants = Object.values(
               entrant.mutations.participants,
             ) as any[];
-            let skip = false;
             const players = [getPlayer(participants[0].playerId)];
             if (!players[0]) {
-              missingPlayerIds.push({
-                playerId: participants[0].playerId,
-                playerNum: 1,
-                entrantId: entrant.id,
-              });
-              skip = true;
+              throw new Error(`missing player: ${participants[0].playerId}`);
             }
             if (participants[1]) {
               players.push(getPlayer(participants[1].playerId));
               if (!players[1]) {
-                missingPlayerIds.push({
-                  playerId: participants[1].playerId,
-                  playerNum: 2,
-                  entrantId: entrant.id,
-                });
-                skip = true;
+                throw new Error(`missing player: ${participants[1].playerId}`);
               }
             }
-            const newEntrant: DbEntrant = {
+            idToEntrant.set(entrant.id, {
               id: entrant.id,
               eventId: entrant.eventId,
               name: entrant.name,
@@ -779,128 +673,26 @@ export async function loadEvent(tournamentId: number, eventId: number) {
               participant2PlayerId: participants[1]?.playerId || null,
               participant2Pronouns: players[1]?.pronouns || null,
               participant2UserSlug: players[1]?.userSlug || null,
-            };
-            if (skip) {
-              entrantsToUpdate.set(newEntrant.id, newEntrant);
-            }
-            entrants.push(newEntrant);
+            });
           });
-
-          // pick up missing players for entrants
-          if (missingPlayerIds.length > 0) {
-            do {
-              const queryPlayerParticipants = missingPlayerIds.slice(0, 500);
-              const inner = queryPlayerParticipants.map(
-                ({ playerId }) => `
-                  playerId${playerId}: player(id: ${playerId}) {
-                    user {
-                      genderPronoun
-                      slug
-                    }
-                  }`,
-              );
-              const query = `query PlayersQuery {${inner}\n}`;
-              // eslint-disable-next-line no-await-in-loop
-              const playerData = await fetchGql(apiKey, query, {});
-              queryPlayerParticipants.forEach(
-                ({ playerId, playerNum, entrantId }) => {
-                  const player = playerData[`playerId${playerId}`];
-                  const pronouns = player.user?.genderPronoun || null;
-                  const userSlug = player.user?.slug.slice(5) || null;
-                  const entrant = entrantsToUpdate.get(entrantId)!;
-                  if (playerNum === 1) {
-                    entrant.participant1Pronouns = pronouns;
-                    entrant.participant1UserSlug = userSlug;
-                  } else {
-                    entrant.participant2Pronouns = pronouns;
-                    entrant.participant2UserSlug = userSlug;
-                  }
-                  upsertPlayer({ id: playerId, pronouns, userSlug });
-                },
-              );
-              missingPlayerIds.splice(0, 500);
-            } while (missingPlayerIds.length > 0);
-          }
-        }
-
-        const sets = dbSetsFromApiSets(
-          json.entities.sets,
-          tournamentId,
-          pool.bracketType,
-        );
-        upsertPool(pool, entrants, sets);
-      }),
-    );
-    updateSyncResultWithSuccess();
-  } catch (e: any) {
-    if (isRetryableApiError(e)) {
-      updateSyncResultWithError(e);
-    } else {
-      updateWithFatalError(e);
-    }
-    throw e;
-  }
-}
-
-async function refreshEvent(tournamentId: number, eventId: number) {
-  const expectedPoolIds = getEventPoolIds(eventId);
-  const poolIdsToRefresh: number[] = [];
-  try {
-    const eventResponse = await wrappedFetch(
-      `https://api.smash.gg/event/${eventId}?expand[]=groups`,
-    );
-    const json = await eventResponse.json();
-    json.entities.groups.forEach((group: any) => {
-      if (group.state !== 1) {
-        poolIdsToRefresh.push(group.id);
-      }
-    });
-    updateSyncResultWithSuccess();
-  } catch (e: any) {
-    if (isRetryableApiError(e)) {
-      updateSyncResultWithError(e);
-    } else {
-      updateWithFatalError(e);
-    }
-    throw e;
-  }
-
-  poolIdsToRefresh.forEach((poolId) => {
-    if (!expectedPoolIds.delete(poolId)) {
-      throw new Error(`unexpected poolId: ${poolId}`);
-    }
-  });
-  if (expectedPoolIds.size > 0) {
-    throw new Error(`missing poolIds: ${Array.from(expectedPoolIds.keys())}`);
-  }
-
-  try {
-    await Promise.all(
-      poolIdsToRefresh.map(async (id) => {
-        const expectedSetIds = getPoolSetIds(id);
-        const response = await wrappedFetch(
-          `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
-        );
-        const json = await response.json();
-        const sets = dbSetsFromApiSets(
-          json.entities.sets,
-          tournamentId,
-          json.entities.groups.groupTypeId,
-        );
-        sets.forEach((set) => {
-          if (!expectedSetIds.delete(set.id)) {
-            throw new Error(`unexpected setId: ${set.id}`);
-          }
-        });
-        if (expectedSetIds.size > 0) {
-          throw new Error(
-            `missing setIds: ${Array.from(expectedSetIds.keys())}`,
+          sets.push(
+            ...dbSetsFromApiSets(
+              json.entities.sets,
+              tournamentId,
+              json.entities.groups.groupTypeId,
+            ),
           );
-        }
-        updateEventSets(tournamentId, eventId, sets);
-      }),
+        }),
     );
     updateSyncResultWithSuccess();
+    updateEvent(
+      tournamentId,
+      eventId,
+      phases,
+      pools,
+      Array.from(idToEntrant.values()),
+      sets,
+    );
   } catch (e: any) {
     if (isRetryableApiError(e)) {
       updateSyncResultWithError(e);
@@ -912,33 +704,37 @@ async function refreshEvent(tournamentId: number, eventId: number) {
 }
 
 const UPDATE_SET_INNER = `
+  id
+  phaseGroup {
+    id
+  }
+  identifier
+  state
+  slots {
+    entrant {
       id
-      state
-      slots {
-        entrant {
-          id
-        }
-        standing {
-          stats {
-            score {
-              value
-            }
-          }
+    }
+    standing {
+      stats {
+        score {
+          value
         }
       }
-      station {
-        id
-      }
-      stream {
-        id
-      }
-      games {
-        stage {
-          id
-        }
-      }
-      updatedAt
-      winnerId
+    }
+  }
+  station {
+    id
+  }
+  stream {
+    id
+  }
+  games {
+    stage {
+      id
+    }
+  }
+  updatedAt
+  winnerId
 `;
 function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
   const games = Array.isArray(set.games) ? (set.games as any[]) : [];
@@ -947,7 +743,9 @@ function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
   const entrant2 = set.slots[1].entrant;
   const standing2 = set.slots[1].standing;
   return {
-    id: set.id,
+    setId: set.id,
+    phaseGroupId: set.phaseGroup.id,
+    identifier: set.identifier,
     state: set.state,
     entrant1Id: entrant1 ? entrant1.id : null,
     entrant1Score: standing1 ? standing1.stats.score.value : null,
@@ -973,7 +771,7 @@ const RESET_SET_RECURSIVE_MUTATION = `
   }
 `;
 async function resetSet(
-  setId: number,
+  setId: number | string,
   recursive: boolean,
 ): Promise<ApiSetUpdate> {
   if (!apiKey) {
@@ -994,7 +792,7 @@ const ASSIGN_SET_STATION_MUTATION = `
   }
 `;
 async function assignSetStation(
-  setId: number,
+  setId: number | string,
   stationId: number,
 ): Promise<ApiSetUpdate> {
   if (!apiKey) {
@@ -1014,7 +812,7 @@ const ASSIGN_SET_STREAM_MUTATION = `
   }
 `;
 async function assignSetStream(
-  setId: number,
+  setId: number | string,
   streamId: number,
 ): Promise<ApiSetUpdate> {
   if (!apiKey) {
@@ -1033,7 +831,7 @@ const START_SET_MUTATION = `
     markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function startSet(setId: number): Promise<ApiSetUpdate> {
+async function startSet(setId: number | string): Promise<ApiSetUpdate> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1053,7 +851,7 @@ const REPORT_SET_MUTATION = `
   }
 `;
 async function reportSet(
-  setId: number,
+  setId: number | string,
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
@@ -1082,7 +880,7 @@ const UPDATE_SET_MUTATION = `
   }
 `;
 async function updateSet(
-  setId: number,
+  setId: number | string,
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
@@ -1131,40 +929,93 @@ async function tryNextTransaction(id: number, slug: string) {
               await resetSet(transaction.setId, transaction.isRecursive),
             ];
           } catch (e: any) {
-            if (
-              e instanceof ApiError &&
-              e.gqlErrors.some(
-                (gqlError) =>
-                  gqlError.message.startsWith(
-                    'Resetting this set will also reset ',
-                  ) &&
-                  gqlError.message.endsWith(
-                    ' dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
-                  ),
-              )
-            ) {
-              markTransactionConflict(
-                transaction.transactionNum,
-                ConflictReason.RESET_DEPENDENT_SETS,
-              );
+            if (e instanceof ApiError) {
+              if (
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message.startsWith(
+                      'Resetting this set will also reset ',
+                    ) &&
+                    gqlError.message.endsWith(
+                      ' dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
+                    ),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.RESET_DEPENDENT_SETS,
+                );
+              } else {
+                throw e;
+              }
             } else {
               throw e;
             }
           }
         } else if (transaction.type === TransactionType.ASSIGN_STATION) {
-          updates = [
-            await assignSetStation(transaction.setId, transaction.stationId),
-          ];
+          try {
+            updates = [
+              await assignSetStation(transaction.setId, transaction.stationId),
+            ];
+          } catch (e: any) {
+            if (
+              e instanceof ApiError &&
+              e.gqlErrors.some((gqlError) =>
+                gqlError.message.startsWith('Set not found for id: '),
+              )
+            ) {
+              markTransactionConflict(
+                transaction.transactionNum,
+                ConflictReason.SET_NOT_FOUND,
+              );
+            } else {
+              throw e;
+            }
+          }
         } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
-          updates = [
-            await assignSetStream(transaction.setId, transaction.streamId),
-          ];
+          try {
+            updates = [
+              await assignSetStream(transaction.setId, transaction.streamId),
+            ];
+          } catch (e: any) {
+            if (
+              e instanceof ApiError &&
+              e.gqlErrors.some((gqlError) =>
+                gqlError.message.startsWith('Set not found for id: '),
+              )
+            ) {
+              markTransactionConflict(
+                transaction.transactionNum,
+                ConflictReason.SET_NOT_FOUND,
+              );
+            } else {
+              throw e;
+            }
+          }
         } else if (transaction.type === TransactionType.START) {
           try {
             updates = [await startSet(transaction.setId)];
           } catch (e: any) {
             if (e instanceof ApiError) {
               if (
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
                 e.gqlErrors.some(
                   (gqlError) => gqlError.message === 'Set is already started',
                 )
@@ -1200,51 +1051,63 @@ async function tryNextTransaction(id: number, slug: string) {
                 ),
               ];
             } catch (e: any) {
-              if (
-                e instanceof ApiError &&
-                e.gqlErrors.some(
-                  (gqlError) =>
-                    gqlError.message ===
-                    'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
-                )
-              ) {
-                try {
-                  updates = await reportSet(
-                    transaction.setId,
-                    transaction.winnerId,
-                    transaction.isDQ,
-                    transaction.gameData,
+              if (e instanceof ApiError) {
+                if (
+                  e.gqlErrors.some((gqlError) =>
+                    gqlError.message.startsWith('Set not found for id: '),
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.SET_NOT_FOUND,
                   );
-                } catch (e2: any) {
-                  if (e2 instanceof ApiError) {
-                    if (
-                      e2.gqlErrors.some(
-                        (gqlError) =>
-                          gqlError.message ===
-                          'Cannot report completed set via API.',
-                      )
-                    ) {
-                      markTransactionConflict(
-                        transaction.transactionNum,
-                        ConflictReason.UPDATE_CHANGE_WINNER,
-                      );
-                    } else if (
-                      e2.gqlErrors.some(
-                        (gqlError) =>
-                          gqlError.message ===
-                          "This set can't be reported until all entrants are filled",
-                      )
-                    ) {
-                      markTransactionConflict(
-                        transaction.transactionNum,
-                        ConflictReason.MISSING_ENTRANTS,
-                      );
+                } else if (
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
+                  )
+                ) {
+                  try {
+                    updates = await reportSet(
+                      transaction.setId,
+                      transaction.winnerId,
+                      transaction.isDQ,
+                      transaction.gameData,
+                    );
+                  } catch (e2: any) {
+                    if (e2 instanceof ApiError) {
+                      if (
+                        e2.gqlErrors.some(
+                          (gqlError) =>
+                            gqlError.message ===
+                            'Cannot report completed set via API.',
+                        )
+                      ) {
+                        markTransactionConflict(
+                          transaction.transactionNum,
+                          ConflictReason.UPDATE_CHANGE_WINNER,
+                        );
+                      } else if (
+                        e2.gqlErrors.some(
+                          (gqlError) =>
+                            gqlError.message ===
+                            "This set can't be reported until all entrants are filled",
+                        )
+                      ) {
+                        markTransactionConflict(
+                          transaction.transactionNum,
+                          ConflictReason.MISSING_ENTRANTS,
+                        );
+                      } else {
+                        throw e2;
+                      }
                     } else {
                       throw e2;
                     }
-                  } else {
-                    throw e2;
                   }
+                } else {
+                  throw e;
                 }
               } else {
                 throw e;
@@ -1261,7 +1124,15 @@ async function tryNextTransaction(id: number, slug: string) {
             } catch (e: any) {
               if (e instanceof ApiError) {
                 if (
-                  e instanceof ApiError &&
+                  e.gqlErrors.some((gqlError) =>
+                    gqlError.message.startsWith('Set not found for id: '),
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.SET_NOT_FOUND,
+                  );
+                } else if (
                   e.gqlErrors.some(
                     (gqlError) =>
                       gqlError.message ===
@@ -1273,7 +1144,6 @@ async function tryNextTransaction(id: number, slug: string) {
                     ConflictReason.REPORT_COMPLETED,
                   );
                 } else if (
-                  e instanceof ApiError &&
                   e.gqlErrors.some(
                     (gqlError) =>
                       gqlError.message ===

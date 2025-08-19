@@ -18,7 +18,7 @@ export function initTransaction(
   updateClients = initUpdateClients;
 }
 
-export function resetSetTransaction(id: number) {
+export function resetSetTransaction(id: number | string) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = resetSet(id, currentTransactionNum);
@@ -27,7 +27,7 @@ export function resetSetTransaction(id: number) {
   return { set: ret.set };
 }
 
-export function startSetTransaction(id: number) {
+export function startSetTransaction(id: number | string) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = startSet(id, currentTransactionNum);
@@ -36,7 +36,10 @@ export function startSetTransaction(id: number) {
   return { set: ret.set };
 }
 
-export function assignSetStationTransaction(id: number, stationId: number) {
+export function assignSetStationTransaction(
+  id: number | string,
+  stationId: number,
+) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = assignSetStation(id, stationId, currentTransactionNum);
@@ -45,7 +48,10 @@ export function assignSetStationTransaction(id: number, stationId: number) {
   return { set: ret.set };
 }
 
-export function assignSetStreamTransaction(id: number, streamId: number) {
+export function assignSetStreamTransaction(
+  id: number | string,
+  streamId: number,
+) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = assignSetStream(id, streamId, currentTransactionNum);
@@ -55,7 +61,7 @@ export function assignSetStreamTransaction(id: number, streamId: number) {
 }
 
 export function reportSetTransaction(
-  id: number,
+  id: number | string,
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],

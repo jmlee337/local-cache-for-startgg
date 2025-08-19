@@ -8,6 +8,7 @@ export type AdminedTournament = {
 };
 
 export enum ConflictReason {
+  SET_NOT_FOUND,
   RESET_DEPENDENT_SETS,
   MISSING_ENTRANTS,
   REPORT_COMPLETED,
@@ -42,6 +43,7 @@ export type RendererStream = {
 
 export type RendererSet = {
   id: number;
+  setId: number | string;
   ordinal: number;
   fullRoundText: string;
   shortRoundText: string;
@@ -158,6 +160,8 @@ export type DbSetMutation = {
   eventId: number;
   tournamentId: number;
 
+  identifier: string;
+
   // locally mutable
   statePresent: null | 1;
   state: number | null;
@@ -190,6 +194,7 @@ export type DbSetMutation = {
 export type DbSet = {
   // ids
   id: number;
+  setId: number | string;
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
@@ -317,7 +322,7 @@ export type ApiGameData = {
 };
 
 export type ApiTransaction = {
-  setId: number;
+  setId: number | string;
   transactionNum: number;
 } & (
   | {
@@ -345,7 +350,9 @@ export type ApiTransaction = {
 );
 
 export type ApiSetUpdate = {
-  id: number;
+  setId: number;
+  phaseGroupId: number;
+  identifier: string;
   state: number;
   entrant1Id: number | null;
   entrant1Score: number | null;

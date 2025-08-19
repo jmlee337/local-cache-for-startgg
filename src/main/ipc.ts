@@ -11,7 +11,6 @@ import {
   getApiTournament,
   getFatalErrorMessage,
   getSyncResult,
-  loadEvent,
   onTransaction,
   startRefreshingTournament,
   setApiKey,
@@ -28,6 +27,7 @@ import {
   getTournament,
   getTournamentId,
   getTournaments,
+  loadEvent,
   makeResetRecursive,
   reportSet,
   resetSet,
@@ -232,20 +232,25 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle(
     'loadEvent',
     async (event: IpcMainInvokeEvent, eventId: number) => {
-      await loadEvent(getTournamentId(), eventId);
+      const tournamentId = getTournamentId();
+      await loadEvent(eventId, tournamentId);
+      maybeTryNow(tournamentId);
       updateClients();
     },
   );
 
   ipcMain.removeHandler('resetSet');
-  ipcMain.handle('resetSet', (event: IpcMainInvokeEvent, id: number) => {
-    resetSetTransaction(id);
-  });
+  ipcMain.handle(
+    'resetSet',
+    (event: IpcMainInvokeEvent, id: number | string) => {
+      resetSetTransaction(id);
+    },
+  );
 
   ipcMain.removeHandler('assignSetStation');
   ipcMain.handle(
     'assignSetStation',
-    (event: IpcMainInvokeEvent, id: number, stationId: number) => {
+    (event: IpcMainInvokeEvent, id: number | string, stationId: number) => {
       assignSetStationTransaction(id, stationId);
     },
   );
@@ -253,22 +258,25 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('assignSetStream');
   ipcMain.handle(
     'assignSetStream',
-    (event: IpcMainInvokeEvent, id: number, streamId: number) => {
+    (event: IpcMainInvokeEvent, id: number | string, streamId: number) => {
       assignSetStreamTransaction(id, streamId);
     },
   );
 
   ipcMain.removeHandler('startSet');
-  ipcMain.handle('startSet', (event: IpcMainInvokeEvent, id: number) => {
-    startSetTransaction(id);
-  });
+  ipcMain.handle(
+    'startSet',
+    (event: IpcMainInvokeEvent, id: number | string) => {
+      startSetTransaction(id);
+    },
+  );
 
   ipcMain.removeHandler('reportSet');
   ipcMain.handle(
     'reportSet',
     (
       event: IpcMainInvokeEvent,
-      id: number,
+      id: number | string,
       winnerId: number,
       isDQ: boolean,
       entrantScores:
@@ -322,20 +330,23 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   );
 
   ipcMain.removeHandler('preemptReset');
-  ipcMain.handle('preemptReset', (event: IpcMainInvokeEvent, setId: number) => {
-    const transactionNum = preemptTransactionNum;
-    preemptTransactionNum -= 1;
-    const ret = resetSet(setId, transactionNum, /* preempt */ true);
-    updateClients();
-    maybeTryNow(ret.tournamentId);
-  });
+  ipcMain.handle(
+    'preemptReset',
+    (event: IpcMainInvokeEvent, setId: number | string) => {
+      const transactionNum = preemptTransactionNum;
+      preemptTransactionNum -= 1;
+      const ret = resetSet(setId, transactionNum, /* preempt */ true);
+      updateClients();
+      maybeTryNow(ret.tournamentId);
+    },
+  );
 
   ipcMain.removeHandler('preemptReport');
   ipcMain.handle(
     'preemptReport',
     (
       event: IpcMainInvokeEvent,
-      id: number,
+      id: number | string,
       winnerId: number,
       isDQ: boolean,
       entrantScores:

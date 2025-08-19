@@ -46,7 +46,7 @@ export default function Sync() {
     } else {
       syncButton = (
         <Button
-          color="error"
+          color="warning"
           size="large"
           variant="text"
           onClick={() => {
@@ -74,7 +74,7 @@ export default function Sync() {
                 new Date(syncResult.lastSuccessMs),
                 'HH:mm:ss',
               )}`
-            : `Unable to sync since ${format(
+            : `Offline since ${format(
                 new Date(syncResult.errorSinceMs),
                 'HH:mm:ss',
               )}`}
