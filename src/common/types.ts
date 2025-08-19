@@ -99,6 +99,13 @@ export type RendererConflict = {
   transactionNum: number;
 };
 
+export type RendererConflictServerSet = {
+  eventId: number;
+  phaseId: number;
+  poolId: number;
+  set: RendererSet;
+};
+
 export type RendererConflictLocalSet = {
   transactionNum: number;
   set: RendererSet;
@@ -110,7 +117,7 @@ export type RendererConflictResolve = {
   phaseName: string;
   poolName: string;
   reason: ConflictReason;
-  serverSets: RendererSet[];
+  serverSets: RendererConflictServerSet[];
   localSets: RendererConflictLocalSet[];
 };
 

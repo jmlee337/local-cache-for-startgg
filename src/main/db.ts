@@ -31,6 +31,7 @@ import {
   RendererConflict,
   RendererConflictResolve,
   RendererConflictLocalSet,
+  RendererConflictServerSet,
 } from '../common/types';
 
 enum SyncStatus {
@@ -648,7 +649,14 @@ export function getConflictResolve(
     );
   }
 
-  const serverSets = [dbSetToRendererSet(set)];
+  const serverSets: RendererConflictServerSet[] = [
+    {
+      eventId: set.eventId,
+      phaseId: set.phaseId,
+      poolId: set.phaseGroupId,
+      set: dbSetToRendererSet(set),
+    },
+  ];
   if (conflictTransactions[0].reason === ConflictReason.RESET_DEPENDENT_SETS) {
     const dependentSets = findResetDependentSets(set);
     serverSets.push(
@@ -659,7 +667,12 @@ export function getConflictResolve(
           }
           return a.ordinal - b.ordinal;
         })
-        .map(dbSetToRendererSet),
+        .map((dependentSet) => ({
+          eventId: dependentSet.eventId,
+          phaseId: dependentSet.phaseId,
+          poolId: dependentSet.phaseGroupId,
+          set: dbSetToRendererSet(dependentSet),
+        })),
     );
   } else if (
     conflictTransactions[0].reason === ConflictReason.MISSING_ENTRANTS
@@ -673,7 +686,12 @@ export function getConflictResolve(
           }
           return b.ordinal - a.ordinal;
         })
-        .map(dbSetToRendererSet),
+        .map((dependentSet) => ({
+          eventId: dependentSet.eventId,
+          phaseId: dependentSet.phaseId,
+          poolId: dependentSet.phaseGroupId,
+          set: dbSetToRendererSet(dependentSet),
+        })),
     );
   }
 

@@ -42,7 +42,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import {
   AdminedTournament,
   ApiError,
@@ -70,6 +70,16 @@ const LOSERS_BACKGROUND_COLOR = '#ffebee';
 const SET_BACKGROUND_COLOR = '#fafafa';
 const WINNER_BACKGROUND_HIGHLIGHT = '#ba68c8';
 const TEXT_COLOR_LIGHT = '#fff';
+
+function getColor(set: RendererSet) {
+  if (set.state === 2) {
+    return '#0d8225';
+  }
+  if (set.state === 6) {
+    return '#f9a825';
+  }
+  return undefined;
+}
 
 function getBackgroundColor(set: RendererSet) {
   if (set.round < 0) {
@@ -108,13 +118,6 @@ function SetEntrant({
 }
 
 function SetListItemInner({ set }: { set: RendererSet }) {
-  let color: string | undefined;
-  if (set.state === 2) {
-    color = '#0d8225';
-  } else if (set.state === 6) {
-    color = '#F9A825';
-  }
-
   let titleStart = <CloudOff fontSize="small" />;
   if (set.syncState === 1) {
     titleStart = <BackupOutlined fontSize="small" />;
@@ -170,7 +173,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
         alignItems="center"
         gap="4px"
         width="100%"
-        style={{ color }}
+        style={{ color: getColor(set) }}
       >
         {titleStart}
         <Typography flexGrow={1} textAlign="center" variant="caption">
@@ -306,7 +309,7 @@ function PoolListItem({
 }: {
   pool: RendererPool;
   conflict: RendererConflict | null;
-  reportSet: (set: RendererSet) => void;
+  reportSet: (poolId: number, set: RendererSet) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [completedOpen, setCompletedOpen] = useState(true);
@@ -392,7 +395,9 @@ function PoolListItem({
                           ? conflict.transactionNum
                           : null
                       }
-                      reportSet={reportSet}
+                      reportSet={(rendererSet: RendererSet) =>
+                        reportSet(pool.id, rendererSet)
+                      }
                     />
                   ),
               )}
@@ -425,7 +430,9 @@ function PoolListItem({
                           ? conflict.transactionNum
                           : null
                       }
-                      reportSet={reportSet}
+                      reportSet={(rendererSet: RendererSet) =>
+                        reportSet(pool.id, rendererSet)
+                      }
                     />
                   ),
               )}
@@ -443,7 +450,7 @@ function PhaseListItem({
 }: {
   phase: RendererPhase;
   conflict: RendererConflict | null;
-  reportSet: (set: RendererSet) => void;
+  reportSet: (phaseId: number, poolId: number, set: RendererSet) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -480,7 +487,9 @@ function PhaseListItem({
               key={pool.id}
               pool={pool}
               conflict={conflict}
-              reportSet={reportSet}
+              reportSet={(poolId: number, set: RendererSet) =>
+                reportSet(phase.id, poolId, set)
+              }
             />
           ))}
       </Collapse>
@@ -495,7 +504,12 @@ function LoadedEventListItem({
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
-  reportSet: (set: RendererSet) => void;
+  reportSet: (
+    eventId: number,
+    phaseId: number,
+    poolId: number,
+    set: RendererSet,
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -543,7 +557,9 @@ function LoadedEventListItem({
               key={phase.id}
               phase={phase}
               conflict={conflict}
-              reportSet={reportSet}
+              reportSet={(phaseId: number, poolId: number, set: RendererSet) =>
+                reportSet(event.id, phaseId, poolId, set)
+              }
             />
           ))}
       </Collapse>
@@ -759,31 +775,11 @@ export default function Tournament() {
     setLocalTournaments(await window.electron.getLocalTournaments());
     getAdminedTournaments();
   };
-
-  const [tournament, setTournament] = useState<RendererTournament | null>(null);
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
       setAdminedTournaments(newAdminedTournaments);
     });
-    window.electron.onTournament((event, newTournament) => {
-      setTournament(newTournament);
-    });
-    const inner = async () => {
-      const currentTournament = await window.electron.getCurrentTournament();
-      if (currentTournament) {
-        setTournament(currentTournament);
-      }
-    };
-    inner();
   }, []);
-
-  const [unloadedOpen, setUnloadedOpen] = useState(true);
-  const unloadedEvents = tournament
-    ? tournament.events.filter((event) => !event.isLoaded)
-    : [];
-  const loadedEvents = tournament
-    ? tournament.events.filter((event) => event.isLoaded)
-    : [];
 
   const [open, setOpen] = useState(false);
   const [settingTournament, setSettingTournament] = useState(false);
@@ -793,7 +789,7 @@ export default function Tournament() {
     setError(message);
     setErrorDialogOpen(true);
   };
-  const get = async (slug: string) => {
+  const getTournament = async (slug: string) => {
     setSettingTournament(true);
     try {
       await window.electron.getTournament(slug);
@@ -805,18 +801,16 @@ export default function Tournament() {
       setSettingTournament(false);
     }
   };
-  const set = async (id: number, slug: string) => {
-    setSettingTournament(true);
-    await window.electron.setTournament(id, slug);
-    setOpen(false);
-    setSettingTournament(false);
-  };
 
   const [stationStreamDialogOpen, setStationStreamDialogOpen] = useState(false);
   const [choosing, setChoosing] = useState(false);
 
   const [resetting, setResetting] = useState(false);
   const [starting, setStarting] = useState(false);
+
+  const [reportEventId, setReportEventId] = useState(0);
+  const [reportPhaseId, setReportPhaseId] = useState(0);
+  const [reportPoolId, setReportPoolId] = useState(0);
 
   const [reportSet, setReportSet] = useState<RendererSet | null>(null);
   const [reportPreempt, setReportPreempt] = useState(false);
@@ -827,20 +821,93 @@ export default function Tournament() {
   const [reportEntrant2Score, setReportEntrant2Score] = useState(0);
   const [reporting, setReporting] = useState(false);
 
-  const reportSetFn = (
-    newReportSet: RendererSet,
-    newReportPreempt: boolean = false,
-  ) => {
-    setReportWinnerId(newReportSet.winnerId ?? 0);
-    setReportIsDq(
-      newReportSet.entrant1Score === -1 || newReportSet.entrant2Score === -1,
-    );
-    setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
-    setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
-    setReportSet(newReportSet);
-    setReportPreempt(newReportPreempt);
-    setReportDialogOpen(true);
-  };
+  const reportSetFn = useCallback(
+    (
+      newReportEventId: number,
+      newReportPhaseId: number,
+      newReportPoolId: number,
+      newReportSet: RendererSet,
+      newReportPreempt: boolean = false,
+    ) => {
+      setReportWinnerId(newReportSet.winnerId ?? 0);
+      setReportIsDq(
+        newReportSet.entrant1Score === -1 || newReportSet.entrant2Score === -1,
+      );
+      setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
+      setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
+      setReportPreempt(newReportPreempt);
+      setReportSet(newReportSet);
+      setReportPoolId(newReportPoolId);
+      setReportPhaseId(newReportPhaseId);
+      setReportEventId(newReportEventId);
+      setReportDialogOpen(true);
+    },
+    [],
+  );
+
+  const [tournament, setTournament] = useState<RendererTournament | null>(null);
+  useEffect(() => {
+    (async () => {
+      const currentTournament = await window.electron.getCurrentTournament();
+      if (currentTournament) {
+        setTournament(currentTournament);
+      }
+    })();
+  }, []);
+  useEffect(() => {
+    window.electron.onTournament((e, newTournament) => {
+      if (
+        reportDialogOpen &&
+        reportEventId &&
+        reportPhaseId &&
+        reportPoolId &&
+        reportSet
+      ) {
+        const newEvent = newTournament.events.find(
+          (event) => event.id === reportEventId,
+        );
+        if (newEvent) {
+          const newPhase = newEvent.phases.find(
+            (phase) => phase.id === reportPhaseId,
+          );
+          if (newPhase) {
+            const newPool = newPhase.pools.find(
+              (pool) => pool.id === reportPoolId,
+            );
+            if (newPool) {
+              const newReportSet = newPool.sets.find(
+                (set) => set.identifier === reportSet.identifier,
+              );
+              if (newReportSet) {
+                reportSetFn(
+                  reportEventId,
+                  reportPhaseId,
+                  reportPoolId,
+                  newReportSet,
+                );
+              }
+            }
+          }
+        }
+      }
+      setTournament(newTournament);
+    });
+  }, [
+    reportDialogOpen,
+    reportEventId,
+    reportPhaseId,
+    reportPoolId,
+    reportSet,
+    reportSetFn,
+  ]);
+
+  const [unloadedOpen, setUnloadedOpen] = useState(true);
+  const unloadedEvents = tournament
+    ? tournament.events.filter((event) => !event.isLoaded)
+    : [];
+  const loadedEvents = tournament
+    ? tournament.events.filter((event) => event.isLoaded)
+    : [];
 
   let reportGameData:
     | [
@@ -1023,7 +1090,12 @@ export default function Tournament() {
                     <LocalTournamentItemButton
                       key={localTournament.id}
                       localTournament={localTournament}
-                      set={set}
+                      set={async (id: number, slug: string) => {
+                        setSettingTournament(true);
+                        await window.electron.setTournament(id, slug);
+                        setOpen(false);
+                        setSettingTournament(false);
+                      }}
                       setLocalTournaments={setLocalTournaments}
                       showError={showError}
                     />
@@ -1048,7 +1120,7 @@ export default function Tournament() {
                   event.preventDefault();
                   event.stopPropagation();
                   if (newSlug) {
-                    await get(newSlug);
+                    await getTournament(newSlug);
                   }
                 }}
               >
@@ -1080,7 +1152,7 @@ export default function Tournament() {
                 <ListItemButton
                   key={adminedTournament.slug}
                   onClick={async () => {
-                    await get(adminedTournament.slug);
+                    await getTournament(adminedTournament.slug);
                   }}
                 >
                   <ListItemText>{adminedTournament.name}</ListItemText>
@@ -1121,13 +1193,20 @@ export default function Tournament() {
           }}
         >
           <Stack
+            color={reportSet ? getColor(reportSet) : undefined}
             direction="row"
             alignItems="center"
             justifyContent="space-between"
             padding="16px 24px"
           >
-            <Typography variant="h6">
+            <Typography variant="h6" display="flex" alignItems="center">
               {reportSet?.fullRoundText} ({reportSet?.identifier})
+              {reportSet?.state === 2 && (
+                <HourglassTop style={{ marginLeft: '3px' }} />
+              )}
+              {reportSet?.state === 6 && (
+                <NotificationsActive style={{ marginLeft: '6px' }} />
+              )}
             </Typography>
             <Stack direction="row" alignItems="center" spacing="8px">
               {reportSet?.hasStageData === 1 && (
@@ -1735,41 +1814,47 @@ export default function Tournament() {
                     padding="8px"
                     sx={{
                       backgroundColor: getBackgroundColor(
-                        conflictResolve.serverSets[0],
+                        conflictResolve.serverSets[0].set,
                       ),
                       boxSizing: 'border-box',
                       width: SET_FIXED_WIDTH,
                     }}
                   >
                     <Typography variant="body2">Server</Typography>
-                    <SetListItemInner set={conflictResolve.serverSets[0]} />
+                    <SetListItemInner set={conflictResolve.serverSets[0].set} />
                   </Box>
                   {conflictResolve.serverSets.length > 1 &&
                     conflictResolve.serverSets.slice(1).map((serverSet) =>
                       conflictResolve.reason ===
                         ConflictReason.MISSING_ENTRANTS &&
-                      serverSet.entrant1Id &&
-                      serverSet.entrant2Id ? (
+                      serverSet.set.entrant1Id &&
+                      serverSet.set.entrant2Id ? (
                         <SetListItemButton
-                          key={serverSet.id}
-                          set={serverSet}
+                          key={serverSet.set.id}
+                          set={serverSet.set}
                           conflictTransactionNum={null}
                           reportSet={(rendererSet) =>
-                            reportSetFn(rendererSet, /* reportPreempt */ true)
+                            reportSetFn(
+                              serverSet.eventId,
+                              serverSet.phaseId,
+                              serverSet.poolId,
+                              rendererSet,
+                              /* reportPreempt */ true,
+                            )
                           }
                         />
                       ) : (
                         <Box
                           padding="8px"
                           sx={{
-                            backgroundColor: getBackgroundColor(serverSet),
+                            backgroundColor: getBackgroundColor(serverSet.set),
                             boxSizing: 'border-box',
                             width: SET_FIXED_WIDTH,
                           }}
                         >
                           <SetListItemInner
-                            key={serverSet.id}
-                            set={serverSet}
+                            key={serverSet.set.id}
+                            set={serverSet.set}
                           />
                         </Box>
                       ),
