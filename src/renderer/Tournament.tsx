@@ -1155,7 +1155,14 @@ export default function Tournament() {
                     await getTournament(adminedTournament.slug);
                   }}
                 >
-                  <ListItemText>{adminedTournament.name}</ListItemText>
+                  <ListItemText
+                    style={{ overflowX: 'hidden', whiteSpace: 'nowrap' }}
+                  >
+                    {adminedTournament.name}{' '}
+                    <Typography variant="caption">
+                      ({adminedTournament.slug})
+                    </Typography>
+                  </ListItemText>
                 </ListItemButton>
               ))}
             </DialogContent>
