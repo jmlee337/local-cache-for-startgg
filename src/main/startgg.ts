@@ -9,7 +9,6 @@ import {
   DbEntrant,
   DbEvent,
   DbPhase,
-  DbPlayer,
   DbPool,
   DbSet,
   DbTournament,
@@ -21,8 +20,6 @@ import {
   DbSeed,
 } from '../common/types';
 import {
-  getPlayer,
-  upsertPlayers,
   upsertTournament,
   updateEvent,
   upsertStations,
@@ -34,6 +31,7 @@ import {
   deleteTransaction,
   markTransactionConflict,
   upgradePreviewSets,
+  replaceParticipants,
 } from './db';
 
 let apiKey = '';
@@ -207,7 +205,15 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
   }
 }
 
-const TOURNAMENT_PLAYERS_QUERY = `
+async function oneSecondPromise() {
+  return new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, 1000);
+  });
+}
+
+const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
       participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
@@ -215,8 +221,10 @@ const TOURNAMENT_PLAYERS_QUERY = `
           totalPages
         }
         nodes {
+          id
+          gamerTag
+          prefix
           player {
-            id
             user {
               genderPronoun
               slug
@@ -265,46 +273,44 @@ export async function getApiTournament(inSlug: string) {
       name: json.entities.tournament.name,
       startAt: json.entities.tournament.startAt,
     };
-    const events: DbEvent[] = (json.entities.event as any[])
-      .filter((event) => {
-        const isMelee = event.videogameId === 1;
-        const isSinglesOrDoubles =
-          event.teamRosterSize === null ||
-          (event.teamRosterSize.minPlayers === 2 &&
-            event.teamRosterSize.maxPlayers === 2);
-        return isMelee && isSinglesOrDoubles;
-      })
-      .map((event) => ({
-        id: event.id,
-        tournamentId: id,
-        name: event.name,
-        isOnline: event.isOnline ? 1 : 0,
-      }));
+    const events: DbEvent[] = (json.entities.event as any[]).map((event) => ({
+      id: event.id,
+      tournamentId: id,
+      name: event.name,
+      isOnline: event.isOnline ? 1 : 0,
+    }));
     upsertTournament(tournament, events);
 
-    let nextData;
     let page = 1;
-    do {
+    const eventIds = getLoadedEventIds(id);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       // eslint-disable-next-line no-await-in-loop
-      nextData = await fetchGql(apiKey, TOURNAMENT_PLAYERS_QUERY, {
+      const nextData = await fetchGql(apiKey, TOURNAMENT_PARTICIPANTS_QUERY, {
         page,
         slug,
-        eventIds: events.map((event) => event.id),
+        eventIds,
       });
       const { nodes } = nextData.tournament.participants;
       if (Array.isArray(nodes)) {
-        upsertPlayers(
-          nodes.map(
-            (participant): DbPlayer => ({
-              id: participant.player.id,
-              pronouns: participant.player.user?.genderPronoun || null,
-              userSlug: participant.player.user?.slug.slice(5) || null,
-            }),
-          ),
+        replaceParticipants(
+          nodes.map((participant) => ({
+            id: participant.id,
+            tournamentId: id,
+            gamerTag: participant.gamerTag,
+            prefix: participant.prefix,
+            pronouns: participant.player.user?.genderPronoun ?? '',
+            userSlug: participant.player.user?.slug.slice(5) ?? '',
+          })),
         );
       }
       page += 1;
-    } while (page <= nextData.tournament.participants.pageInfo.totalPages);
+      if (page <= nextData.tournament.participants.pageInfo.totalPages) {
+        await oneSecondPromise();
+      } else {
+        break;
+      }
+    }
 
     const streamsAndStationsData = await fetchGql(
       apiKey,
@@ -633,6 +639,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   }
 
   const idToEntrant = new Map<number, DbEntrant>();
+  const entrantIdToParticipantIds = new Map<number, number[]>();
   const seeds: DbSeed[] = [];
   const sets: DbSet[] = [];
   try {
@@ -647,38 +654,17 @@ async function refreshEvent(tournamentId: number, eventId: number) {
           const jsonEntrants = json.entities.entrants;
           if (Array.isArray(jsonEntrants)) {
             jsonEntrants.forEach((entrant) => {
-              const participants = Object.values(
-                entrant.mutations.participants,
-              ) as any[];
-              const players = [getPlayer(participants[0].playerId)];
-              if (!players[0]) {
-                throw new Error(`missing player: ${participants[0].playerId}`);
-              }
-              if (participants[1]) {
-                players.push(getPlayer(participants[1].playerId));
-                if (!players[1]) {
-                  throw new Error(
-                    `missing player: ${participants[1].playerId}`,
-                  );
-                }
-              }
               idToEntrant.set(entrant.id, {
                 id: entrant.id,
                 eventId: entrant.eventId,
                 name: entrant.name,
-                participant1Id: participants[0].id,
-                participant1GamerTag: participants[0].gamerTag,
-                participant1Prefix: participants[0].prefix,
-                participant1PlayerId: participants[0].playerId,
-                participant1Pronouns: players[0]?.pronouns || null,
-                participant1UserSlug: players[0]?.userSlug || null,
-                participant2Id: participants[1]?.id || null,
-                participant2GamerTag: participants[1]?.gamerTag || null,
-                participant2Prefix: participants[1]?.prefix || null,
-                participant2PlayerId: participants[1]?.playerId || null,
-                participant2Pronouns: players[1]?.pronouns || null,
-                participant2UserSlug: players[1]?.userSlug || null,
               });
+              entrantIdToParticipantIds.set(
+                entrant.id,
+                (Object.values(entrant.mutations.participants) as any[]).map(
+                  (participant) => participant.id,
+                ),
+              );
             });
           }
           seeds.push(
@@ -708,6 +694,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       phases,
       pools,
       Array.from(idToEntrant.values()),
+      entrantIdToParticipantIds,
       seeds,
       sets,
     );
@@ -1200,11 +1187,7 @@ async function tryNextTransaction(id: number, slug: string) {
         if (!transaction) {
           break;
         } else {
-          await new Promise<void>((resolve) => {
-            setTimeout(() => {
-              resolve();
-            }, 1000);
-          });
+          await oneSecondPromise();
         }
       }
     }

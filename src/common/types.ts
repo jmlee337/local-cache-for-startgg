@@ -41,6 +41,14 @@ export type RendererStream = {
   streamSource: string;
 };
 
+export type RendererParticipant = {
+  id: number;
+  gamerTag: string;
+  prefix: string;
+  pronouns: string;
+  userSlug: string;
+};
+
 export type RendererSet = {
   id: number;
   setId: number | string;
@@ -52,10 +60,12 @@ export type RendererSet = {
   state: number;
   entrant1Id: number | null;
   entrant1Name: string | null;
+  entrant1Participants: RendererParticipant[];
   entrant1PrereqStr: string | null;
   entrant1Score: number | null;
   entrant2Id: number | null;
   entrant2Name: string | null;
+  entrant2Participants: RendererParticipant[];
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
   winnerId: number | null;
@@ -136,28 +146,24 @@ export type DbStream = {
   streamSource: string;
 };
 
-export type DbPlayer = {
+export type DbParticipant = {
   id: number;
-  pronouns: string | null;
-  userSlug: string | null;
+  tournamentId: number;
+  gamerTag: string;
+  prefix: string;
+  pronouns: string;
+  userSlug: string;
+};
+
+export type DbParticipantToEntrant = {
+  participantId: number;
+  entrantId: number;
 };
 
 export type DbEntrant = {
   id: number;
   eventId: number;
   name: string;
-  participant1Id: number;
-  participant1GamerTag: string;
-  participant1Prefix: string;
-  participant1Pronouns: string | null;
-  participant1PlayerId: number;
-  participant1UserSlug: string | null;
-  participant2Id: number | null;
-  participant2GamerTag: string | null;
-  participant2Prefix: string | null;
-  participant2Pronouns: string | null;
-  participant2PlayerId: number | null;
-  participant2UserSlug: string | null;
 };
 
 export type DbSetMutation = {

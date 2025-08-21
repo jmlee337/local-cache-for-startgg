@@ -50,6 +50,7 @@ import {
   RendererConflict,
   RendererConflictResolve,
   RendererEvent,
+  RendererParticipant,
   RendererPhase,
   RendererPool,
   RendererSet,
@@ -88,6 +89,13 @@ function getBackgroundColor(set: RendererSet) {
   return SET_BACKGROUND_COLOR;
 }
 
+function getEntrantName(participants: RendererParticipant[]) {
+  if (participants.length === 0) {
+    return null;
+  }
+  return participants.map((participant) => participant.gamerTag).join(' / ');
+}
+
 function SetEntrant({
   entrantName,
   prereqStr,
@@ -109,6 +117,7 @@ function SetEntrant({
       overflow="hidden"
       textOverflow="ellipsis"
       whiteSpace="nowrap"
+      width="100%"
       color={secondary ? '#757575' : undefined}
       fontStyle={secondary ? 'italic' : undefined}
     >
@@ -181,16 +190,21 @@ function SetListItemInner({ set }: { set: RendererSet }) {
         </Typography>
         {titleEnd}
       </Stack>
-      <Stack direction="row" alignItems="center" gap="8px" width="100%">
+      <Stack direction="row" alignItems="center" width="100%">
         <Stack
           flexGrow={1}
+          maxWidth={
+            set.state !== 3 && (set.station || set.stream)
+              ? `calc(${SET_FIXED_WIDTH} - 40px)`
+              : `calc(${SET_FIXED_WIDTH} - 8px)`
+          }
           sx={{ typography: (theme) => theme.typography.body2 }}
         >
           <Stack
             direction="row"
             alignItems="center"
-            gap="8px"
             marginRight="-8px"
+            width="100%"
             style={{
               fontWeight:
                 set.entrant1Id && set.entrant1Id === set.winnerId
@@ -199,7 +213,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
             }}
           >
             <SetEntrant
-              entrantName={set.entrant1Name}
+              entrantName={getEntrantName(set.entrant1Participants)}
               prereqStr={set.entrant1PrereqStr}
             />
             {set.state === 3 && (
@@ -222,8 +236,8 @@ function SetListItemInner({ set }: { set: RendererSet }) {
           <Stack
             direction="row"
             alignItems="center"
-            gap="8px"
             marginRight="-8px"
+            width="100%"
             style={{
               fontWeight:
                 set.entrant2Id && set.entrant2Id === set.winnerId
@@ -232,7 +246,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
             }}
           >
             <SetEntrant
-              entrantName={set.entrant2Name}
+              entrantName={getEntrantName(set.entrant2Participants)}
               prereqStr={set.entrant2PrereqStr}
             />
             {set.state === 3 && (
@@ -1251,7 +1265,7 @@ export default function Tournament() {
                   whiteSpace="nowrap"
                   width="176px"
                 >
-                  {reportSet?.entrant1Name}
+                  {reportSet && getEntrantName(reportSet.entrant1Participants)}
                 </Box>
                 <Button
                   disabled={
@@ -1419,7 +1433,7 @@ export default function Tournament() {
                   whiteSpace="nowrap"
                   width="176px"
                 >
-                  {reportSet?.entrant2Name}
+                  {reportSet && getEntrantName(reportSet.entrant2Participants)}
                 </Box>
                 <Button
                   disabled={

@@ -12,7 +12,6 @@ import {
   DbTransactionGameData,
   DbLoadedEvent,
   DbPhase,
-  DbPlayer,
   DbPool,
   DbTransactionSelections,
   DbSet,
@@ -33,6 +32,9 @@ import {
   RendererConflictLocalSet,
   RendererConflictServerSet,
   DbSeed,
+  DbParticipantToEntrant,
+  DbParticipant,
+  RendererParticipant,
 } from '../common/types';
 
 enum SyncStatus {
@@ -163,26 +165,28 @@ export function dbInit(window: BrowserWindow) {
     )`,
   ).run();
   db.prepare(
-    `CREATE TABLE IF NOT EXISTS entrants(
+    `CREATE TABLE IF NOT EXISTS participants(
       id INTEGER PRIMARY KEY,
-      eventId INTEGER,
-      name TEXT,
-      participant1Id INTEGER,
-      participant1GamerTag TEXT,
-      participant1Prefix TEXT,
-      participant1Pronouns TEXT,
-      participant1PlayerId INTEGER,
-      participant1UserSlug TEXT,
-      participant2Id INTEGER,
-      participant2GamerTag TEXT,
-      participant2Prefix TEXT,
-      participant2Pronouns TEXT,
-      participant2PlayerId INTEGER,
-      participant2UserSlug TEXT
+      tournamentId INTEGER NOT NULL,
+      gamerTag TEXT,
+      prefix TEXT,
+      pronouns TEXT,
+      userSlug TEXT
     )`,
   ).run();
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS players (id INTEGER PRIMARY KEY, pronouns TEXT, userSlug TEXT)',
+    `CREATE TABLE IF NOT EXISTS participantsToEntrant (
+      participantId INTEGER,
+      entrantId INTEGER,
+      PRIMARY KEY (participantId, entrantId)
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS entrants(
+      id INTEGER PRIMARY KEY,
+      eventId INTEGER NOT NULL,
+      name TEXT
+    )`,
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS stations (
@@ -250,17 +254,50 @@ export function dbInit(window: BrowserWindow) {
   };
 }
 
-function getEntrantName(id: number): string | null {
-  const maybeEntrant = db!
-    .prepare('SELECT * FROM entrants WHERE id = @id')
-    .get({ id }) as DbEntrant | undefined;
-  if (!maybeEntrant) {
-    return null;
+function getRendererEntrant(id: number): {
+  name: string | null;
+  participants: RendererParticipant[];
+} {
+  if (!db) {
+    throw new Error('not init');
   }
 
-  return maybeEntrant.participant2Id
-    ? maybeEntrant.name
-    : maybeEntrant.participant1GamerTag;
+  const entrant = db
+    .prepare('SELECT * FROM entrants WHERE id = @id')
+    .get({ id }) as DbEntrant | undefined;
+  if (!entrant) {
+    throw new Error(`entrant not found: ${id}`);
+  }
+
+  const participantsToEntrant = db
+    .prepare('SELECT * FROM participantsToEntrant WHERE entrantId = @id')
+    .all({ id }) as DbParticipantToEntrant[];
+  if (participantsToEntrant.length === 0) {
+    throw new Error(`participant(s) not found for entrant: ${id}`);
+  }
+  const participantIds = participantsToEntrant.map(
+    (participantToEntrant) => participantToEntrant.participantId,
+  );
+
+  const participants = db
+    .prepare(
+      `SELECT * FROM participants WHERE id IN (${participantIds.join(', ')})`,
+    )
+    .all() as DbParticipant[];
+  if (participantIds.length !== participants.length) {
+    throw new Error(
+      `participant(s) not found, expected: [${participantIds.join(
+        ', ',
+      )}], actual: [${participants
+        .map((participant) => participant.id)
+        .join(', ')}]`,
+    );
+  }
+
+  return {
+    name: entrant.name,
+    participants,
+  };
 }
 
 let currentTournamentId = 0;
@@ -296,25 +333,32 @@ export function loadEvent(eventId: number, tournamentId: number) {
   ).run({ eventId, tournamentId });
 }
 
-const PLAYER_UPSERT_SQL =
-  'REPLACE INTO players (id, pronouns, userSlug) VALUES (@id, @pronouns, @userSlug)';
-export function upsertPlayers(players: DbPlayer[]) {
+export function replaceParticipants(participants: DbParticipant[]) {
   if (!db) {
     throw new Error('not init');
   }
 
-  players.forEach((player) => {
-    db!.prepare(PLAYER_UPSERT_SQL).run(player);
+  participants.forEach((participant) => {
+    db!
+      .prepare(
+        `REPLACE INTO participants (
+          id,
+          tournamentId,
+          gamerTag,
+          prefix,
+          pronouns,
+          userSlug
+        ) VALUES (
+          @id,
+          @tournamentId,
+          @gamerTag,
+          @prefix,
+          @pronouns,
+          @userSlug
+        )`,
+      )
+      .run(participant);
   });
-}
-
-const PLAYER_GET_SQL = 'SELECT * FROM players WHERE id = @id';
-export function getPlayer(id: number) {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  return db.prepare(PLAYER_GET_SQL).get({ id }) as DbPlayer | undefined;
 }
 
 const STATION_UPSERT_SQL = `REPLACE INTO
@@ -420,11 +464,11 @@ function getRendererStream(id: number): RendererStream | null {
 
 const shortRoundTextRegex = /([A-Z]|[0-9])/g;
 function dbSetToRendererSet(dbSet: DbSet): RendererSet {
-  const entrant1Name = dbSet.entrant1Id
-    ? getEntrantName(dbSet.entrant1Id)
+  const entrant1 = dbSet.entrant1Id
+    ? getRendererEntrant(dbSet.entrant1Id)
     : null;
-  const entrant2Name = dbSet.entrant2Id
-    ? getEntrantName(dbSet.entrant2Id)
+  const entrant2 = dbSet.entrant2Id
+    ? getRendererEntrant(dbSet.entrant2Id)
     : null;
   return {
     id: dbSet.id,
@@ -439,11 +483,13 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
     round: dbSet.round,
     state: dbSet.state,
     entrant1Id: dbSet.entrant1Id,
-    entrant1Name,
+    entrant1Name: entrant1?.name ?? null,
+    entrant1Participants: entrant1?.participants ?? [],
     entrant1PrereqStr: dbSet.entrant1PrereqStr,
     entrant1Score: dbSet.entrant1Score,
     entrant2Id: dbSet.entrant2Id,
-    entrant2Name,
+    entrant2Name: entrant2?.name ?? null,
+    entrant2Participants: entrant2?.participants ?? [],
     entrant2PrereqStr: dbSet.entrant2PrereqStr,
     entrant2Score: dbSet.entrant2Score,
     winnerId: dbSet.winnerId,
@@ -2374,6 +2420,7 @@ export function updateEvent(
   phases: DbPhase[],
   pools: DbPool[],
   entrants: DbEntrant[],
+  entrantIdToParticipantIds: Map<number, number[]>,
   seeds: DbSeed[],
   sets: DbSet[],
 ) {
@@ -2409,39 +2456,38 @@ export function updateEvent(
         `REPLACE INTO entrants (
           id,
           eventId,
-          name,
-          participant1Id,
-          participant1GamerTag,
-          participant1Prefix,
-          participant1Pronouns,
-          participant1PlayerId,
-          participant1UserSlug,
-          participant2Id,
-          participant2GamerTag,
-          participant2Prefix,
-          participant2Pronouns,
-          participant2PlayerId,
-          participant2UserSlug
+          name
         ) values (
           @id,
           @eventId,
-          @name,
-          @participant1Id,
-          @participant1GamerTag,
-          @participant1Prefix,
-          @participant1Pronouns,
-          @participant1PlayerId,
-          @participant1UserSlug,
-          @participant2Id,
-          @participant2GamerTag,
-          @participant2Prefix,
-          @participant2Pronouns,
-          @participant2PlayerId,
-          @participant2UserSlug
+          @name
         )`,
       )
       .run(entrant);
   });
+
+  Array.from(entrantIdToParticipantIds.entries()).forEach(
+    ([entrantId, participantIds]) => {
+      participantIds.forEach((participantId) => {
+        db!
+          .prepare(
+            `REPLACE INTO participantsToEntrant (
+              participantId, entrantId
+            ) VALUES (
+              @participantId, @entrantId
+            )`,
+          )
+          .run({ participantId, entrantId });
+      });
+      db!
+        .prepare(
+          `DELETE FROM participantsToEntrant
+            WHERE entrantId = @entrantId
+              AND participantId NOT IN (${participantIds.join(', ')})`,
+        )
+        .run({ entrantId });
+    },
+  );
 
   seeds.forEach((seed) => {
     db!
@@ -2937,15 +2983,16 @@ export function makeResetRecursive(transactionNum: number) {
   return transaction.tournamentId;
 }
 
-export function getLoadedEventIds() {
+export function getLoadedEventIds(tournamentId?: number) {
   if (!db) {
     throw new Error('not init');
   }
 
+  const id = tournamentId ?? currentTournamentId;
   return (
     db
       .prepare('SELECT * FROM loadedEvents WHERE tournamentId = @id')
-      .all({ id: currentTournamentId }) as DbLoadedEvent[]
+      .all({ id }) as DbLoadedEvent[]
   ).map((loadedEvent) => loadedEvent.id);
 }
 
