@@ -835,7 +835,7 @@ export default function Tournament() {
   const [reportEntrant2Score, setReportEntrant2Score] = useState(0);
   const [reporting, setReporting] = useState(false);
 
-  const reportSetFn = useCallback(
+  const setReportState = useCallback(
     (
       newReportEventId: number,
       newReportPhaseId: number,
@@ -854,7 +854,6 @@ export default function Tournament() {
       setReportPoolId(newReportPoolId);
       setReportPhaseId(newReportPhaseId);
       setReportEventId(newReportEventId);
-      setReportDialogOpen(true);
     },
     [],
   );
@@ -893,7 +892,7 @@ export default function Tournament() {
                 (set) => set.identifier === reportSet.identifier,
               );
               if (newReportSet) {
-                reportSetFn(
+                setReportState(
                   reportEventId,
                   reportPhaseId,
                   reportPoolId,
@@ -912,7 +911,7 @@ export default function Tournament() {
     reportPhaseId,
     reportPoolId,
     reportSet,
-    reportSetFn,
+    setReportState,
   ]);
 
   const [unloadedOpen, setUnloadedOpen] = useState(true);
@@ -1205,7 +1204,10 @@ export default function Tournament() {
                 key={event.id}
                 event={event}
                 conflict={conflict}
-                reportSet={reportSetFn}
+                reportSet={(eventId, phaseId, poolId, set) => {
+                  setReportState(eventId, phaseId, poolId, set);
+                  setReportDialogOpen(true);
+                }}
               />
             ))}
           </List>
@@ -1857,15 +1859,16 @@ export default function Tournament() {
                           key={serverSet.set.id}
                           set={serverSet.set}
                           conflictTransactionNum={null}
-                          reportSet={(rendererSet) =>
-                            reportSetFn(
+                          reportSet={(rendererSet) => {
+                            setReportState(
                               serverSet.eventId,
                               serverSet.phaseId,
                               serverSet.poolId,
                               rendererSet,
                               /* reportPreempt */ true,
-                            )
-                          }
+                            );
+                            setReportDialogOpen(true);
+                          }}
                         />
                       ) : (
                         <Box
