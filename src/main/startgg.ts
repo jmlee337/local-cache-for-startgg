@@ -18,6 +18,7 @@ import {
   DbStream,
   SyncState,
   ConflictReason,
+  DbSeed,
 } from '../common/types';
 import {
   getPlayer,
@@ -609,6 +610,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         eventId,
         tournamentId,
         name: phase.name,
+        phaseOrder: phase.phaseOrder,
       });
     });
     json.entities.groups.forEach((group: any) => {
@@ -633,6 +635,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   }
 
   const idToEntrant = new Map<number, DbEntrant>();
+  const seeds: DbSeed[] = [];
   const sets: DbSet[] = [];
   try {
     await Promise.all(
@@ -643,38 +646,54 @@ async function refreshEvent(tournamentId: number, eventId: number) {
             `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
           );
           const json = await response.json();
-          (json.entities.entrants as any[]).forEach((entrant) => {
-            const participants = Object.values(
-              entrant.mutations.participants,
-            ) as any[];
-            const players = [getPlayer(participants[0].playerId)];
-            if (!players[0]) {
-              throw new Error(`missing player: ${participants[0].playerId}`);
-            }
-            if (participants[1]) {
-              players.push(getPlayer(participants[1].playerId));
-              if (!players[1]) {
-                throw new Error(`missing player: ${participants[1].playerId}`);
+          const jsonEntrants = json.entities.entrants;
+          if (Array.isArray(jsonEntrants)) {
+            jsonEntrants.forEach((entrant) => {
+              const participants = Object.values(
+                entrant.mutations.participants,
+              ) as any[];
+              const players = [getPlayer(participants[0].playerId)];
+              if (!players[0]) {
+                throw new Error(`missing player: ${participants[0].playerId}`);
               }
-            }
-            idToEntrant.set(entrant.id, {
-              id: entrant.id,
-              eventId: entrant.eventId,
-              name: entrant.name,
-              participant1Id: participants[0].id,
-              participant1GamerTag: participants[0].gamerTag,
-              participant1Prefix: participants[0].prefix,
-              participant1PlayerId: participants[0].playerId,
-              participant1Pronouns: players[0]?.pronouns || null,
-              participant1UserSlug: players[0]?.userSlug || null,
-              participant2Id: participants[1]?.id || null,
-              participant2GamerTag: participants[1]?.gamerTag || null,
-              participant2Prefix: participants[1]?.prefix || null,
-              participant2PlayerId: participants[1]?.playerId || null,
-              participant2Pronouns: players[1]?.pronouns || null,
-              participant2UserSlug: players[1]?.userSlug || null,
+              if (participants[1]) {
+                players.push(getPlayer(participants[1].playerId));
+                if (!players[1]) {
+                  throw new Error(
+                    `missing player: ${participants[1].playerId}`,
+                  );
+                }
+              }
+              idToEntrant.set(entrant.id, {
+                id: entrant.id,
+                eventId: entrant.eventId,
+                name: entrant.name,
+                participant1Id: participants[0].id,
+                participant1GamerTag: participants[0].gamerTag,
+                participant1Prefix: participants[0].prefix,
+                participant1PlayerId: participants[0].playerId,
+                participant1Pronouns: players[0]?.pronouns || null,
+                participant1UserSlug: players[0]?.userSlug || null,
+                participant2Id: participants[1]?.id || null,
+                participant2GamerTag: participants[1]?.gamerTag || null,
+                participant2Prefix: participants[1]?.prefix || null,
+                participant2PlayerId: participants[1]?.playerId || null,
+                participant2Pronouns: players[1]?.pronouns || null,
+                participant2UserSlug: players[1]?.userSlug || null,
+              });
             });
-          });
+          }
+          seeds.push(
+            ...json.entities.seeds.map((seed: any) => ({
+              id: seed.id,
+              phaseId: seed.phaseId,
+              eventId,
+              tournamentId,
+              entrantId: Number.isInteger(seed.entrantId)
+                ? seed.entrantId
+                : null,
+            })),
+          );
           sets.push(
             ...dbSetsFromApiSets(
               json.entities.sets,
@@ -691,6 +710,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       phases,
       pools,
       Array.from(idToEntrant.values()),
+      seeds,
       sets,
     );
   } catch (e: any) {

@@ -32,6 +32,7 @@ import {
   RendererConflictResolve,
   RendererConflictLocalSet,
   RendererConflictServerSet,
+  DbSeed,
 } from '../common/types';
 
 enum SyncStatus {
@@ -58,7 +59,13 @@ export function dbInit(window: BrowserWindow) {
     'CREATE TABLE IF NOT EXISTS loadedEvents (id INTEGER PRIMARY KEY, tournamentId INTEGER NOT NULL)',
   ).run();
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS phases (id INTEGER PRIMARY KEY, eventId INTEGER, tournamentId INTEGERY, name TEXT)',
+    `CREATE TABLE IF NOT EXISTS phases (
+      id INTEGER PRIMARY KEY,
+      eventId INTEGER,
+      tournamentId INTEGER,
+      name TEXT,
+      phaseOrder INTEGER
+    )`,
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS pools (
@@ -144,6 +151,15 @@ export function dbInit(window: BrowserWindow) {
       hasStageDataPresent INTEGER,
       hasStageData INTEGER,
       updatedAt INTEGER NOT NULL
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS seeds(
+      id INTEGER PRIMARY KEY,
+      phaseId INTEGER NOT NULL,
+      eventId INTEGER NOT NULL,
+      tournamentId INTEGER NOT NULL,
+      entrantId INTEGER
     )`,
   ).run();
   db.prepare(
@@ -2358,6 +2374,7 @@ export function updateEvent(
   phases: DbPhase[],
   pools: DbPool[],
   entrants: DbEntrant[],
+  seeds: DbSeed[],
   sets: DbSet[],
 ) {
   if (!db) {
@@ -2425,6 +2442,24 @@ export function updateEvent(
       )
       .run(entrant);
   });
+
+  seeds.forEach((seed) => {
+    db!
+      .prepare(
+        `REPLACE INTO seeds (
+          id, phaseId, eventId, tournamentId, entrantId
+        ) values (
+          @id, @phaseId, @eventId, @tournamentId, @entrantId
+        )`,
+      )
+      .run(seed);
+  });
+  db.prepare(
+    `DELETE FROM seeds
+      WHERE eventId = @eventId AND id NOT IN (${seeds
+        .map((seed) => seed.id)
+        .join(', ')})`,
+  ).run({ eventId });
 
   sets.forEach((set) => {
     db!
@@ -2971,9 +3006,11 @@ export function getTournament(): RendererTournament | undefined {
       isLoaded: dbLoadedEventIds.has(dbEvent.id),
       phases: dbPhases
         .filter((dbPhase) => dbPhase.eventId === dbEvent.id)
+        .sort((a, b) => a.phaseOrder - b.phaseOrder)
         .map((dbPhase) => ({
           id: dbPhase.id,
           name: dbPhase.name,
+          phaseOrder: dbPhase.phaseOrder,
           pools: dbPools
             .filter((dbPool) => dbPool.phaseId === dbPhase.id)
             .map((dbPool) => {

@@ -76,6 +76,7 @@ export type RendererPhase = {
   id: number;
   name: string;
   pools: RendererPool[];
+  phaseOrder: number;
 };
 
 export type RendererEvent = {
@@ -245,6 +246,14 @@ export type DbSet = {
   syncState: SyncState;
 };
 
+export type DbSeed = {
+  id: number;
+  phaseId: number;
+  eventId: number;
+  tournamentId: number;
+  entrantId: number | null;
+};
+
 export type DbPool = {
   id: number;
   phaseId: number;
@@ -260,6 +269,7 @@ export type DbPhase = {
   eventId: number;
   tournamentId: number;
   name: string;
+  phaseOrder: number;
 };
 
 export type DbLoadedEvent = {
