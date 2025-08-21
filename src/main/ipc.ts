@@ -218,13 +218,21 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('setTournament');
   ipcMain.handle(
     'setTournament',
-    async (event: IpcMainInvokeEvent, newId: number, slug: string) => {
+    (event: IpcMainInvokeEvent, newId: number, slug: string) => {
       const oldId = getTournamentId();
       if (oldId !== newId) {
         setTournamentId(newId);
         updateClients();
         startRefreshingTournament(newId, slug);
       }
+    },
+  );
+
+  ipcMain.removeHandler('retryTournament');
+  ipcMain.handle(
+    'retryTournament',
+    (event: IpcMainInvokeEvent, id: number, slug: string) => {
+      startRefreshingTournament(id, slug);
     },
   );
 

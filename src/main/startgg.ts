@@ -190,7 +190,6 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
 
   try {
     const data = await fetchGql(apiKey, GET_ADMINED_TOURNAMENTS_QUERY, {});
-    updateSyncResultWithSuccess();
     return (data.currentUser.tournaments.nodes as any[]).map((tournament) => ({
       id: tournament.id,
       slug: tournament.slug.slice(11),
@@ -333,7 +332,6 @@ export async function getApiTournament(inSlug: string) {
       ),
     );
 
-    updateSyncResultWithSuccess();
     return id;
   } catch (e: any) {
     if (isRetryableApiError(e)) {

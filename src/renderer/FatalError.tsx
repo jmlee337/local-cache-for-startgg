@@ -1,13 +1,20 @@
 import {
   Button,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
 
-export default function FatalError() {
+export default function FatalError({
+  tournamentId,
+  tournamentSlug,
+}: {
+  tournamentId: number | undefined;
+  tournamentSlug: string | undefined;
+}) {
   const [open, setOpen] = useState(false);
   const [fatalErrorMessage, setFatalErrorMessage] = useState('');
 
@@ -48,6 +55,22 @@ export default function FatalError() {
           <DialogContent>
             <DialogContentText>{fatalErrorMessage}</DialogContentText>
           </DialogContent>
+          {tournamentId && tournamentSlug && (
+            <DialogActions>
+              <Button
+                variant="contained"
+                onClick={async () => {
+                  await window.electron.retryTournament(
+                    tournamentId,
+                    tournamentSlug,
+                  );
+                  setOpen(false);
+                }}
+              >
+                Retry
+              </Button>
+            </DialogActions>
+          )}
         </Dialog>
       </>
     )

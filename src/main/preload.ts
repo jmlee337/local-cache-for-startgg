@@ -32,6 +32,8 @@ const electronHandler = {
     ipcRenderer.invoke('getTournament', slug),
   setTournament: (id: number, slug: string): Promise<void> =>
     ipcRenderer.invoke('setTournament', id, slug),
+  retryTournament: (id: number, slug: string): Promise<void> =>
+    ipcRenderer.invoke('retryTournament', id, slug),
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
   resetSet: (id: number | string): Promise<void> =>

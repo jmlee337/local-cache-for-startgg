@@ -997,7 +997,10 @@ export default function Tournament() {
                 Conflict!
               </Button>
             )}
-            <FatalError />
+            <FatalError
+              tournamentId={tournament?.id}
+              tournamentSlug={tournament?.slug}
+            />
           </Stack>
           <Settings showError={showError} />
         </Toolbar>
