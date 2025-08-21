@@ -34,12 +34,15 @@ jobs:
           npm exec tsc
           npm test
 
-  windows-ubuntu:
-    runs-on: ${{ matrix.os }}
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            release/build/OfflineModeForStartgg*.dmg
 
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+  windows:
+    runs-on: windows-latest
 
     steps:
       - name: Check out Git repository
@@ -63,3 +66,43 @@ jobs:
           npm run lint
           npm exec tsc
           npm test
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            release/build/OfflineModeForStartgg*.exe
+
+  windows-ubuntu:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js and NPM
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: npm install
+        run: |
+          npm install
+
+      - name: npm test
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run package
+          npm run lint
+          npm exec tsc
+          npm test
+
+      - name: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ubuntu
+          path: |
+            release/build/OfflineModeForStartgg*.AppImage
