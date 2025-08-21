@@ -74,7 +74,7 @@ jobs:
           path: |
             release/build/OfflineModeForStartgg*.exe
 
-  windows-ubuntu:
+  ubuntu:
     runs-on: ubuntu-latest
 
     steps:
