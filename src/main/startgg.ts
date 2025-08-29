@@ -327,16 +327,18 @@ export async function getApiTournament(inSlug: string) {
         }),
       ),
     );
-    upsertStreams(
-      streamsAndStationsData.tournament.streams.map(
-        (apiStream: any): DbStream => ({
-          id: apiStream.id,
-          tournamentId: id,
-          streamName: apiStream.streamName,
-          streamSource: apiStream.streamSource,
-        }),
-      ),
-    );
+    if (Array.isArray(streamsAndStationsData.tournament.streams)) {
+      upsertStreams(
+        streamsAndStationsData.tournament.streams.map(
+          (apiStream: any): DbStream => ({
+            id: apiStream.id,
+            tournamentId: id,
+            streamName: apiStream.streamName,
+            streamSource: apiStream.streamSource,
+          }),
+        ),
+      );
+    }
 
     return id;
   } catch (e: any) {

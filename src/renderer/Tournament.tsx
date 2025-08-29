@@ -1602,6 +1602,8 @@ export default function Tournament() {
             <IconButton
               color="primary"
               disabled={
+                (tournament?.stations.length === 0 &&
+                  tournament?.streams.length === 0) ||
                 choosing ||
                 reportPreempt ||
                 typeof reportSet?.setId === 'string'
