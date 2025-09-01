@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Dialog,
   DialogContent,
@@ -12,7 +13,12 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { ContentCopy, Settings as SettingsIcon } from '@mui/icons-material';
+import {
+  CloudDownload,
+  ContentCopy,
+  Settings as SettingsIcon,
+} from '@mui/icons-material';
+import { lt } from 'semver';
 import IconButton from './IconButton';
 
 export default function Settings({
@@ -24,6 +30,7 @@ export default function Settings({
   const [autoSync, setAutoSync] = useState(true);
   const [websocket, setWebsocket] = useState(true);
   const [appVersion, setAppVersion] = useState('');
+  const [versionLatest, setVersionLatest] = useState('');
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -32,14 +39,21 @@ export default function Settings({
       const autoSyncPromise = window.electron.getAutoSync();
       const websocketPromise = window.electron.getWebsocket();
       const appVersionPromise = window.electron.getAppVersion();
+      const versionLatestPromise = window.electron.getVersionLatest();
 
       const initApiKey = await apiKeyPromise;
       setApiKey(initApiKey);
       setAutoSync(await autoSyncPromise);
       setWebsocket(await websocketPromise);
-      setAppVersion(await appVersionPromise);
 
-      if (!initApiKey) {
+      const initAppVersion = await appVersionPromise;
+      const initVersionLatest = await versionLatestPromise;
+      setAppVersion(initAppVersion);
+      setVersionLatest(initVersionLatest);
+      if (
+        !initApiKey ||
+        (initVersionLatest && lt(initAppVersion, initVersionLatest))
+      ) {
         setOpen(true);
       }
     };
@@ -77,7 +91,7 @@ export default function Settings({
         >
           <DialogTitle>Settings</DialogTitle>
           <Typography variant="caption">
-            Offline Mode for start.gg version {appVersion}
+            Offline Mode for start.gg v{appVersion}
           </Typography>
         </Stack>
         <DialogContent>
@@ -154,6 +168,25 @@ export default function Settings({
               />
             }
           />
+          {appVersion && versionLatest && lt(appVersion, versionLatest) && (
+            <Alert
+              severity="warning"
+              style={{ marginTop: '8px' }}
+              action={
+                <Button
+                  endIcon={<CloudDownload />}
+                  variant="contained"
+                  onClick={() => {
+                    window.electron.update();
+                  }}
+                >
+                  Quit and download
+                </Button>
+              }
+            >
+              Update available! v{versionLatest}
+            </Alert>
+          )}
         </DialogContent>
       </Dialog>
     </>

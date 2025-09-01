@@ -127,6 +127,9 @@ const electronHandler = {
     ipcRenderer.on('websocketStatus', callback);
   },
   getAppVersion: (): Promise<string> => ipcRenderer.invoke('getAppVersion'),
+  getVersionLatest: (): Promise<string> =>
+    ipcRenderer.invoke('getVersionLatest'),
+  update: (): void => ipcRenderer.send('update'),
   copy: (text: string): Promise<void> => ipcRenderer.invoke('copy', text),
 };
 

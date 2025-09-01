@@ -4,6 +4,7 @@ import {
   clipboard,
   ipcMain,
   IpcMainInvokeEvent,
+  shell,
 } from 'electron';
 import Store from 'electron-store';
 import {
@@ -409,10 +410,35 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('getSyncResult', getSyncResult);
 
   ipcMain.removeHandler('getAppVersion');
-  ipcMain.handle('getAppVersion', () => app.getVersion());
+  ipcMain.handle('getAppVersion', app.getVersion);
 
   ipcMain.removeHandler('copy');
   ipcMain.handle('copy', (event: IpcMainInvokeEvent, text: string) => {
     clipboard.writeText(text);
+  });
+
+  ipcMain.removeAllListeners('getVersionLatest');
+  ipcMain.handle('getVersionLatest', async () => {
+    try {
+      const response = await fetch(
+        'https://api.github.com/repos/jmlee337/local-cache-for-startgg/releases/latest',
+      );
+      const json = await response.json();
+      const latestVersion = json.tag_name;
+      if (typeof latestVersion !== 'string') {
+        return '';
+      }
+      return latestVersion;
+    } catch {
+      return '';
+    }
+  });
+
+  ipcMain.removeAllListeners('update');
+  ipcMain.on('update', async () => {
+    await shell.openExternal(
+      'https://github.com/jmlee337/local-cache-for-startgg/releases/latest',
+    );
+    app.quit();
   });
 }
