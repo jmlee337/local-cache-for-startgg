@@ -358,99 +358,103 @@ function PoolListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        <ListItemButton
-          disableGutters
-          style={{
-            justifyContent: 'space-between',
-            marginLeft: '16px',
-            marginRight: '-8px',
-            padding: '0 16px 0 0',
-          }}
-          onClick={() => {
-            setCompletedOpen(!completedOpen);
-          }}
-        >
-          <ListItemText style={{ flexGrow: 0 }}>
-            <Typography variant="caption">completed</Typography>
-          </ListItemText>
-          {completedOpen ? (
-            <Tooltip title="Hide completed sets">
-              <Visibility />
-            </Tooltip>
-          ) : (
-            <Tooltip title="Show completed sets">
-              <VisibilityOff />
-            </Tooltip>
-          )}
-        </ListItemButton>
-        {winnersSets.length > 0 && (
-          <Stack
-            direction="row"
-            flexWrap="wrap"
-            gap="8px"
-            marginLeft="16px"
-            marginRight="32px"
-          >
-            {winnersSets
-              .sort((a, b) => {
-                if (a.identifier.length === b.identifier.length) {
-                  return a.identifier.localeCompare(b.identifier);
-                }
-                return a.identifier.length - b.identifier.length;
-              })
-              .map(
-                (set) =>
-                  (completedOpen || set.state !== 3) && (
-                    <SetListItemButton
-                      key={set.id}
-                      set={set}
-                      conflictTransactionNum={
-                        conflict && conflict.setId === set.id
-                          ? conflict.transactionNum
-                          : null
-                      }
-                      reportSet={(rendererSet: RendererSet) =>
-                        reportSet(pool.id, rendererSet)
-                      }
-                    />
-                  ),
+        {open && (
+          <>
+            <ListItemButton
+              disableGutters
+              style={{
+                justifyContent: 'space-between',
+                marginLeft: '16px',
+                marginRight: '-8px',
+                padding: '0 16px 0 0',
+              }}
+              onClick={() => {
+                setCompletedOpen(!completedOpen);
+              }}
+            >
+              <ListItemText style={{ flexGrow: 0 }}>
+                <Typography variant="caption">completed</Typography>
+              </ListItemText>
+              {completedOpen ? (
+                <Tooltip title="Hide completed sets">
+                  <Visibility />
+                </Tooltip>
+              ) : (
+                <Tooltip title="Show completed sets">
+                  <VisibilityOff />
+                </Tooltip>
               )}
-          </Stack>
-        )}
-        {losersSets.length > 0 && (
-          <Stack
-            direction="row"
-            flexWrap="wrap"
-            gap="8px"
-            marginLeft="16px"
-            marginRight="32px"
-            marginTop="8px"
-          >
-            {losersSets
-              .sort((a, b) => {
-                if (a.identifier.length === b.identifier.length) {
-                  return a.identifier.localeCompare(b.identifier);
-                }
-                return a.identifier.length - b.identifier.length;
-              })
-              .map(
-                (set) =>
-                  (completedOpen || set.state !== 3) && (
-                    <SetListItemButton
-                      key={set.id}
-                      set={set}
-                      conflictTransactionNum={
-                        conflict && conflict.setId === set.id
-                          ? conflict.transactionNum
-                          : null
-                      }
-                      reportSet={(rendererSet: RendererSet) =>
-                        reportSet(pool.id, rendererSet)
-                      }
-                    />
-                  ),
-              )}
-          </Stack>
+            </ListItemButton>
+            {winnersSets.length > 0 && (
+              <Stack
+                direction="row"
+                flexWrap="wrap"
+                gap="8px"
+                marginLeft="16px"
+                marginRight="32px"
+              >
+                {winnersSets
+                  .sort((a, b) => {
+                    if (a.identifier.length === b.identifier.length) {
+                      return a.identifier.localeCompare(b.identifier);
+                    }
+                    return a.identifier.length - b.identifier.length;
+                  })
+                  .map(
+                    (set) =>
+                      (completedOpen || set.state !== 3) && (
+                        <SetListItemButton
+                          key={set.id}
+                          set={set}
+                          conflictTransactionNum={
+                            conflict && conflict.setId === set.id
+                              ? conflict.transactionNum
+                              : null
+                          }
+                          reportSet={(rendererSet: RendererSet) =>
+                            reportSet(pool.id, rendererSet)
+                          }
+                        />
+                      ),
+                  )}
+              </Stack>
+            )}
+            {losersSets.length > 0 && (
+              <Stack
+                direction="row"
+                flexWrap="wrap"
+                gap="8px"
+                marginLeft="16px"
+                marginRight="32px"
+                marginTop="8px"
+              >
+                {losersSets
+                  .sort((a, b) => {
+                    if (a.identifier.length === b.identifier.length) {
+                      return a.identifier.localeCompare(b.identifier);
+                    }
+                    return a.identifier.length - b.identifier.length;
+                  })
+                  .map(
+                    (set) =>
+                      (completedOpen || set.state !== 3) && (
+                        <SetListItemButton
+                          key={set.id}
+                          set={set}
+                          conflictTransactionNum={
+                            conflict && conflict.setId === set.id
+                              ? conflict.transactionNum
+                              : null
+                          }
+                          reportSet={(rendererSet: RendererSet) =>
+                            reportSet(pool.id, rendererSet)
+                          }
+                        />
+                      ),
+                  )}
+              </Stack>
+            )}
+          </>
         )}
       </Collapse>
     </Box>
@@ -495,7 +499,8 @@ function PhaseListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        {phase.pools.length > 0 &&
+        {open &&
+          phase.pools.length > 0 &&
           phase.pools.map((pool) => (
             <PoolListItem
               key={pool.id}
@@ -565,7 +570,8 @@ function LoadedEventListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        {event.phases.length > 0 &&
+        {open &&
+          event.phases.length > 0 &&
           event.phases.map((phase) => (
             <PhaseListItem
               key={phase.id}
@@ -1186,15 +1192,17 @@ export default function Tournament() {
         </Stack>
         {unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen}>
-            <List>
-              {unloadedEvents.map((event) => (
-                <UnloadedEventListItem
-                  key={event.id}
-                  event={event}
-                  showError={showError}
-                />
-              ))}
-            </List>
+            {open && (
+              <List>
+                {unloadedEvents.map((event) => (
+                  <UnloadedEventListItem
+                    key={event.id}
+                    event={event}
+                    showError={showError}
+                  />
+                ))}
+              </List>
+            )}
           </Collapse>
         )}
         {loadedEvents.length > 0 && (
