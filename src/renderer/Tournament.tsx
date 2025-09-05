@@ -882,6 +882,8 @@ export default function Tournament() {
         reportPoolId &&
         reportSet
       ) {
+        /*
+        TODO: this right
         const newEvent = newTournament.events.find(
           (event) => event.id === reportEventId,
         );
@@ -908,6 +910,7 @@ export default function Tournament() {
             }
           }
         }
+        */
       }
       setTournament(newTournament);
     });
