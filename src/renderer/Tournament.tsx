@@ -849,12 +849,6 @@ export default function Tournament() {
       newReportSet: RendererSet,
       newReportPreempt: boolean = false,
     ) => {
-      setReportWinnerId(newReportSet.winnerId ?? 0);
-      setReportIsDq(
-        newReportSet.entrant1Score === -1 || newReportSet.entrant2Score === -1,
-      );
-      setReportEntrant1Score(newReportSet.entrant1Score ?? 0);
-      setReportEntrant2Score(newReportSet.entrant2Score ?? 0);
       setReportPreempt(newReportPreempt);
       setReportSet(newReportSet);
       setReportPoolId(newReportPoolId);
@@ -882,8 +876,6 @@ export default function Tournament() {
         reportPoolId &&
         reportSet
       ) {
-        /*
-        TODO: this right
         const newEvent = newTournament.events.find(
           (event) => event.id === reportEventId,
         );
@@ -910,7 +902,6 @@ export default function Tournament() {
             }
           }
         }
-        */
       }
       setTournament(newTournament);
     });
@@ -1217,6 +1208,12 @@ export default function Tournament() {
                 conflict={conflict}
                 reportSet={(eventId, phaseId, poolId, set) => {
                   setReportState(eventId, phaseId, poolId, set);
+                  setReportWinnerId(set.winnerId ?? 0);
+                  setReportIsDq(
+                    set.entrant1Score === -1 || set.entrant2Score === -1,
+                  );
+                  setReportEntrant1Score(set.entrant1Score ?? 0);
+                  setReportEntrant2Score(set.entrant2Score ?? 0);
                   setReportDialogOpen(true);
                 }}
               />
@@ -1879,6 +1876,17 @@ export default function Tournament() {
                               serverSet.poolId,
                               rendererSet,
                               /* reportPreempt */ true,
+                            );
+                            setReportWinnerId(rendererSet.winnerId ?? 0);
+                            setReportIsDq(
+                              rendererSet.entrant1Score === -1 ||
+                                rendererSet.entrant2Score === -1,
+                            );
+                            setReportEntrant1Score(
+                              rendererSet.entrant1Score ?? 0,
+                            );
+                            setReportEntrant2Score(
+                              rendererSet.entrant2Score ?? 0,
                             );
                             setReportDialogOpen(true);
                           }}

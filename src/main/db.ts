@@ -2433,9 +2433,9 @@ export function updateEvent(
       .prepare(
         `REPLACE INTO
           phases
-            (id, eventId, tournamentId, name)
+            (id, eventId, tournamentId, name, phaseOrder)
           VALUES
-            (@id, @eventId, @tournamentId, @name)`,
+            (@id, @eventId, @tournamentId, @name, @phaseOrder)`,
       )
       .run(phase);
   });
