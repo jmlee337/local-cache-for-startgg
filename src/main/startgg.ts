@@ -42,10 +42,12 @@ export function setApiKey(newApiKey: string) {
 async function wrappedFetch(
   input: URL | RequestInfo,
   init?: RequestInit | undefined,
-): Promise<Response> {
+) {
   let response: Response | undefined;
+  let json: any;
   try {
     response = await fetch(input, init);
+    json = await response.json();
   } catch (e: any) {
     throw new ApiError({
       cause: e,
@@ -65,11 +67,11 @@ async function wrappedFetch(
       status: response.status,
     });
   }
-  return response;
+  return json;
 }
 
 async function fetchGql(key: string, query: string, variables: any) {
-  const response = await wrappedFetch('https://api.start.gg/gql/alpha', {
+  const json = await wrappedFetch('https://api.start.gg/gql/alpha', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${key}`,
@@ -77,7 +79,6 @@ async function fetchGql(key: string, query: string, variables: any) {
     },
     body: JSON.stringify({ query, variables }),
   });
-  const json = await response.json();
   if (json.errors) {
     throw new ApiError({
       message: json.errors.map((error: any) => error.message).join(', '),
@@ -261,10 +262,9 @@ export async function getApiTournament(inSlug: string) {
   }
 
   try {
-    const response = await wrappedFetch(
+    const json = await wrappedFetch(
       `https://api.smash.gg/tournament/${inSlug}?expand[]=event`,
     );
-    const json = await response.json();
     const { id, slug: apiSlug } = json.entities.tournament;
     const slug = apiSlug.slice(11);
     const tournament: DbTournament = {
@@ -606,10 +606,9 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   const phases: DbPhase[] = [];
   const pools: DbPool[] = [];
   try {
-    const eventResponse = await wrappedFetch(
+    const json = await wrappedFetch(
       `https://api.smash.gg/event/${eventId}?expand[]=phase&expand[]=groups`,
     );
-    const json = await eventResponse.json();
     json.entities.phase.forEach((phase: any) => {
       phases.push({
         id: phase.id,
@@ -649,10 +648,9 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       pools
         .map((pool) => pool.id)
         .map(async (id) => {
-          const response = await wrappedFetch(
+          const json = await wrappedFetch(
             `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
           );
-          const json = await response.json();
           const jsonEntrants = json.entities.entrants;
           if (Array.isArray(jsonEntrants)) {
             jsonEntrants.forEach((entrant) => {

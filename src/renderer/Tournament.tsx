@@ -348,11 +348,11 @@ function PoolListItem({
           {pool.name} <Typography variant="caption">({pool.id})</Typography>
         </ListItemText>
         {open ? (
-          <Tooltip title="Hide sets">
+          <Tooltip placement="left" title="Hide sets">
             <KeyboardArrowDown />
           </Tooltip>
         ) : (
-          <Tooltip title="Show sets">
+          <Tooltip placement="left" title="Show sets">
             <KeyboardArrowRight />
           </Tooltip>
         )}
@@ -376,11 +376,11 @@ function PoolListItem({
                 <Typography variant="caption">completed</Typography>
               </ListItemText>
               {completedOpen ? (
-                <Tooltip title="Hide completed sets">
+                <Tooltip placement="left" title="Hide completed sets">
                   <Visibility />
                 </Tooltip>
               ) : (
-                <Tooltip title="Show completed sets">
+                <Tooltip placement="left" title="Show completed sets">
                   <VisibilityOff />
                 </Tooltip>
               )}
@@ -489,11 +489,11 @@ function PhaseListItem({
           {phase.name} <Typography variant="caption">({phase.id})</Typography>
         </ListItemText>
         {open ? (
-          <Tooltip title="Hide pools">
+          <Tooltip placement="left" title="Hide pools">
             <KeyboardArrowDown />
           </Tooltip>
         ) : (
-          <Tooltip title="Show pools">
+          <Tooltip placement="left" title="Show pools">
             <KeyboardArrowRight />
           </Tooltip>
         )}
@@ -560,11 +560,11 @@ function LoadedEventListItem({
           )}
         </Stack>
         {open ? (
-          <Tooltip title="Hide pools">
+          <Tooltip placement="left" title="Hide phases">
             <KeyboardArrowDown />
           </Tooltip>
         ) : (
-          <Tooltip title="Show pools">
+          <Tooltip placement="left" title="Show phases">
             <KeyboardArrowRight />
           </Tooltip>
         )}
