@@ -1186,7 +1186,7 @@ export default function Tournament() {
         </Stack>
         {unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen}>
-            {open && (
+            {unloadedOpen && (
               <List>
                 {unloadedEvents.map((event) => (
                   <UnloadedEventListItem
