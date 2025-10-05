@@ -145,7 +145,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
   } else if (set.state === 3) {
     if (set.hasStageData) {
       titleEnd = (
-        <Stadium fontSize="small" style={{ margin: '-2px -8px 2px 8px' }} />
+        <Stadium fontSize="small" style={{ margin: '-2px -9px 2px 9px' }} />
       );
     }
   } else if (set.state === 6) {
@@ -190,7 +190,13 @@ function SetListItemInner({ set }: { set: RendererSet }) {
         </Typography>
         {titleEnd}
       </Stack>
-      <Stack direction="row" alignItems="center" width="100%">
+      <Stack
+        direction="row"
+        alignItems="center"
+        marginRight={
+          set.state !== 3 && (set.station || set.stream) ? undefined : '-8px'
+        }
+      >
         <Stack
           flexGrow={1}
           maxWidth={
