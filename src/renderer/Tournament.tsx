@@ -9,6 +9,8 @@ import {
   HourglassTop,
   KeyboardArrowDown,
   KeyboardArrowRight,
+  LockOpen,
+  LockPerson,
   NotificationsActive,
   Refresh,
   RestartAlt,
@@ -47,6 +49,7 @@ import {
   AdminedTournament,
   ApiError,
   ConflictReason,
+  PoolSiblings,
   RendererConflict,
   RendererConflictResolve,
   RendererEvent,
@@ -63,6 +66,7 @@ import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
+import UpgradeDialog from './UpgradeDialog';
 
 const SET_FIXED_WIDTH = '162px';
 
@@ -325,10 +329,14 @@ function SetListItemButton({
 function PoolListItem({
   pool,
   conflict,
+  phaseId,
+  openUpgradeDialog,
   reportSet,
 }: {
   pool: RendererPool;
   conflict: RendererConflict | null;
+  phaseId: number;
+  openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (poolId: number, set: RendererSet) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -340,6 +348,7 @@ function PoolListItem({
   return (
     <Box marginLeft="16px">
       <ListItemButton
+        disabled={pool.sets.length === 0}
         disableGutters
         style={{
           justifyContent: 'space-between',
@@ -350,9 +359,33 @@ function PoolListItem({
           setOpen(!open);
         }}
       >
-        <ListItemText style={{ flexGrow: 0 }}>
-          {pool.name} <Typography variant="caption">({pool.id})</Typography>
-        </ListItemText>
+        <Stack direction="row" alignItems="center">
+          <ListItemText style={{ flexGrow: 0 }}>
+            {pool.name} <Typography variant="caption">({pool.id})</Typography>
+          </ListItemText>
+          {pool.sets.length > 0 && (
+            <>
+              {typeof pool.sets[0].setId === 'number' && (
+                <Tooltip title="Locked" placement="right">
+                  <LockPerson style={{ marginLeft: '8px' }} />
+                </Tooltip>
+              )}
+              {open && typeof pool.sets[0].setId === 'string' && (
+                <Tooltip title="Lock" placement="right">
+                  <IconButton
+                    color="primary"
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      openUpgradeDialog(pool, phaseId);
+                    }}
+                  >
+                    <LockOpen />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </>
+          )}
+        </Stack>
         {open ? (
           <Tooltip placement="left" title="Hide sets">
             <KeyboardArrowDown />
@@ -470,10 +503,12 @@ function PoolListItem({
 function PhaseListItem({
   phase,
   conflict,
+  openUpgradeDialog,
   reportSet,
 }: {
   phase: RendererPhase;
   conflict: RendererConflict | null;
+  openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (phaseId: number, poolId: number, set: RendererSet) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -512,6 +547,8 @@ function PhaseListItem({
               key={pool.id}
               pool={pool}
               conflict={conflict}
+              phaseId={phase.id}
+              openUpgradeDialog={openUpgradeDialog}
               reportSet={(poolId: number, set: RendererSet) =>
                 reportSet(phase.id, poolId, set)
               }
@@ -525,10 +562,12 @@ function PhaseListItem({
 function LoadedEventListItem({
   event,
   conflict,
+  openUpgradeDialog,
   reportSet,
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
+  openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (
     eventId: number,
     phaseId: number,
@@ -551,7 +590,7 @@ function LoadedEventListItem({
           setOpen(!open);
         }}
       >
-        <Stack direction="row">
+        <Stack direction="row" alignItems="center">
           <ListItemText style={{ marginRight: '8px' }}>
             {event.name} <Typography variant="caption">({event.id})</Typography>
           </ListItemText>
@@ -583,6 +622,7 @@ function LoadedEventListItem({
               key={phase.id}
               phase={phase}
               conflict={conflict}
+              openUpgradeDialog={openUpgradeDialog}
               reportSet={(phaseId: number, poolId: number, set: RendererSet) =>
                 reportSet(event.id, phaseId, poolId, set)
               }
@@ -984,6 +1024,23 @@ export default function Tournament() {
     })();
   }, [conflict]);
 
+  const [upgradePool, setUpgradePool] = useState<{
+    id: number;
+    name: string;
+    waveId: number | null;
+    phaseId: number;
+  }>({
+    id: 0,
+    name: '',
+    waveId: 0,
+    phaseId: 0,
+  });
+  const [upgradePoolSiblings, setUpgradePoolSiblings] = useState<PoolSiblings>({
+    wave: [],
+    phase: [],
+  });
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+
   return (
     <>
       <AppBar position="fixed" style={{ backgroundColor: '#fff' }}>
@@ -1212,6 +1269,21 @@ export default function Tournament() {
                 key={event.id}
                 event={event}
                 conflict={conflict}
+                openUpgradeDialog={async (
+                  pool: RendererPool,
+                  phaseId: number,
+                ) => {
+                  setUpgradePool({
+                    id: pool.id,
+                    name: pool.name,
+                    waveId: pool.waveId,
+                    phaseId,
+                  });
+                  setUpgradePoolSiblings(
+                    await window.electron.getPoolSiblings(pool.waveId, phaseId),
+                  );
+                  setUpgradeDialogOpen(true);
+                }}
                 reportSet={(eventId, phaseId, poolId, set) => {
                   setReportState(eventId, phaseId, poolId, set);
                   setReportWinnerId(set.winnerId ?? 0);
@@ -2063,6 +2135,12 @@ export default function Tournament() {
             )}
           </DialogContent>
         </Dialog>
+        <UpgradeDialog
+          open={upgradeDialogOpen}
+          setOpen={setUpgradeDialogOpen}
+          pool={upgradePool}
+          siblings={upgradePoolSiblings}
+        />
         <ErrorDialog
           open={errorDialogOpen}
           error={error}

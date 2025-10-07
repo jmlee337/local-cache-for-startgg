@@ -35,6 +35,7 @@ import {
   DbParticipantToEntrant,
   DbParticipant,
   RendererParticipant,
+  PoolSiblings,
 } from '../common/types';
 
 enum SyncStatus {
@@ -72,6 +73,7 @@ export function dbInit(window: BrowserWindow) {
   db.prepare(
     `CREATE TABLE IF NOT EXISTS pools (
       id INTEGER PRIMARY KEY,
+      waveId INTEGER,
       phaseId INTEGER,
       eventId INTEGER,
       tournamentId INTEGER,
@@ -2212,24 +2214,21 @@ export function finalizeTransaction(
   })();
 }
 
-export function upgradePreviewSets(
-  deleteSetIds: string[],
-  updateSetIds: number[],
-) {
+export function updateSetIds(oldSetIds: string[], newSetIds: number[]) {
   if (!db) {
     throw new Error('not init');
   }
 
-  if (deleteSetIds.length !== updateSetIds.length) {
+  if (oldSetIds.length !== newSetIds.length) {
     throw new Error(
-      `deleteSetIds length: ${deleteSetIds.length} does not match updateSetIds length: ${updateSetIds.length}`,
+      `deleteSetIds length: ${oldSetIds.length} does not match updateSetIds length: ${newSetIds.length}`,
     );
   }
 
-  for (let i = 0; i < deleteSetIds.length; i += 1) {
+  for (let i = 0; i < oldSetIds.length; i += 1) {
     db.prepare(
       'UPDATE sets SET setId = @updateSetId WHERE setId = @deleteSetId',
-    ).run({ deleteSetId: deleteSetIds[i], updateSetId: updateSetIds[i] });
+    ).run({ deleteSetId: oldSetIds[i], updateSetId: newSetIds[i] });
   }
 }
 
@@ -2444,9 +2443,9 @@ export function updateEvent(
       .prepare(
         `REPLACE INTO
           pools
-            (id, phaseId, eventId, tournamentId, name, bracketType, state)
+            (id, waveId, phaseId, eventId, tournamentId, name, bracketType, state)
           VALUES
-            (@id, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state)`,
+            (@id, @waveId, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state)`,
       )
       .run(pool);
   });
@@ -2983,6 +2982,69 @@ export function makeResetRecursive(transactionNum: number) {
   return transaction.tournamentId;
 }
 
+export function getPoolSiblings(waveId: number | null, phaseId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbPhasePools = db
+    .prepare('SELECT * FROM pools WHERE phaseId = @phaseId')
+    .all({ phaseId }) as DbPool[];
+  const siblings: PoolSiblings = {
+    wave: [],
+    phase: dbPhasePools.map((dbPool) => dbPool.name),
+  };
+
+  if (waveId !== null) {
+    const dbWavePools = db
+      .prepare('SELECT * FROM pools WHERE waveId = @waveId')
+      .all({ waveId }) as DbPool[];
+    siblings.wave = dbWavePools.map((dbPool) => dbPool.name);
+  }
+
+  return siblings;
+}
+
+export function getPreviewSetIdFromPool(poolId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbSet = db
+    .prepare('SELECT * FROM sets WHERE phaseGroupId = @poolId LIMIT 1')
+    .get({ poolId }) as DbSet;
+  if (typeof dbSet.setId === 'string') {
+    return dbSet.setId;
+  }
+  return '';
+}
+
+export function getPreviewSetIdsFromWave(waveId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbPools = db
+    .prepare('SELECT * FROM pools WHERE waveId = @waveId')
+    .all({ waveId }) as DbPool[];
+  return dbPools
+    .map((dbPool) => getPreviewSetIdFromPool(dbPool.id))
+    .filter((previewSetId) => previewSetId);
+}
+
+export function getPreviewSetIdsFromPhase(phaseId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbPools = db
+    .prepare('SELECT * FROM pools WHERE phaseId = @phaseId')
+    .all({ phaseId }) as DbPool[];
+  return dbPools
+    .map((dbPool) => getPreviewSetIdFromPool(dbPool.id))
+    .filter((previewSetId) => previewSetId);
+}
+
 export function getLoadedEventIds(tournamentId?: number) {
   if (!db) {
     throw new Error('not init');
@@ -3091,6 +3153,7 @@ export function getTournament(): RendererTournament | undefined {
                 id: dbPool.id,
                 name: dbPool.name,
                 bracketType: dbPool.bracketType,
+                waveId: dbPool.waveId,
                 sets: rendererSets,
               };
             }),

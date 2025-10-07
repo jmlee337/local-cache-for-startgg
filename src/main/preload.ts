@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 import {
   AdminedTournament,
+  PoolSiblings,
   RendererConflict,
   RendererConflictResolve,
   RendererTournament,
@@ -36,6 +37,17 @@ const electronHandler = {
     ipcRenderer.invoke('retryTournament', id, slug),
   loadEvent: (eventId: number): Promise<void> =>
     ipcRenderer.invoke('loadEvent', eventId),
+  getPoolSiblings: (
+    waveId: number | null,
+    phaseId: number,
+  ): Promise<PoolSiblings> =>
+    ipcRenderer.invoke('getPoolSiblings', waveId, phaseId),
+  upgradePoolSets: (poolId: number): Promise<void> =>
+    ipcRenderer.invoke('upgradePoolSets', poolId),
+  upgradeWaveSets: (waveId: number): Promise<void> =>
+    ipcRenderer.invoke('upgradeWaveSets', waveId),
+  upgradePhaseSets: (phaseId: number): Promise<void> =>
+    ipcRenderer.invoke('upgradePhaseSets', phaseId),
   resetSet: (id: number | string): Promise<void> =>
     ipcRenderer.invoke('resetSet', id),
   assignSetStation: (id: number | string, stationId: number): Promise<void> =>

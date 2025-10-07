@@ -79,6 +79,7 @@ export type RendererPool = {
   id: number;
   name: string;
   bracketType: number;
+  waveId: number | null;
   sets: RendererSet[];
 };
 
@@ -262,6 +263,7 @@ export type DbSeed = {
 
 export type DbPool = {
   id: number;
+  waveId: number | null;
   phaseId: number;
   eventId: number;
   tournamentId: number;
@@ -420,4 +422,9 @@ export type SyncResult = {
 export type WebsocketStatus = {
   err: string;
   port: number;
+};
+
+export type PoolSiblings = {
+  wave: string[];
+  phase: string[];
 };

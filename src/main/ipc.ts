@@ -17,6 +17,7 @@ import {
   setApiKey,
   startggInit,
   maybeTryNow,
+  upgradePreviewSets,
 } from './startgg';
 import {
   dbInit,
@@ -25,6 +26,10 @@ import {
   getConflict,
   getConflictResolve,
   getLastTournament,
+  getPoolSiblings,
+  getPreviewSetIdFromPool,
+  getPreviewSetIdsFromPhase,
+  getPreviewSetIdsFromWave,
   getTournament,
   getTournamentId,
   getTournaments,
@@ -244,6 +249,55 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       const tournamentId = getTournamentId();
       await loadEvent(eventId, tournamentId);
       maybeTryNow(tournamentId);
+      updateClients();
+    },
+  );
+
+  ipcMain.removeHandler('getPoolSiblings');
+  ipcMain.handle(
+    'getPoolSiblings',
+    (event: IpcMainInvokeEvent, waveId: number | null, phaseId: number) =>
+      getPoolSiblings(waveId, phaseId),
+  );
+
+  ipcMain.removeHandler('upgradePoolSets');
+  ipcMain.handle(
+    'upgradePoolSets',
+    async (event: IpcMainInvokeEvent, poolId: number) => {
+      const previewSetId = getPreviewSetIdFromPool(poolId);
+      if (!previewSetId) {
+        throw new Error('Pool is already upgraded.');
+      }
+
+      await upgradePreviewSets([previewSetId]);
+      updateClients();
+    },
+  );
+
+  ipcMain.removeHandler('upgradeWaveSets');
+  ipcMain.handle(
+    'upgradeWaveSets',
+    async (event: IpcMainInvokeEvent, waveId: number) => {
+      const previewSetIds = getPreviewSetIdsFromWave(waveId);
+      if (previewSetIds.length === 0) {
+        throw new Error('Every pool in wave is already upgraded.');
+      }
+
+      await upgradePreviewSets(previewSetIds);
+      updateClients();
+    },
+  );
+
+  ipcMain.removeHandler('upgradePhaseSets');
+  ipcMain.handle(
+    'upgradePhaseSets',
+    async (event: IpcMainInvokeEvent, phaseId: number) => {
+      const previewSetIds = getPreviewSetIdsFromPhase(phaseId);
+      if (previewSetIds.length === 0) {
+        throw new Error('Every pool in phase is already upgraded.');
+      }
+
+      await upgradePreviewSets(previewSetIds);
       updateClients();
     },
   );

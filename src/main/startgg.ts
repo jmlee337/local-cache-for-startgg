@@ -30,7 +30,7 @@ import {
   getTournamentId,
   deleteTransaction,
   markTransactionConflict,
-  upgradePreviewSets,
+  updateSetIds,
   replaceParticipants,
 } from './db';
 
@@ -86,15 +86,15 @@ async function fetchGql(key: string, query: string, variables: any) {
     });
   }
 
-  const deleteSetIds = json.actionRecords?.delete?.sets;
-  const updateSetIds = json.actionRecords?.update?.sets;
+  const oldSetIds = json.actionRecords?.delete?.sets;
+  const newSetIds = json.actionRecords?.update?.sets;
   if (
-    Array.isArray(deleteSetIds) &&
-    deleteSetIds.every((deleteSetId) => typeof deleteSetId === 'string') &&
-    Array.isArray(updateSetIds) &&
-    updateSetIds.every((updateSetId) => Number.isInteger(updateSetId))
+    Array.isArray(oldSetIds) &&
+    oldSetIds.every((deleteSetId) => typeof deleteSetId === 'string') &&
+    Array.isArray(newSetIds) &&
+    newSetIds.every((updateSetId) => Number.isInteger(updateSetId))
   ) {
-    upgradePreviewSets(deleteSetIds, updateSetIds);
+    updateSetIds(oldSetIds, newSetIds);
   }
 
   return json.data;
@@ -263,7 +263,7 @@ export async function getApiTournament(inSlug: string) {
 
   try {
     const json = await wrappedFetch(
-      `https://api.smash.gg/tournament/${inSlug}?expand[]=event`,
+      `https://api.start.gg/tournament/${inSlug}?expand[]=event`,
     );
     const { id, slug: apiSlug } = json.entities.tournament;
     const slug = apiSlug.slice(11);
@@ -607,7 +607,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   const pools: DbPool[] = [];
   try {
     const json = await wrappedFetch(
-      `https://api.smash.gg/event/${eventId}?expand[]=phase&expand[]=groups`,
+      `https://api.start.gg/event/${eventId}?expand[]=phase&expand[]=groups`,
     );
     json.entities.phase.forEach((phase: any) => {
       phases.push({
@@ -621,6 +621,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
     json.entities.groups.forEach((group: any) => {
       pools.push({
         id: group.id,
+        waveId: group.waveId,
         phaseId: group.phaseId,
         eventId,
         tournamentId,
@@ -649,7 +650,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         .map((pool) => pool.id)
         .map(async (id) => {
           const json = await wrappedFetch(
-            `https://api.smash.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
+            `https://api.start.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
           );
           const jsonEntrants = json.entities.entrants;
           if (Array.isArray(jsonEntrants)) {
@@ -667,24 +668,28 @@ async function refreshEvent(tournamentId: number, eventId: number) {
               );
             });
           }
-          seeds.push(
-            ...json.entities.seeds.map((seed: any) => ({
-              id: seed.id,
-              phaseId: seed.phaseId,
-              eventId,
-              tournamentId,
-              entrantId: Number.isInteger(seed.entrantId)
-                ? seed.entrantId
-                : null,
-            })),
-          );
-          sets.push(
-            ...dbSetsFromApiSets(
-              json.entities.sets,
-              tournamentId,
-              json.entities.groups.groupTypeId,
-            ),
-          );
+          if (json.entities.seeds instanceof Array) {
+            seeds.push(
+              ...json.entities.seeds.map((seed: any) => ({
+                id: seed.id,
+                phaseId: seed.phaseId,
+                eventId,
+                tournamentId,
+                entrantId: Number.isInteger(seed.entrantId)
+                  ? seed.entrantId
+                  : null,
+              })),
+            );
+          }
+          if (json.entities.sets instanceof Array) {
+            sets.push(
+              ...dbSetsFromApiSets(
+                json.entities.sets,
+                tournamentId,
+                json.entities.groups.groupTypeId,
+              ),
+            );
+          }
         }),
     );
     updateSyncResultWithSuccess();
@@ -1234,4 +1239,21 @@ export function startRefreshingTournament(id: number, slug: string) {
   setImmediate(() => {
     tryNextTransaction(id, slug);
   });
+}
+
+export async function upgradePreviewSets(previewSetIds: string[]) {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  while (previewSetIds.length > 0) {
+    const mutationPreivewSetIds = previewSetIds.slice(0, 500);
+    const inner = mutationPreivewSetIds.map(
+      (setId) => `
+      setId${setId}: reportBracketSet(setId: "${setId}") { id }`,
+    );
+    const mutation = `mutation UpgradeMutation {${inner}}`;
+    await fetchGql(apiKey, mutation, {});
+    previewSetIds.splice(0, 500);
+  }
 }
