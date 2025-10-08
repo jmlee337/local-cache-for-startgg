@@ -18,6 +18,7 @@ import {
   SyncState,
   ConflictReason,
   DbSeed,
+  DbParticipant,
 } from '../common/types';
 import {
   upsertTournament,
@@ -298,7 +299,7 @@ export async function getApiTournament(inSlug: string) {
             id: participant.id,
             tournamentId: id,
             gamerTag: participant.gamerTag,
-            prefix: participant.prefix,
+            prefix: participant.prefix ?? '',
             pronouns: participant.player.user?.genderPronoun ?? '',
             userSlug: participant.player.user?.slug.slice(5) ?? '',
           })),
@@ -642,6 +643,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
 
   const idToEntrant = new Map<number, DbEntrant>();
   const entrantIdToParticipantIds = new Map<number, number[]>();
+  const participants: DbParticipant[] = [];
   const seeds: DbSeed[] = [];
   const sets: DbSet[] = [];
   try {
@@ -664,6 +666,18 @@ async function refreshEvent(tournamentId: number, eventId: number) {
                 entrant.id,
                 (Object.values(entrant.mutations.participants) as any[]).map(
                   (participant) => participant.id,
+                ),
+              );
+              participants.push(
+                ...(Object.values(entrant.mutations.participants) as any[]).map(
+                  (participant) => ({
+                    id: participant.id,
+                    tournamentId,
+                    gamerTag: participant.gamerTag,
+                    prefix: participant.prefix ?? '',
+                    pronouns: '',
+                    userSlug: '',
+                  }),
                 ),
               );
             });
@@ -700,6 +714,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       pools,
       Array.from(idToEntrant.values()),
       entrantIdToParticipantIds,
+      participants,
       seeds,
       sets,
     );
