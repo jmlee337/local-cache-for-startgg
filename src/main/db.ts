@@ -2992,14 +2992,28 @@ export function getPoolSiblings(waveId: number | null, phaseId: number) {
     .all({ phaseId }) as DbPool[];
   const siblings: PoolSiblings = {
     wave: [],
-    phase: dbPhasePools.map((dbPool) => dbPool.name),
+    phase: dbPhasePools
+      .map((dbPool) => dbPool.name)
+      .sort((a, b) => {
+        if (a.length === b.length) {
+          return a.localeCompare(b);
+        }
+        return a.length - b.length;
+      }),
   };
 
   if (waveId !== null) {
     const dbWavePools = db
       .prepare('SELECT * FROM pools WHERE waveId = @waveId')
       .all({ waveId }) as DbPool[];
-    siblings.wave = dbWavePools.map((dbPool) => dbPool.name);
+    siblings.wave = dbWavePools
+      .map((dbPool) => dbPool.name)
+      .sort((a, b) => {
+        if (a.length === b.length) {
+          return a.localeCompare(b);
+        }
+        return a.length - b.length;
+      });
   }
 
   return siblings;

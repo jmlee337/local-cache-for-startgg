@@ -6,11 +6,11 @@ import {
   DialogTitle,
   FormControl,
   FormControlLabel,
-  List,
   ListItem,
   ListItemText,
   Radio,
   RadioGroup,
+  Stack,
 } from '@mui/material';
 import { useState } from 'react';
 import { PoolSiblings } from '../common/types';
@@ -23,7 +23,7 @@ enum UpgradeMethod {
 
 function PoolItem({ name }: { name: string }) {
   return (
-    <ListItem disablePadding>
+    <ListItem disablePadding style={{ flex: '0 0 content' }}>
       <ListItemText>{name}</ListItemText>
     </ListItem>
   );
@@ -77,7 +77,7 @@ export default function UpgradeDialog({
             />
           </RadioGroup>
         </FormControl>
-        <List>
+        <Stack direction="row" flexWrap="wrap" gap="8px" width="300px">
           {upgradeMethod === UpgradeMethod.POOL && (
             <PoolItem name={pool.name} />
           )}
@@ -85,7 +85,7 @@ export default function UpgradeDialog({
             siblings.wave.map((poolName) => <PoolItem name={poolName} />)}
           {upgradeMethod === UpgradeMethod.PHASE &&
             siblings.phase.map((poolName) => <PoolItem name={poolName} />)}
-        </List>
+        </Stack>
       </DialogContent>
       <DialogActions>
         <Button
