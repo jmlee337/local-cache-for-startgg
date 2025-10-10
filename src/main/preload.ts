@@ -143,6 +143,7 @@ const electronHandler = {
     ipcRenderer.invoke('getVersionLatest'),
   update: (): void => ipcRenderer.send('update'),
   copy: (text: string): Promise<void> => ipcRenderer.invoke('copy', text),
+  openDbFolder: (): Promise<void> => ipcRenderer.invoke('openDbFolder'),
 };
 
 contextBridge.exposeInMainWorld('electron', electronHandler);

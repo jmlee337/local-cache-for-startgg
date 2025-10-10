@@ -2,6 +2,7 @@ import {
   Alert,
   Button,
   Dialog,
+  DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
@@ -188,6 +189,16 @@ export default function Settings({
             </Alert>
           )}
         </DialogContent>
+        <DialogActions>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              await window.electron.openDbFolder();
+            }}
+          >
+            Open DB Folder
+          </Button>
+        </DialogActions>
       </Dialog>
     </>
   );

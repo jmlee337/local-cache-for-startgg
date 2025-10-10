@@ -466,6 +466,11 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('getAppVersion');
   ipcMain.handle('getAppVersion', app.getVersion);
 
+  ipcMain.removeHandler('openDbFolder');
+  ipcMain.handle('openDbFolder', async () => {
+    await shell.openPath(app.getPath('userData'));
+  });
+
   ipcMain.removeHandler('copy');
   ipcMain.handle('copy', (event: IpcMainInvokeEvent, text: string) => {
     clipboard.writeText(text);
