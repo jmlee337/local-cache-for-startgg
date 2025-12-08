@@ -224,6 +224,7 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
         }
         nodes {
           id
+          connectedAccounts
           gamerTag
           prefix
           player {
@@ -231,6 +232,11 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
               genderPronoun
               slug
             }
+          }
+          requiredConnections {
+            type
+            externalId
+            externalUsername
           }
         }
       }
@@ -295,14 +301,30 @@ export async function getApiTournament(inSlug: string) {
       const { nodes } = nextData.tournament.participants;
       if (Array.isArray(nodes)) {
         replaceParticipants(
-          nodes.map((participant) => ({
-            id: participant.id,
-            tournamentId: id,
-            gamerTag: participant.gamerTag,
-            prefix: participant.prefix ?? '',
-            pronouns: participant.player.user?.genderPronoun ?? '',
-            userSlug: participant.player.user?.slug.slice(5) ?? '',
-          })),
+          nodes.map((participant) => {
+            let discordId = '';
+            let discordUsername = '';
+            if (participant.requiredConnections) {
+              const discord = (participant.requiredConnections as any[]).find(
+                (rc) => rc.type === 'DISCORD',
+              );
+              if (discord) {
+                discordId = discord.externalId;
+                discordUsername = discord.externalUsername;
+              }
+            }
+            return {
+              id: participant.id,
+              tournamentId: id,
+              connectCode: participant.connectedAccounts?.slippi?.value ?? '',
+              discordId,
+              discordUsername,
+              gamerTag: participant.gamerTag,
+              prefix: participant.prefix ?? '',
+              pronouns: participant.player.user?.genderPronoun ?? '',
+              userSlug: participant.player.user?.slug.slice(5) ?? '',
+            };
+          }),
         );
       }
       page += 1;
@@ -673,6 +695,9 @@ async function refreshEvent(tournamentId: number, eventId: number) {
                   (participant) => ({
                     id: participant.id,
                     tournamentId,
+                    connectCode: '',
+                    discordId: '',
+                    discordUsername: '',
                     gamerTag: participant.gamerTag,
                     prefix: participant.prefix ?? '',
                     pronouns: '',

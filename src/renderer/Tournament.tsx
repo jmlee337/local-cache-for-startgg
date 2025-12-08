@@ -67,6 +67,8 @@ import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
 import UpgradeDialog from './UpgradeDialog';
+import Discords from './Discords';
+import ConnectCodes from './ConnectCodes';
 
 const SET_FIXED_WIDTH = '162px';
 
@@ -1078,7 +1080,11 @@ export default function Tournament() {
               tournamentSlug={tournament?.slug}
             />
           </Stack>
-          <Settings showError={showError} />
+          <Stack direction="row" alignItems="center">
+            <ConnectCodes participants={tournament?.participants ?? []} />
+            <Discords participants={tournament?.participants ?? []} />
+            <Settings showError={showError} />
+          </Stack>
         </Toolbar>
       </AppBar>
       <Toolbar />
@@ -1139,6 +1145,7 @@ export default function Tournament() {
             <DialogTitle
               style={{
                 display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 paddingRight: '32px',
               }}

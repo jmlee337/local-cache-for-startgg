@@ -43,6 +43,9 @@ export type RendererStream = {
 
 export type RendererParticipant = {
   id: number;
+  connectCode: string;
+  discordId: string;
+  discordUsername: string;
   gamerTag: string;
   prefix: string;
   pronouns: string;
@@ -102,6 +105,7 @@ export type RendererTournament = {
   id: number;
   slug: string;
   events: RendererEvent[];
+  participants: RendererParticipant[];
   stations: RendererStation[];
   streams: RendererStream[];
 };
@@ -150,6 +154,9 @@ export type DbStream = {
 export type DbParticipant = {
   id: number;
   tournamentId: number;
+  connectCode: string;
+  discordId: string;
+  discordUsername: string;
   gamerTag: string;
   prefix: string;
   pronouns: string;

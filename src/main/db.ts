@@ -170,6 +170,9 @@ export function dbInit(window: BrowserWindow) {
     `CREATE TABLE IF NOT EXISTS participants(
       id INTEGER PRIMARY KEY,
       tournamentId INTEGER NOT NULL,
+      connectCode TEXT,
+      discordId TEXT,
+      discordUsername TEXT,
       gamerTag TEXT,
       prefix TEXT,
       pronouns TEXT,
@@ -346,6 +349,9 @@ export function replaceParticipants(participants: DbParticipant[]) {
         `REPLACE INTO participants (
           id,
           tournamentId,
+          connectCode,
+          discordId,
+          discordUsername,
           gamerTag,
           prefix,
           pronouns,
@@ -353,6 +359,9 @@ export function replaceParticipants(participants: DbParticipant[]) {
         ) VALUES (
           @id,
           @tournamentId,
+          @connectCode,
+          @discordId,
+          @discordUsername,
           @gamerTag,
           @prefix,
           @pronouns,
@@ -2495,6 +2504,9 @@ export function updateEvent(
         `INSERT OR IGNORE INTO participants (
           id,
           tournamentId,
+          connectCode,
+          discordId,
+          discordUsername,
           gamerTag,
           prefix,
           pronouns,
@@ -2502,6 +2514,9 @@ export function updateEvent(
         ) VALUES (
           @id,
           @tournamentId,
+          @connectCode,
+          @discordId,
+          @discordUsername,
           @gamerTag,
           @prefix,
           @pronouns,
@@ -3136,6 +3151,11 @@ export function getTournament(): RendererTournament | undefined {
     }
     return a.name.length - b.name.length;
   });
+  const dbParticipants = db
+    .prepare(
+      'SELECT * FROM participants WHERE tournamentId = @id ORDER BY gamerTag ASC',
+    )
+    .all({ id: currentTournamentId }) as DbParticipant[];
   const dbStations = db
     .prepare('SELECT * FROM stations WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbStation[];
@@ -3196,6 +3216,7 @@ export function getTournament(): RendererTournament | undefined {
             }),
         })),
     })),
+    participants: dbParticipants,
     stations: dbStations,
     streams: dbStreams,
   };
