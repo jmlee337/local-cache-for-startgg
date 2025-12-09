@@ -32,7 +32,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  InputBase,
   List,
   ListItem,
   ListItemButton,
@@ -645,7 +644,7 @@ function UnloadedEventListItem({
   const [loading, setLoading] = useState(false);
   return (
     <ListItem disablePadding style={{ justifyContent: 'space-between' }}>
-      <Stack direction="row">
+      <Stack direction="row" alignItems="center">
         <ListItemText style={{ marginRight: '8px' }}>
           {event.name} <Typography variant="caption">({event.id})</Typography>
         </ListItemText>
@@ -839,13 +838,20 @@ export default function Tournament() {
   const [localTournaments, setLocalTournaments] = useState<AdminedTournament[]>(
     [],
   );
-  const refresh = async () => {
+  const getTournaments = async () => {
     setLocalTournaments(await window.electron.getLocalTournaments());
     getAdminedTournaments();
   };
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
       setAdminedTournaments(newAdminedTournaments);
+    });
+  }, []);
+
+  const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    window.electron.onRefreshing((event, newRefreshing) => {
+      setRefreshing(newRefreshing);
     });
   }, []);
 
@@ -1042,7 +1048,6 @@ export default function Tournament() {
     phase: [],
   });
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
-
   return (
     <>
       <AppBar position="fixed" style={{ backgroundColor: '#fff' }}>
@@ -1089,29 +1094,45 @@ export default function Tournament() {
       </AppBar>
       <Toolbar />
       <Stack marginTop="8px">
-        <Stack direction="row" alignItems="center">
-          <InputBase
-            disabled
-            size="small"
-            value={
-              tournament
-                ? `${tournament.slug} (${tournament.id})`
-                : 'Set tournament'
-            }
-            style={{ flexGrow: 1 }}
-          />
-          <Tooltip title="Set tournament">
-            <IconButton
-              onClick={() => {
-                refresh();
-                setOpen(true);
-              }}
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+        >
+          <Stack direction="row" alignItems="center">
+            <Typography
+              variant="body1"
+              sx={{ color: (theme) => theme.palette.text.disabled }}
             >
-              <Edit />
-            </IconButton>
-          </Tooltip>
-          {unloadedEvents.length > 0 &&
-            (unloadedOpen ? (
+              {tournament
+                ? `${tournament.slug} (${tournament.id})`
+                : 'Set tournament'}
+            </Typography>
+            <Tooltip title="Set tournament">
+              <IconButton
+                onClick={() => {
+                  getTournaments();
+                  setOpen(true);
+                }}
+              >
+                <Edit />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+          <Stack direction="row">
+            <Tooltip title="Refresh">
+              <span>
+                <IconButton
+                  disabled={!tournament || refreshing}
+                  onClick={() => {
+                    window.electron.refreshTournament();
+                  }}
+                >
+                  {refreshing ? <CircularProgress size="24px" /> : <Refresh />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            {unloadedOpen ? (
               <Tooltip title="Hide unloaded events">
                 <IconButton
                   onClick={() => {
@@ -1131,7 +1152,8 @@ export default function Tournament() {
                   <VisibilityOff />
                 </IconButton>
               </Tooltip>
-            ))}
+            )}
+          </Stack>
           <Dialog
             fullWidth
             open={open}
@@ -1154,7 +1176,7 @@ export default function Tournament() {
               <Tooltip title="Refresh">
                 <IconButton
                   disabled={gettingAdminedTournaments}
-                  onClick={refresh}
+                  onClick={getTournaments}
                 >
                   {gettingAdminedTournaments ? (
                     <CircularProgress size="24px" />

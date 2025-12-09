@@ -954,6 +954,7 @@ export function onTransaction(callback: () => void) {
   emitter.addListener('transaction', callback);
 }
 
+// TODO remove old timeout when switching
 const slugToTimeout = new Map<string, NodeJS.Timeout>();
 async function tryNextTransaction(id: number, slug: string) {
   slugToTimeout.delete(slug);
@@ -962,6 +963,7 @@ async function tryNextTransaction(id: number, slug: string) {
   }
 
   try {
+    mainWindow?.webContents.send('refreshing', true);
     await getApiTournament(slug);
     await Promise.all(
       getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
@@ -1255,6 +1257,8 @@ async function tryNextTransaction(id: number, slug: string) {
     } else {
       updateWithFatalError(e);
     }
+  } finally {
+    mainWindow?.webContents.send('refreshing', false);
   }
 }
 

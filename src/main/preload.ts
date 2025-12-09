@@ -33,6 +33,8 @@ const electronHandler = {
     ipcRenderer.invoke('getTournament', slug),
   setTournament: (id: number, slug: string): Promise<void> =>
     ipcRenderer.invoke('setTournament', id, slug),
+  refreshTournament: (): Promise<void> =>
+    ipcRenderer.invoke('refreshTournament'),
   retryTournament: (id: number, slug: string): Promise<void> =>
     ipcRenderer.invoke('retryTournament', id, slug),
   loadEvent: (eventId: number): Promise<void> =>
@@ -116,6 +118,12 @@ const electronHandler = {
   ) => {
     ipcRenderer.removeAllListeners('fatalError');
     ipcRenderer.on('fatalError', callback);
+  },
+  onRefreshing: (
+    callback: (event: IpcRendererEvent, refreshing: boolean) => void,
+  ) => {
+    ipcRenderer.removeAllListeners('refreshing');
+    ipcRenderer.on('refreshing', callback);
   },
   onSyncResult: (
     callback: (event: IpcRendererEvent, syncResult: SyncResult) => void,

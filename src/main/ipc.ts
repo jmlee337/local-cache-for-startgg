@@ -234,6 +234,12 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     },
   );
 
+  ipcMain.removeHandler('refreshTournament');
+  ipcMain.handle('refreshTournament', () => {
+    maybeTryNow(getTournamentId());
+    updateClients();
+  });
+
   ipcMain.removeHandler('retryTournament');
   ipcMain.handle(
     'retryTournament',
