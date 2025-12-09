@@ -1120,6 +1120,7 @@ export default function Tournament() {
             </Tooltip>
           </Stack>
           <Stack direction="row">
+            {/* TODO move this to appbar */}
             <Tooltip title="Refresh">
               <span>
                 <IconButton
