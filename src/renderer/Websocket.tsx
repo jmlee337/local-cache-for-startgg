@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
-import { Box, Button, Dialog, DialogContent, DialogTitle } from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Box,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import { LeakAdd, LeakRemove } from '@mui/icons-material';
 import { WebsocketStatus } from '../common/types';
 
 export default function Websocket() {
@@ -22,33 +30,45 @@ export default function Websocket() {
     inner();
   }, []);
 
-  let websocketButton;
-  if (websocketStatus.err) {
-    websocketButton = (
-      <Button
-        color="error"
-        size="large"
-        variant="contained"
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        Websocket Error
-      </Button>
+  const websocketButton = useMemo(() => {
+    if (websocketStatus.err) {
+      return (
+        <Tooltip title="Websocket error!">
+          <IconButton
+            color="error"
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            <LeakRemove />
+          </IconButton>
+        </Tooltip>
+      );
+    }
+    if (websocketStatus.port) {
+      return (
+        <Tooltip title="Websocket running">
+          <IconButton
+            color="primary"
+            onClick={() => {
+              setOpen(true);
+            }}
+          >
+            <LeakAdd />
+          </IconButton>
+        </Tooltip>
+      );
+    }
+    return (
+      <Tooltip title="Websocket disabled">
+        <span>
+          <IconButton disabled>
+            <LeakRemove />
+          </IconButton>
+        </span>
+      </Tooltip>
     );
-  } else if (websocketStatus.port) {
-    websocketButton = (
-      <Button
-        size="large"
-        variant="text"
-        onClick={() => {
-          setOpen(true);
-        }}
-      >
-        Websocket: {websocketStatus.port}
-      </Button>
-    );
-  }
+  }, [websocketStatus]);
   return (
     <>
       {websocketButton}

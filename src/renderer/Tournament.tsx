@@ -1059,7 +1059,7 @@ export default function Tournament() {
             paddingRight: '8px',
           }}
         >
-          <Stack direction="row" alignItems="center" marginLeft="-3px">
+          <Stack direction="row" alignItems="center">
             <Sync />
             <Websocket />
             {conflict && (

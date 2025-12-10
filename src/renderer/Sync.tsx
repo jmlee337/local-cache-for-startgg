@@ -1,6 +1,14 @@
-import { Box, Button, Dialog, DialogContent, DialogTitle } from '@mui/material';
-import { useEffect, useState } from 'react';
+import {
+  Box,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Tooltip,
+} from '@mui/material';
+import { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
+import { CloudDone, CloudOff } from '@mui/icons-material';
 import { SyncResult } from '../common/types';
 
 const ERROR_THRESHOLD_MS = 4000;
@@ -21,43 +29,40 @@ export default function Sync() {
     };
     inner();
   }, []);
-  const success =
-    syncResult.success ||
-    syncResult.lastErrorMs - syncResult.errorSinceMs < ERROR_THRESHOLD_MS;
 
   const [open, setOpen] = useState(false);
-  let syncButton = <div />;
-  if (
-    syncResult.lastSuccessMs ||
-    syncResult.lastErrorMs - syncResult.errorSinceMs >= ERROR_THRESHOLD_MS
-  ) {
-    if (success) {
-      syncButton = (
-        <Button
-          size="large"
-          variant="text"
+
+  const success = useMemo(
+    () =>
+      syncResult.success ||
+      syncResult.lastErrorMs - syncResult.errorSinceMs < ERROR_THRESHOLD_MS,
+    [syncResult],
+  );
+  const syncButton = useMemo(() => {
+    return success ? (
+      <Tooltip title="Online">
+        <IconButton
+          color="primary"
           onClick={() => {
             setOpen(true);
           }}
         >
-          Online
-        </Button>
-      );
-    } else {
-      syncButton = (
-        <Button
+          <CloudDone />
+        </IconButton>
+      </Tooltip>
+    ) : (
+      <Tooltip title="Offline">
+        <IconButton
           color="warning"
-          size="large"
-          variant="text"
           onClick={() => {
             setOpen(true);
           }}
         >
-          Offline
-        </Button>
-      );
-    }
-  }
+          <CloudOff />
+        </IconButton>
+      </Tooltip>
+    );
+  }, [success]);
 
   return (
     <>
