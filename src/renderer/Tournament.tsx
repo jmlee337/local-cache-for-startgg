@@ -32,6 +32,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   List,
   ListItem,
   ListItemButton,
@@ -61,7 +62,6 @@ import {
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
-import IconButton from './IconButton';
 import Sync from './Sync';
 import Websocket from './Websocket';
 import FatalError from './FatalError';
@@ -353,8 +353,8 @@ function PoolListItem({
         disableGutters
         style={{
           justifyContent: 'space-between',
-          marginRight: '-8px',
-          padding: '0 16px 0 0',
+          marginLeft: '-32px',
+          padding: '0 16px 0 32px',
         }}
         onClick={() => {
           setOpen(!open);
@@ -404,9 +404,9 @@ function PoolListItem({
               disableGutters
               style={{
                 justifyContent: 'space-between',
-                marginLeft: '16px',
-                marginRight: '-8px',
-                padding: '0 16px 0 0',
+                height: '32px',
+                marginLeft: '-48px',
+                padding: '0 16px 0 64px',
               }}
               onClick={() => {
                 setCompletedOpen(!completedOpen);
@@ -417,11 +417,15 @@ function PoolListItem({
               </ListItemText>
               {completedOpen ? (
                 <Tooltip placement="left" title="Hide completed sets">
-                  <Visibility />
+                  <Visibility
+                    sx={{ color: (theme) => theme.palette.text.secondary }}
+                  />
                 </Tooltip>
               ) : (
                 <Tooltip placement="left" title="Show completed sets">
-                  <VisibilityOff />
+                  <VisibilityOff
+                    sx={{ color: (theme) => theme.palette.text.secondary }}
+                  />
                 </Tooltip>
               )}
             </ListItemButton>
@@ -520,8 +524,8 @@ function PhaseListItem({
         disableGutters
         style={{
           justifyContent: 'space-between',
-          marginRight: '-8px',
-          padding: '0 16px 0 0',
+          marginLeft: '-16px',
+          padding: '0 16px 0 16px',
         }}
         onClick={() => {
           setOpen(!open);
@@ -584,8 +588,7 @@ function LoadedEventListItem({
         disableGutters
         style={{
           justifyContent: 'space-between',
-          marginRight: '-8px',
-          padding: '0 16px 0 0',
+          padding: '0 16px 0 8px',
         }}
         onClick={() => {
           setOpen(!open);
@@ -1050,237 +1053,269 @@ export default function Tournament() {
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
   return (
     <>
-      <AppBar position="fixed" style={{ backgroundColor: '#fff' }}>
+      <AppBar
+        position="fixed"
+        sx={{
+          backgroundColor: (theme) => theme.palette.common.white,
+          color: (theme) => theme.palette.text.primary,
+        }}
+      >
         <Toolbar
           disableGutters
           style={{
-            justifyContent: 'space-between',
-            gap: '8px',
             paddingRight: '8px',
           }}
         >
-          <Stack direction="row" alignItems="center">
-            <Sync />
-            <Websocket />
-            {conflict && (
-              <Button
-                color="warning"
-                size="large"
-                variant="contained"
-                onClick={async () => {
-                  setConflictResolve(
-                    await window.electron.getConflictResolve(
-                      conflict.setId,
-                      conflict.transactionNum,
-                    ),
-                  );
-                  setConflictDialogOpen(true);
-                }}
+          <Stack width="100%">
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Stack
+                direction="row"
+                alignItems="center"
+                marginLeft="8px"
+                flexShrink={1}
+                minWidth={0}
               >
-                Conflict!
-              </Button>
-            )}
-            <FatalError
-              tournamentId={tournament?.id}
-              tournamentSlug={tournament?.slug}
-            />
-          </Stack>
-          <Stack direction="row" alignItems="center">
-            <ConnectCodes participants={tournament?.participants ?? []} />
-            <Discords participants={tournament?.participants ?? []} />
-            <Settings showError={showError} />
+                <Typography
+                  variant="body1"
+                  sx={{ color: (theme) => theme.palette.text.disabled }}
+                  style={{
+                    flexShrink: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {tournament
+                    ? `${tournament.name} (${tournament.slug})`
+                    : 'Set tournament'}
+                </Typography>
+                <Tooltip title="Set tournament">
+                  <IconButton
+                    onClick={() => {
+                      getTournaments();
+                      setOpen(true);
+                    }}
+                  >
+                    <Edit />
+                  </IconButton>
+                </Tooltip>
+                <Dialog
+                  fullWidth
+                  open={open}
+                  onClose={() => {
+                    setOpen(false);
+                  }}
+                  PaperProps={{
+                    style: { height: 'calc(100% - 64px)' },
+                  }}
+                >
+                  <DialogTitle
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      paddingRight: '32px',
+                    }}
+                  >
+                    Set tournament
+                    <Tooltip title="Refresh">
+                      <IconButton
+                        disabled={gettingAdminedTournaments}
+                        onClick={getTournaments}
+                      >
+                        {gettingAdminedTournaments ? (
+                          <CircularProgress size="24px" />
+                        ) : (
+                          <Refresh />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                  </DialogTitle>
+                  <DialogContent>
+                    {localTournaments.length > 0 && (
+                      <>
+                        <Box
+                          sx={{
+                            typography: (theme) => theme.typography.subtitle2,
+                          }}
+                        >
+                          Local tournaments
+                        </Box>
+                        {localTournaments.map((localTournament) => (
+                          <LocalTournamentItemButton
+                            key={localTournament.id}
+                            localTournament={localTournament}
+                            set={async (id: number, slug: string) => {
+                              setSettingTournament(true);
+                              await window.electron.setTournament(id, slug);
+                              setOpen(false);
+                              setSettingTournament(false);
+                            }}
+                            setLocalTournaments={setLocalTournaments}
+                            showError={showError}
+                          />
+                        ))}
+                      </>
+                    )}
+                    <Box
+                      sx={{ typography: (theme) => theme.typography.subtitle2 }}
+                    >
+                      Fetch from start.gg
+                    </Box>
+                    <form
+                      style={{
+                        alignItems: 'center',
+                        display: 'flex',
+                        margin: '8px 4px',
+                        gap: '8px',
+                      }}
+                      onSubmit={async (event: FormEvent<HTMLFormElement>) => {
+                        const target = event.target as typeof event.target & {
+                          slug: { value: string };
+                        };
+                        const newSlug = target.slug.value;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (newSlug) {
+                          await getTournament(newSlug);
+                        }
+                      }}
+                    >
+                      <TextField
+                        autoFocus
+                        label="Tournament Slug"
+                        name="slug"
+                        placeholder="super-smash-con-2023"
+                        size="small"
+                        variant="outlined"
+                      />
+                      <Button
+                        disabled={settingTournament}
+                        endIcon={
+                          settingTournament && <CircularProgress size="24px" />
+                        }
+                        type="submit"
+                        variant="contained"
+                      >
+                        Get!
+                      </Button>
+                    </form>
+                    {adminedTournamentsError.length > 0 && (
+                      <Alert severity="error" style={{ marginTop: '8px' }}>
+                        {adminedTournamentsError}
+                      </Alert>
+                    )}
+                    {adminedTournaments.map((adminedTournament) => (
+                      <ListItemButton
+                        key={adminedTournament.slug}
+                        onClick={async () => {
+                          await getTournament(adminedTournament.slug);
+                        }}
+                      >
+                        <ListItemText
+                          style={{ overflowX: 'hidden', whiteSpace: 'nowrap' }}
+                        >
+                          {adminedTournament.name}{' '}
+                          <Typography variant="caption">
+                            ({adminedTournament.slug})
+                          </Typography>
+                        </ListItemText>
+                      </ListItemButton>
+                    ))}
+                  </DialogContent>
+                </Dialog>
+              </Stack>
+              <Stack direction="row" alignItems="center">
+                <Settings showError={showError} />
+              </Stack>
+            </Stack>
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              gap="8px"
+            >
+              <Stack direction="row" alignItems="center">
+                <Sync />
+                {conflict && (
+                  <Button
+                    color="warning"
+                    size="large"
+                    variant="contained"
+                    onClick={async () => {
+                      setConflictResolve(
+                        await window.electron.getConflictResolve(
+                          conflict.setId,
+                          conflict.transactionNum,
+                        ),
+                      );
+                      setConflictDialogOpen(true);
+                    }}
+                  >
+                    Conflict!
+                  </Button>
+                )}
+                <FatalError
+                  tournamentId={tournament?.id}
+                  tournamentSlug={tournament?.slug}
+                />
+                <Websocket />
+              </Stack>
+              <Stack direction="row" alignItems="center">
+                <Tooltip title="Refresh">
+                  <span>
+                    <IconButton
+                      disabled={!tournament || refreshing}
+                      onClick={() => {
+                        window.electron.refreshTournament();
+                      }}
+                    >
+                      {refreshing ? (
+                        <CircularProgress size="24px" />
+                      ) : (
+                        <Refresh />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+                <ConnectCodes participants={tournament?.participants ?? []} />
+                <Discords participants={tournament?.participants ?? []} />
+                {unloadedOpen ? (
+                  <Tooltip title="Hide unloaded events">
+                    <IconButton
+                      onClick={() => {
+                        setUnloadedOpen(false);
+                      }}
+                    >
+                      <Visibility />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  <Tooltip title="Show unloaded events">
+                    <IconButton
+                      onClick={() => {
+                        setUnloadedOpen(true);
+                      }}
+                    >
+                      <VisibilityOff />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Stack>
+            </Stack>
           </Stack>
         </Toolbar>
       </AppBar>
-      <Toolbar />
-      <Stack marginTop="8px">
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-        >
-          <Stack direction="row" alignItems="center">
-            <Typography
-              variant="body1"
-              sx={{ color: (theme) => theme.palette.text.disabled }}
-            >
-              {tournament
-                ? `${tournament.slug} (${tournament.id})`
-                : 'Set tournament'}
-            </Typography>
-            <Tooltip title="Set tournament">
-              <IconButton
-                onClick={() => {
-                  getTournaments();
-                  setOpen(true);
-                }}
-              >
-                <Edit />
-              </IconButton>
-            </Tooltip>
-          </Stack>
-          <Stack direction="row">
-            {/* TODO move this to appbar */}
-            <Tooltip title="Refresh">
-              <span>
-                <IconButton
-                  disabled={!tournament || refreshing}
-                  onClick={() => {
-                    window.electron.refreshTournament();
-                  }}
-                >
-                  {refreshing ? <CircularProgress size="24px" /> : <Refresh />}
-                </IconButton>
-              </span>
-            </Tooltip>
-            {unloadedOpen ? (
-              <Tooltip title="Hide unloaded events">
-                <IconButton
-                  onClick={() => {
-                    setUnloadedOpen(false);
-                  }}
-                >
-                  <Visibility />
-                </IconButton>
-              </Tooltip>
-            ) : (
-              <Tooltip title="Show unloaded events">
-                <IconButton
-                  onClick={() => {
-                    setUnloadedOpen(true);
-                  }}
-                >
-                  <VisibilityOff />
-                </IconButton>
-              </Tooltip>
-            )}
-          </Stack>
-          <Dialog
-            fullWidth
-            open={open}
-            onClose={() => {
-              setOpen(false);
-            }}
-            PaperProps={{
-              style: { height: 'calc(100% - 64px)' },
-            }}
-          >
-            <DialogTitle
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                paddingRight: '32px',
-              }}
-            >
-              Set tournament
-              <Tooltip title="Refresh">
-                <IconButton
-                  disabled={gettingAdminedTournaments}
-                  onClick={getTournaments}
-                >
-                  {gettingAdminedTournaments ? (
-                    <CircularProgress size="24px" />
-                  ) : (
-                    <Refresh />
-                  )}
-                </IconButton>
-              </Tooltip>
-            </DialogTitle>
-            <DialogContent>
-              {localTournaments.length > 0 && (
-                <>
-                  <Box
-                    sx={{ typography: (theme) => theme.typography.subtitle2 }}
-                  >
-                    Local tournaments
-                  </Box>
-                  {localTournaments.map((localTournament) => (
-                    <LocalTournamentItemButton
-                      key={localTournament.id}
-                      localTournament={localTournament}
-                      set={async (id: number, slug: string) => {
-                        setSettingTournament(true);
-                        await window.electron.setTournament(id, slug);
-                        setOpen(false);
-                        setSettingTournament(false);
-                      }}
-                      setLocalTournaments={setLocalTournaments}
-                      showError={showError}
-                    />
-                  ))}
-                </>
-              )}
-              <Box sx={{ typography: (theme) => theme.typography.subtitle2 }}>
-                Fetch from start.gg
-              </Box>
-              <form
-                style={{
-                  alignItems: 'center',
-                  display: 'flex',
-                  margin: '8px 4px',
-                  gap: '8px',
-                }}
-                onSubmit={async (event: FormEvent<HTMLFormElement>) => {
-                  const target = event.target as typeof event.target & {
-                    slug: { value: string };
-                  };
-                  const newSlug = target.slug.value;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (newSlug) {
-                    await getTournament(newSlug);
-                  }
-                }}
-              >
-                <TextField
-                  autoFocus
-                  label="Tournament Slug"
-                  name="slug"
-                  placeholder="super-smash-con-2023"
-                  size="small"
-                  variant="outlined"
-                />
-                <Button
-                  disabled={settingTournament}
-                  endIcon={
-                    settingTournament && <CircularProgress size="24px" />
-                  }
-                  type="submit"
-                  variant="contained"
-                >
-                  Get!
-                </Button>
-              </form>
-              {adminedTournamentsError.length > 0 && (
-                <Alert severity="error" style={{ marginTop: '8px' }}>
-                  {adminedTournamentsError}
-                </Alert>
-              )}
-              {adminedTournaments.map((adminedTournament) => (
-                <ListItemButton
-                  key={adminedTournament.slug}
-                  onClick={async () => {
-                    await getTournament(adminedTournament.slug);
-                  }}
-                >
-                  <ListItemText
-                    style={{ overflowX: 'hidden', whiteSpace: 'nowrap' }}
-                  >
-                    {adminedTournament.name}{' '}
-                    <Typography variant="caption">
-                      ({adminedTournament.slug})
-                    </Typography>
-                  </ListItemText>
-                </ListItemButton>
-              ))}
-            </DialogContent>
-          </Dialog>
-        </Stack>
+      <Stack marginTop="88px">
         {unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen}>
             {unloadedOpen && (
-              <List>
+              <List disablePadding>
                 {unloadedEvents.map((event) => (
                   <UnloadedEventListItem
                     key={event.id}
@@ -1293,7 +1328,7 @@ export default function Tournament() {
           </Collapse>
         )}
         {loadedEvents.length > 0 && (
-          <List>
+          <List disablePadding style={{ margin: '0 -8px' }}>
             {loadedEvents.map((event) => (
               <LoadedEventListItem
                 key={event.id}

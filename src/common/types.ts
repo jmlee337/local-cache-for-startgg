@@ -103,6 +103,7 @@ export type RendererEvent = {
 
 export type RendererTournament = {
   id: number;
+  name: string;
   slug: string;
   events: RendererEvent[];
   participants: RendererParticipant[];

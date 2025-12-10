@@ -7,6 +7,7 @@ import {
   DialogContentText,
   DialogTitle,
   FormControlLabel,
+  IconButton,
   Stack,
   Switch,
   TextField,
@@ -20,7 +21,6 @@ import {
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { lt } from 'semver';
-import IconButton from './IconButton';
 
 export default function Settings({
   showError,

@@ -3164,6 +3164,7 @@ export function getTournament(): RendererTournament | undefined {
     .all({ id: currentTournamentId }) as DbStream[];
   lastTournament = {
     id: dbTournament.id,
+    name: dbTournament.name,
     slug: dbTournament.slug,
     events: dbEvents.map((dbEvent) => ({
       id: dbEvent.id,
