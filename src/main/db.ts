@@ -1576,7 +1576,19 @@ export function reportSet(
     throw new Error('cannot change reported set to DQ');
   }
   const reportHasStageData =
-    gameData.length > 0 && gameData.every((game) => game.stageId !== undefined);
+    gameData.length > 0 &&
+    gameData.every(
+      (game) =>
+        game.entrant1Score !== undefined &&
+        game.entrant2Score !== undefined &&
+        game.selections.find(
+          (selection) => selection.entrantId === entrant1Id,
+        ) &&
+        game.selections.find(
+          (selection) => selection.entrantId === entrant2Id,
+        ) &&
+        game.stageId !== undefined,
+    );
   if (state === 3 && hasStageData && !reportHasStageData) {
     throw new Error('cannot remove stage data in update');
   }

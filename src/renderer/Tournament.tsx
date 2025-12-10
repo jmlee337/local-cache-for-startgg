@@ -5,6 +5,8 @@ import {
   CloudOff,
   Download,
   Edit,
+  FolderZip,
+  FolderZipOutlined,
   Group,
   HourglassTop,
   KeyboardArrowDown,
@@ -15,8 +17,6 @@ import {
   Refresh,
   RestartAlt,
   Router,
-  Stadium,
-  StadiumOutlined,
   Tv,
   Visibility,
   VisibilityOff,
@@ -150,7 +150,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
   } else if (set.state === 3) {
     if (set.hasStageData) {
       titleEnd = (
-        <Stadium fontSize="small" style={{ margin: '-2px -9px 2px 9px' }} />
+        <FolderZip fontSize="small" style={{ margin: '-1px -9px 1px 9px' }} />
       );
     }
   } else if (set.state === 6) {
@@ -374,7 +374,7 @@ function PoolListItem({
               {open && typeof pool.sets[0].setId === 'string' && (
                 <Tooltip title="Lock" placement="right">
                   <IconButton
-                    color="primary"
+                    color="warning"
                     onClick={(ev) => {
                       ev.stopPropagation();
                       openUpgradeDialog(pool, phaseId);
@@ -1387,8 +1387,8 @@ export default function Tournament() {
             </Typography>
             <Stack direction="row" alignItems="center" spacing="8px">
               {reportSet?.hasStageData === 1 && (
-                <Tooltip title="Games and stages reported">
-                  <StadiumOutlined />
+                <Tooltip title="Most likely hotswapped">
+                  <FolderZipOutlined />
                 </Tooltip>
               )}
               {reportSet?.station && (
@@ -1751,7 +1751,6 @@ export default function Tournament() {
           </DialogContent>
           <DialogActions>
             <IconButton
-              color="primary"
               disabled={
                 (tournament?.stations.length === 0 &&
                   tournament?.streams.length === 0) ||
@@ -1784,7 +1783,6 @@ export default function Tournament() {
               {resetting ? <CircularProgress size="24px" /> : <RestartAlt />}
             </IconButton>
             <IconButton
-              color="primary"
               disabled={
                 starting ||
                 !reportSet?.entrant1Id ||

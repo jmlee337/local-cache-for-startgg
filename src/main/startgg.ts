@@ -575,7 +575,17 @@ function dbSetsFromApiSets(
         tournamentId,
         ordinal: idToDEOrdinal.get(set.id) ?? set.round - roundMax,
         hasStageData:
-          games.length > 0 && games.every((game) => game.stageId !== null)
+          set.entrant1CharacterIds &&
+          set.entrant1CharacterIds.length > 0 &&
+          set.entrant2CharacterIds &&
+          set.entrant2CharacterIds.length > 0 &&
+          games.length > 0 &&
+          games.every(
+            (game) =>
+              game.entrant1P1Stocks !== null &&
+              game.entrant2P1Stocks !== null &&
+              game.stageId !== null,
+          )
             ? 1
             : null,
         syncState: SyncState.SYNCED,
@@ -781,6 +791,14 @@ const UPDATE_SET_INNER = `
     id
   }
   games {
+    entrant1Score
+    entrant2Score
+    selections {
+      entrant {
+        id
+      }
+      selectionType
+    }
     stage {
       id
     }
@@ -808,7 +826,26 @@ function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
     stationId: set.station?.id ?? null,
     streamId: set.stream?.id ?? null,
     hasStageData:
-      games.length > 0 && games.every((game) => game.stage) ? 1 : null,
+      games.length > 0 &&
+      games.every(
+        (game) =>
+          game.entrant1Score !== null &&
+          game.entrant2Score !== null &&
+          game.selections &&
+          (game.selections as any[]).find(
+            (selection) =>
+              selection.entrant.id === entrant1.id &&
+              selection.selectionType === 'CHARACTER',
+          ) &&
+          (game.selections as any[]).find(
+            (selection) =>
+              selection.entrant.id === entrant2.id &&
+              selection.selectionType === 'CHARACTER',
+          ) &&
+          game.stage,
+      )
+        ? 1
+        : null,
   };
 }
 
