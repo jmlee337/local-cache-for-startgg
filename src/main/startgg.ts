@@ -219,7 +219,7 @@ async function oneSecondPromise() {
 const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
-      participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
+      participants(query: {page: $page, perPage: 332, filter: {eventIds: $eventIds}}) {
         pageInfo {
           totalPages
         }

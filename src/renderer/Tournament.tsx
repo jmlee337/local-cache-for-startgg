@@ -331,12 +331,14 @@ function PoolListItem({
   pool,
   conflict,
   phaseId,
+  ancestorsOpen,
   openUpgradeDialog,
   reportSet,
 }: {
   pool: RendererPool;
   conflict: RendererConflict | null;
   phaseId: number;
+  ancestorsOpen: boolean;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (poolId: number, set: RendererSet) => void;
 }) {
@@ -357,7 +359,7 @@ function PoolListItem({
           padding: '0 16px 0 32px',
         }}
         onClick={() => {
-          setOpen(!open);
+          setOpen((oldOpen) => !oldOpen);
         }}
       >
         <Stack direction="row" alignItems="center">
@@ -371,7 +373,7 @@ function PoolListItem({
                   <LockPerson style={{ marginLeft: '8px' }} />
                 </Tooltip>
               )}
-              {open && typeof pool.sets[0].setId === 'string' && (
+              {typeof pool.sets[0].setId === 'string' && (
                 <Tooltip title="Lock" placement="right">
                   <IconButton
                     color="warning"
@@ -397,109 +399,107 @@ function PoolListItem({
           </Tooltip>
         )}
       </ListItemButton>
-      <Collapse in={open}>
-        {open && (
-          <>
-            <ListItemButton
-              disableGutters
-              style={{
-                justifyContent: 'space-between',
-                height: '32px',
-                marginLeft: '-48px',
-                padding: '0 16px 0 64px',
-              }}
-              onClick={() => {
-                setCompletedOpen(!completedOpen);
-              }}
+      <Collapse in={open && ancestorsOpen} unmountOnExit>
+        <>
+          <ListItemButton
+            disableGutters
+            style={{
+              justifyContent: 'space-between',
+              height: '32px',
+              marginLeft: '-48px',
+              padding: '0 16px 0 64px',
+            }}
+            onClick={() => {
+              setCompletedOpen(!completedOpen);
+            }}
+          >
+            <ListItemText style={{ flexGrow: 0 }}>
+              <Typography variant="caption">completed</Typography>
+            </ListItemText>
+            {completedOpen ? (
+              <Tooltip placement="left" title="Hide completed sets">
+                <Visibility
+                  sx={{ color: (theme) => theme.palette.text.secondary }}
+                />
+              </Tooltip>
+            ) : (
+              <Tooltip placement="left" title="Show completed sets">
+                <VisibilityOff
+                  sx={{ color: (theme) => theme.palette.text.secondary }}
+                />
+              </Tooltip>
+            )}
+          </ListItemButton>
+          {winnersSets.length > 0 && (
+            <Stack
+              direction="row"
+              flexWrap="wrap"
+              gap="8px"
+              marginLeft="16px"
+              marginRight="32px"
             >
-              <ListItemText style={{ flexGrow: 0 }}>
-                <Typography variant="caption">completed</Typography>
-              </ListItemText>
-              {completedOpen ? (
-                <Tooltip placement="left" title="Hide completed sets">
-                  <Visibility
-                    sx={{ color: (theme) => theme.palette.text.secondary }}
-                  />
-                </Tooltip>
-              ) : (
-                <Tooltip placement="left" title="Show completed sets">
-                  <VisibilityOff
-                    sx={{ color: (theme) => theme.palette.text.secondary }}
-                  />
-                </Tooltip>
-              )}
-            </ListItemButton>
-            {winnersSets.length > 0 && (
-              <Stack
-                direction="row"
-                flexWrap="wrap"
-                gap="8px"
-                marginLeft="16px"
-                marginRight="32px"
-              >
-                {winnersSets
-                  .sort((a, b) => {
-                    if (a.identifier.length === b.identifier.length) {
-                      return a.identifier.localeCompare(b.identifier);
-                    }
-                    return a.identifier.length - b.identifier.length;
-                  })
-                  .map(
-                    (set) =>
-                      (completedOpen || set.state !== 3) && (
-                        <SetListItemButton
-                          key={set.id}
-                          set={set}
-                          conflictTransactionNum={
-                            conflict && conflict.setId === set.id
-                              ? conflict.transactionNum
-                              : null
-                          }
-                          reportSet={(rendererSet: RendererSet) =>
-                            reportSet(pool.id, rendererSet)
-                          }
-                        />
-                      ),
-                  )}
-              </Stack>
-            )}
-            {losersSets.length > 0 && (
-              <Stack
-                direction="row"
-                flexWrap="wrap"
-                gap="8px"
-                marginLeft="16px"
-                marginRight="32px"
-                marginTop="8px"
-              >
-                {losersSets
-                  .sort((a, b) => {
-                    if (a.identifier.length === b.identifier.length) {
-                      return a.identifier.localeCompare(b.identifier);
-                    }
-                    return a.identifier.length - b.identifier.length;
-                  })
-                  .map(
-                    (set) =>
-                      (completedOpen || set.state !== 3) && (
-                        <SetListItemButton
-                          key={set.id}
-                          set={set}
-                          conflictTransactionNum={
-                            conflict && conflict.setId === set.id
-                              ? conflict.transactionNum
-                              : null
-                          }
-                          reportSet={(rendererSet: RendererSet) =>
-                            reportSet(pool.id, rendererSet)
-                          }
-                        />
-                      ),
-                  )}
-              </Stack>
-            )}
-          </>
-        )}
+              {winnersSets
+                .sort((a, b) => {
+                  if (a.identifier.length === b.identifier.length) {
+                    return a.identifier.localeCompare(b.identifier);
+                  }
+                  return a.identifier.length - b.identifier.length;
+                })
+                .map(
+                  (set) =>
+                    (completedOpen || set.state !== 3) && (
+                      <SetListItemButton
+                        key={set.id}
+                        set={set}
+                        conflictTransactionNum={
+                          conflict && conflict.setId === set.id
+                            ? conflict.transactionNum
+                            : null
+                        }
+                        reportSet={(rendererSet: RendererSet) =>
+                          reportSet(pool.id, rendererSet)
+                        }
+                      />
+                    ),
+                )}
+            </Stack>
+          )}
+          {losersSets.length > 0 && (
+            <Stack
+              direction="row"
+              flexWrap="wrap"
+              gap="8px"
+              marginLeft="16px"
+              marginRight="32px"
+              marginTop="8px"
+            >
+              {losersSets
+                .sort((a, b) => {
+                  if (a.identifier.length === b.identifier.length) {
+                    return a.identifier.localeCompare(b.identifier);
+                  }
+                  return a.identifier.length - b.identifier.length;
+                })
+                .map(
+                  (set) =>
+                    (completedOpen || set.state !== 3) && (
+                      <SetListItemButton
+                        key={set.id}
+                        set={set}
+                        conflictTransactionNum={
+                          conflict && conflict.setId === set.id
+                            ? conflict.transactionNum
+                            : null
+                        }
+                        reportSet={(rendererSet: RendererSet) =>
+                          reportSet(pool.id, rendererSet)
+                        }
+                      />
+                    ),
+                )}
+            </Stack>
+          )}
+        </>
       </Collapse>
     </Box>
   );
@@ -508,11 +508,13 @@ function PoolListItem({
 function PhaseListItem({
   phase,
   conflict,
+  ancestorsOpen,
   openUpgradeDialog,
   reportSet,
 }: {
   phase: RendererPhase;
   conflict: RendererConflict | null;
+  ancestorsOpen: boolean;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (phaseId: number, poolId: number, set: RendererSet) => void;
 }) {
@@ -528,7 +530,7 @@ function PhaseListItem({
           padding: '0 16px 0 16px',
         }}
         onClick={() => {
-          setOpen(!open);
+          setOpen((oldOpen) => !oldOpen);
         }}
       >
         <ListItemText>
@@ -545,14 +547,14 @@ function PhaseListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        {open &&
-          phase.pools.length > 0 &&
+        {phase.pools.length > 0 &&
           phase.pools.map((pool) => (
             <PoolListItem
               key={pool.id}
               pool={pool}
               conflict={conflict}
               phaseId={phase.id}
+              ancestorsOpen={open && ancestorsOpen}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(poolId: number, set: RendererSet) =>
                 reportSet(phase.id, poolId, set)
@@ -591,7 +593,7 @@ function LoadedEventListItem({
           padding: '0 16px 0 8px',
         }}
         onClick={() => {
-          setOpen(!open);
+          setOpen((oldOpen) => !oldOpen);
         }}
       >
         <Stack direction="row" alignItems="center">
@@ -619,13 +621,13 @@ function LoadedEventListItem({
         )}
       </ListItemButton>
       <Collapse in={open}>
-        {open &&
-          event.phases.length > 0 &&
+        {event.phases.length > 0 &&
           event.phases.map((phase) => (
             <PhaseListItem
               key={phase.id}
               phase={phase}
               conflict={conflict}
+              ancestorsOpen={open}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(phaseId: number, poolId: number, set: RendererSet) =>
                 reportSet(event.id, phaseId, poolId, set)
@@ -1313,18 +1315,16 @@ export default function Tournament() {
       </AppBar>
       <Stack marginTop="88px">
         {unloadedEvents.length > 0 && (
-          <Collapse in={unloadedOpen}>
-            {unloadedOpen && (
-              <List disablePadding>
-                {unloadedEvents.map((event) => (
-                  <UnloadedEventListItem
-                    key={event.id}
-                    event={event}
-                    showError={showError}
-                  />
-                ))}
-              </List>
-            )}
+          <Collapse in={unloadedOpen} unmountOnExit>
+            <List disablePadding>
+              {unloadedEvents.map((event) => (
+                <UnloadedEventListItem
+                  key={event.id}
+                  event={event}
+                  showError={showError}
+                />
+              ))}
+            </List>
           </Collapse>
         )}
         {loadedEvents.length > 0 && (
