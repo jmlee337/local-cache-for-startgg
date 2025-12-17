@@ -219,7 +219,7 @@ async function oneSecondPromise() {
 const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
-      participants(query: {page: $page, perPage: 332, filter: {eventIds: $eventIds}}) {
+      participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
         pageInfo {
           totalPages
         }
@@ -228,11 +228,9 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
           connectedAccounts
           gamerTag
           prefix
-          player {
-            user {
-              genderPronoun
-              slug
-            }
+          user {
+            genderPronoun
+            slug
           }
           requiredConnections {
             type
@@ -322,8 +320,8 @@ export async function getApiTournament(inSlug: string) {
               discordUsername,
               gamerTag: participant.gamerTag,
               prefix: participant.prefix ?? '',
-              pronouns: participant.player.user?.genderPronoun ?? '',
-              userSlug: participant.player.user?.slug.slice(5) ?? '',
+              pronouns: participant.user?.genderPronoun ?? '',
+              userSlug: participant.user?.slug.slice(5) ?? '',
             };
           }),
         );
