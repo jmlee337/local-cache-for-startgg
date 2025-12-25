@@ -97,6 +97,7 @@ export type RendererPhase = {
 export type RendererEvent = {
   id: number;
   name: string;
+  slug: string;
   isOnline: boolean;
   isLoaded: boolean;
   phases: RendererPhase[];
@@ -298,6 +299,7 @@ export type DbEvent = {
   id: number;
   tournamentId: number;
   name: string;
+  slug: string;
   isOnline: 0 | 1;
 };
 

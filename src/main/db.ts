@@ -56,7 +56,7 @@ export function dbInit(window: BrowserWindow) {
     'CREATE TABLE IF NOT EXISTS tournaments (id INTEGER PRIMARY KEY, slug TEXT, name TEXT, startAt INTEGER)',
   ).run();
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, tournamentId INTEGER, name TEXT, isOnline INTEGER)',
+    'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, tournamentId INTEGER, name TEXT, slug TEXT, isOnline INTEGER)',
   ).run();
   db.prepare(
     'CREATE TABLE IF NOT EXISTS loadedEvents (id INTEGER PRIMARY KEY, tournamentId INTEGER NOT NULL)',
@@ -316,7 +316,7 @@ export function setTournamentId(newTournamentId: number) {
 const TOURNAMENT_UPSERT_SQL =
   'REPLACE INTO tournaments (id, name, slug, startAt) VALUES (@id, @name, @slug, @startAt)';
 const EVENT_UPSERT_SQL =
-  'REPLACE INTO events (id, tournamentId, name, isOnline) VALUES (@id, @tournamentId, @name, @isOnline)';
+  'REPLACE INTO events (id, tournamentId, name, slug, isOnline) VALUES (@id, @tournamentId, @name, @slug, @isOnline)';
 export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
   if (!db) {
     throw new Error('not init');
@@ -3295,6 +3295,7 @@ export function getTournament(): RendererTournament | undefined {
     events: dbEvents.map((dbEvent) => ({
       id: dbEvent.id,
       name: dbEvent.name,
+      slug: dbEvent.slug,
       isOnline: dbEvent.isOnline === 1,
       isLoaded: dbLoadedEventIds.has(dbEvent.id),
       phases: dbPhases
