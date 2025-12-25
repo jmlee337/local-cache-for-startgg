@@ -1250,7 +1250,6 @@ export default function Tournament() {
                 {conflict && (
                   <Button
                     color="warning"
-                    size="large"
                     variant="contained"
                     onClick={async () => {
                       setConflictResolve(

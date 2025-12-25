@@ -37,7 +37,6 @@ export default function FatalError({
       <>
         <Button
           color="error"
-          size="large"
           variant="contained"
           onClick={() => {
             setOpen(true);
