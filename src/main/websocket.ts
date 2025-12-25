@@ -10,7 +10,29 @@ import {
   resetSetTransaction,
   startSetTransaction,
 } from './transaction';
-import { RendererSet } from '../common/types';
+import { ApiGameData, RendererSet } from '../common/types';
+
+type Request = {
+  id?: number | string;
+} & (
+  | {
+      op?: 'start-set-request' | 'reset-set-request';
+    }
+  | {
+      op?: 'assign-set-station-request';
+      stationId?: number;
+    }
+  | {
+      op?: 'assign-set-stream-request';
+      streamId?: number;
+    }
+  | {
+      op?: 'report-set-request';
+      winnerId?: number;
+      isDQ?: boolean;
+      gameData?: ApiGameData[];
+    }
+);
 
 type Response = {
   op:
@@ -87,12 +109,15 @@ export async function startWebsocketServer(port: number) {
             return;
           }
 
-          const json = JSON.parse(data.utf8Data);
+          const json = JSON.parse(data.utf8Data) as Request;
           if (json.op === 'reset-set-request') {
             const response: Response = {
               op: 'reset-set-response',
             };
-            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
               response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
@@ -108,7 +133,10 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'start-set-response',
             };
-            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
               response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
@@ -124,12 +152,18 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'assign-set-station-response',
             };
-            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
               response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
-            if (!Number.isInteger(json.stationId)) {
+            if (
+              json.stationId === undefined ||
+              !Number.isInteger(json.stationId)
+            ) {
               response.err = 'stationId must be integer';
               newConnection.sendUTF(JSON.stringify(response));
               return;
@@ -148,12 +182,18 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'assign-set-stream-response',
             };
-            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
               response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
-            if (!Number.isInteger(json.streamId)) {
+            if (
+              json.streamId === undefined ||
+              !Number.isInteger(json.streamId)
+            ) {
               response.err = 'streamId must be integer';
               newConnection.sendUTF(JSON.stringify(response));
               return;
@@ -172,12 +212,18 @@ export async function startWebsocketServer(port: number) {
             const response: Response = {
               op: 'report-set-response',
             };
-            if (!Number.isInteger(json.id) && typeof json.id !== 'string') {
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
               response.err = 'id must be integer or string';
               newConnection.sendUTF(JSON.stringify(response));
               return;
             }
-            if (!Number.isInteger(json.winnerId)) {
+            if (
+              json.winnerId === undefined ||
+              !Number.isInteger(json.winnerId)
+            ) {
               response.err = 'winnerId must be integer';
               newConnection.sendUTF(JSON.stringify(response));
               return;
