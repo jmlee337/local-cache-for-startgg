@@ -913,6 +913,20 @@ async function assignSetStream(
   return updateSetToApiSetUpdate(data.assignStream);
 }
 
+const CALL_SET_MUTATION = `
+  mutation callSet($setId: ID!) {
+    markSetCalled(setId: $setId) {${UPDATE_SET_INNER}}
+  }
+`;
+async function callSet(setId: number | string): Promise<ApiSetUpdate> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
+  const data = await fetchGql(apiKey, CALL_SET_MUTATION, { setId });
+  return updateSetToApiSetUpdate(data.markSetCalled);
+}
+
 const START_SET_MUTATION = `
   mutation startSet($setId: ID!) {
     markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
@@ -1088,6 +1102,44 @@ async function tryNextTransaction(id: number, slug: string) {
               );
             } else {
               throw e;
+            }
+          }
+        } else if (transaction.type === TransactionType.CALL) {
+          try {
+            updates = [await callSet(transaction.setId)];
+          } catch (e: any) {
+            if (e instanceof ApiError) {
+              if (
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    'Cannot mark set called that is already completed.',
+                )
+              ) {
+                deleteTransaction(transaction.transactionNum);
+              } else if (
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    "This set can't be reported until all entrants are filled",
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.MISSING_ENTRANTS,
+                );
+              } else {
+                throw e;
+              }
             }
           }
         } else if (transaction.type === TransactionType.START) {

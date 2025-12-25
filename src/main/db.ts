@@ -1275,6 +1275,83 @@ export function resetSet(
   };
 }
 
+export function callSet(id: number | string, transactionNum: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+    | DbSet
+    | undefined;
+  if (!set) {
+    throw new Error(`no such set: ${id}`);
+  }
+
+  applyMutations(set);
+  const { entrant1Id, entrant2Id, state } = set;
+  if (state === 3) {
+    throw new Error(`set is already completed: ${id}`);
+  }
+  if (state === 6) {
+    throw new Error(`set is already called: ${id}`);
+  }
+  if (state !== 1 && state !== 2) {
+    throw new Error(`set: ${id} has unexpected state: ${state}`);
+  }
+  if (!entrant1Id || !entrant2Id) {
+    throw new Error(
+      `set not callable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
+    );
+  }
+  set.state = 6;
+
+  db.prepare(
+    `INSERT INTO setMutations (
+      setId,
+      phaseGroupId,
+      phaseId,
+      eventId,
+      tournamentId,
+      identifier,
+      transactionNum,
+      statePresent,
+      state,
+      updatedAt
+    ) VALUES (
+      @id,
+      @phaseGroupId,
+      @phaseId,
+      @eventId,
+      @tournamentId,
+      @identifier,
+      @transactionNum,
+      1,
+      @state,
+      @updatedAt
+    )`,
+  ).run({
+    ...set,
+    transactionNum,
+    updatedAt: Date.now() / 1000,
+  });
+  insertTransaction(
+    {
+      transactionNum,
+      type: TransactionType.CALL,
+      setId: set.setId,
+    },
+    set.tournamentId,
+    set.eventId,
+    set.id,
+    set.entrant1Id,
+    set.entrant2Id,
+  );
+  return {
+    tournamentId: set.tournamentId,
+    set: dbSetToRendererSet(set),
+  };
+}
+
 export function startSet(id: number | string, transactionNum: number) {
   if (!db) {
     throw new Error('not init');
@@ -1316,10 +1393,6 @@ export function startSet(id: number | string, transactionNum: number) {
       transactionNum,
       statePresent,
       state,
-      entrant1IdPresent,
-      entrant1Id,
-      entrant2IdPresent,
-      entrant2Id,
       updatedAt
     ) VALUES (
       @id,
@@ -1331,17 +1404,11 @@ export function startSet(id: number | string, transactionNum: number) {
       @transactionNum,
       1,
       @state,
-      1,
-      @entrant1Id,
-      1,
-      @entrant2Id,
       @updatedAt
     )`,
   ).run({
     ...set,
     transactionNum,
-    entrant1Id,
-    entrant2Id,
     updatedAt: Date.now() / 1000,
   });
   insertTransaction(
@@ -1963,6 +2030,13 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
       isRecursive: dbTransaction.isRecursive === 1,
     };
   }
+  if (dbTransaction.type === TransactionType.CALL) {
+    return {
+      transactionNum: dbTransaction.transactionNum,
+      type: dbTransaction.type,
+      setId,
+    };
+  }
   if (dbTransaction.type === TransactionType.START) {
     return {
       transactionNum: dbTransaction.transactionNum,
@@ -2024,6 +2098,7 @@ function canTransactNow(transaction: DbTransaction) {
     case TransactionType.ASSIGN_STREAM:
       return true;
     case TransactionType.RESET:
+    case TransactionType.CALL:
     case TransactionType.START:
     case TransactionType.REPORT:
       return (
@@ -2318,6 +2393,26 @@ function getSyncStatus(
             ? SyncStatus.BEHIND
             : SyncStatus.AHEAD,
       };
+    case TransactionType.CALL: {
+      const mutationSet: DbSet = { ...afterSet };
+      for (const setMutation of setMutations) {
+        if (setMutation.transactionNum > dbTransaction.transactionNum) {
+          break;
+        }
+        applyMutation(mutationSet, setMutation);
+      }
+      if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
+        return {
+          syncStatus: SyncStatus.CONFLICT,
+          reason: ConflictReason.MISSING_ENTRANTS,
+        };
+      }
+
+      if (containsValidReset || afterSet.state === 1 || afterSet.state === 2) {
+        return { syncStatus: SyncStatus.AHEAD };
+      }
+      return { syncStatus: SyncStatus.BEHIND };
+    }
     case TransactionType.START: {
       const mutationSet: DbSet = { ...afterSet };
       for (const setMutation of setMutations) {
@@ -2719,9 +2814,11 @@ export function updateEvent(
       // coalesce
       // - multiple assign station
       // - multiple assign stream
-      // - reset, start, report, update before reset
+      // - multiple call/start
+      // - reset, call, start, report, update before reset
       const resetStationStreamCoalescedDbTransactions: DbTransaction[] = [];
       let foundReset = false;
+      let foundCallStart = false;
       let foundAssignStation = false;
       let foundAssignStream = false;
       for (let i = dbTransactions.length - 1; i >= 0; i -= 1) {
@@ -2729,8 +2826,12 @@ export function updateEvent(
         if (
           (foundReset &&
             (dbTransaction.type === TransactionType.RESET ||
+              dbTransaction.type === TransactionType.CALL ||
               dbTransaction.type === TransactionType.START ||
               dbTransaction.type === TransactionType.REPORT)) ||
+          (foundCallStart &&
+            (dbTransaction.type === TransactionType.CALL ||
+              dbTransaction.type === TransactionType.START)) ||
           (foundAssignStation &&
             dbTransaction.type === TransactionType.ASSIGN_STATION) ||
           (foundAssignStream &&
@@ -2742,6 +2843,11 @@ export function updateEvent(
         }
         if (dbTransaction.type === TransactionType.RESET) {
           foundReset = true;
+        } else if (
+          dbTransaction.type === TransactionType.CALL ||
+          dbTransaction.type === TransactionType.START
+        ) {
+          foundCallStart = true;
         } else if (dbTransaction.type === TransactionType.ASSIGN_STATION) {
           foundAssignStation = true;
         } else if (dbTransaction.type === TransactionType.ASSIGN_STREAM) {
@@ -2750,7 +2856,7 @@ export function updateEvent(
         resetStationStreamCoalescedDbTransactions.unshift(dbTransaction);
       }
 
-      // coalesce start before report
+      // coalesce call or start before report
       const reportCoalescedDbTransactions: DbTransaction[] = [];
       let foundReport = false;
       for (
@@ -2759,7 +2865,11 @@ export function updateEvent(
         i -= 1
       ) {
         const dbTransaction = resetStationStreamCoalescedDbTransactions[i];
-        if (foundReport && dbTransaction.type === TransactionType.START) {
+        if (
+          foundReport &&
+          (dbTransaction.type === TransactionType.CALL ||
+            dbTransaction.type === TransactionType.START)
+        ) {
           transactionNumsToDelete.push(dbTransaction.transactionNum);
           // eslint-disable-next-line no-continue
           continue;
@@ -2775,18 +2885,22 @@ export function updateEvent(
         (dbTransaction) => dbTransaction.type === TransactionType.RESET,
       );
       if (resetTransactionI !== -1) {
-        // at this point there's 1 START or 1 REPORT (after RESET) or neither
-        const startOrReportTransaction = reportCoalescedDbTransactions.find(
-          (dbTransaction) =>
-            dbTransaction.type === TransactionType.START ||
-            (dbTransaction.type === TransactionType.REPORT &&
-              dbTransaction.isUpdate === null),
-        );
+        // at this point there's 1 CALL, 1 START, or 1 REPORT (after RESET) or none
+        const callOrStartOrReportTransaction =
+          reportCoalescedDbTransactions.find(
+            (dbTransaction) =>
+              dbTransaction.type === TransactionType.CALL ||
+              dbTransaction.type === TransactionType.START ||
+              (dbTransaction.type === TransactionType.REPORT &&
+                dbTransaction.isUpdate === null),
+          );
         if (
-          startOrReportTransaction &&
-          ((startOrReportTransaction.type === TransactionType.START &&
-            (afterSet.state === 1 || afterSet.state === 6)) ||
-            (startOrReportTransaction.type === TransactionType.REPORT &&
+          callOrStartOrReportTransaction &&
+          ((callOrStartOrReportTransaction.type === TransactionType.CALL &&
+            (afterSet.state === 1 || afterSet.state === 2)) ||
+            (callOrStartOrReportTransaction.type === TransactionType.START &&
+              (afterSet.state === 1 || afterSet.state === 6)) ||
+            (callOrStartOrReportTransaction.type === TransactionType.REPORT &&
               afterSet.state !== 3))
         ) {
           const resetTransaction = reportCoalescedDbTransactions.splice(

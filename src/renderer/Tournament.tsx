@@ -771,6 +771,8 @@ function getDescription(type: TransactionType) {
   switch (type) {
     case TransactionType.RESET:
       return 'Reset';
+    case TransactionType.CALL:
+      return 'Call';
     case TransactionType.START:
       return 'Start';
     case TransactionType.ASSIGN_STATION:
@@ -885,6 +887,7 @@ export default function Tournament() {
   const [choosing, setChoosing] = useState(false);
 
   const [resetting, setResetting] = useState(false);
+  const [calling, setCalling] = useState(false);
   const [starting, setStarting] = useState(false);
 
   const [reportEventId, setReportEventId] = useState(0);
@@ -1781,6 +1784,32 @@ export default function Tournament() {
               }}
             >
               {resetting ? <CircularProgress size="24px" /> : <RestartAlt />}
+            </IconButton>
+            <IconButton
+              disabled={
+                calling ||
+                !reportSet?.entrant1Id ||
+                !reportSet?.entrant2Id ||
+                !(reportSet?.state === 1 || reportSet?.state === 2) ||
+                reportPreempt
+              }
+              onClick={async () => {
+                setCalling(true);
+                try {
+                  await window.electron.callSet(reportSet!.setId);
+                  setReportDialogOpen(false);
+                } catch (e: any) {
+                  showError(e instanceof Error ? e.message : e);
+                } finally {
+                  setCalling(false);
+                }
+              }}
+            >
+              {calling ? (
+                <CircularProgress size="24px" />
+              ) : (
+                <NotificationsActive />
+              )}
             </IconButton>
             <IconButton
               disabled={

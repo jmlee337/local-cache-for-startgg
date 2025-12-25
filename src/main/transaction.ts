@@ -2,6 +2,7 @@ import { ApiGameData } from '../common/types';
 import {
   assignSetStation,
   assignSetStream,
+  callSet,
   reportSet,
   resetSet,
   startSet,
@@ -22,6 +23,15 @@ export function resetSetTransaction(id: number | string) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = resetSet(id, currentTransactionNum);
+  updateClients();
+  maybeTryNow(ret.tournamentId);
+  return { set: ret.set };
+}
+
+export function callSetTransaction(id: number | string) {
+  const currentTransactionNum = transactionNum;
+  transactionNum += 1;
+  const ret = callSet(id, currentTransactionNum);
   updateClients();
   maybeTryNow(ret.tournamentId);
   return { set: ret.set };

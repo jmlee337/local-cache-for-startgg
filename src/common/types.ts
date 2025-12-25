@@ -24,6 +24,7 @@ export enum SyncState {
 
 export enum TransactionType {
   RESET,
+  CALL,
   START,
   ASSIGN_STATION,
   ASSIGN_STREAM,
@@ -363,7 +364,7 @@ export type ApiTransaction = {
       isRecursive: boolean;
     }
   | {
-      type: TransactionType.START;
+      type: TransactionType.CALL | TransactionType.START;
     }
   | {
       type: TransactionType.ASSIGN_STATION;

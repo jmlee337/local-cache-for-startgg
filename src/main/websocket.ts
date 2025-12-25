@@ -6,6 +6,7 @@ import { getLastTournament } from './db';
 import {
   assignSetStationTransaction,
   assignSetStreamTransaction,
+  callSetTransaction,
   reportSetTransaction,
   resetSetTransaction,
   startSetTransaction,
@@ -16,7 +17,7 @@ type Request = {
   id?: number | string;
 } & (
   | {
-      op?: 'start-set-request' | 'reset-set-request';
+      op?: 'reset-set-request' | 'call-set-request' | 'start-set-request';
     }
   | {
       op?: 'assign-set-station-request';
@@ -36,10 +37,11 @@ type Request = {
 
 type Response = {
   op:
+    | 'reset-set-response'
+    | 'call-set-response'
     | 'start-set-response'
     | 'assign-set-station-response'
     | 'assign-set-stream-response'
-    | 'reset-set-response'
     | 'report-set-response';
   err?: string;
   data?: {
@@ -124,6 +126,25 @@ export async function startWebsocketServer(port: number) {
             }
             try {
               response.data = resetSetTransaction(json.id);
+              newConnection.sendUTF(JSON.stringify(response));
+            } catch (e: any) {
+              response.err = e instanceof Error ? e.message : e.toString();
+              newConnection.sendUTF(JSON.stringify(response));
+            }
+          } else if (json.op === 'call-set-request') {
+            const response: Response = {
+              op: 'call-set-response',
+            };
+            if (
+              json.id === undefined ||
+              (!Number.isInteger(json.id) && typeof json.id !== 'string')
+            ) {
+              response.err = 'id must be integer or string';
+              newConnection.sendUTF(JSON.stringify(response));
+              return;
+            }
+            try {
+              response.data = callSetTransaction(json.id);
               newConnection.sendUTF(JSON.stringify(response));
             } catch (e: any) {
               response.err = e instanceof Error ? e.message : e.toString();

@@ -56,6 +56,8 @@ const electronHandler = {
     ipcRenderer.invoke('assignSetStation', id, stationId),
   assignSetStream: (id: number | string, streamId: number): Promise<void> =>
     ipcRenderer.invoke('assignSetStream', id, streamId),
+  callSet: (id: number | string): Promise<void> =>
+    ipcRenderer.invoke('callSet', id),
   startSet: (id: number | string): Promise<void> =>
     ipcRenderer.invoke('startSet', id),
   reportSet: (

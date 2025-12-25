@@ -1,11 +1,4 @@
-import {
-  app,
-  BrowserWindow,
-  clipboard,
-  ipcMain,
-  IpcMainInvokeEvent,
-  shell,
-} from 'electron';
+import { app, BrowserWindow, clipboard, ipcMain, shell } from 'electron';
 import Store from 'electron-store';
 import {
   getAdminedTournaments,
@@ -48,6 +41,7 @@ import {
 import {
   assignSetStationTransaction,
   assignSetStreamTransaction,
+  callSetTransaction,
   initTransaction,
   reportSetTransaction,
   resetSetTransaction,
@@ -81,22 +75,19 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('getApiKey', () => apiKey);
 
   ipcMain.removeHandler('setApiKey');
-  ipcMain.handle(
-    'setApiKey',
-    async (event: IpcMainInvokeEvent, newApiKey: string) => {
-      const apiKeyChanged = apiKey !== newApiKey;
-      store.set('apiKey', newApiKey);
-      setApiKey(newApiKey);
-      apiKey = newApiKey;
+  ipcMain.handle('setApiKey', async (event, newApiKey: string) => {
+    const apiKeyChanged = apiKey !== newApiKey;
+    store.set('apiKey', newApiKey);
+    setApiKey(newApiKey);
+    apiKey = newApiKey;
 
-      if (apiKeyChanged) {
-        mainWindow.webContents.send(
-          'adminedTournaments',
-          await getAdminedTournaments(),
-        );
-      }
-    },
-  );
+    if (apiKeyChanged) {
+      mainWindow.webContents.send(
+        'adminedTournaments',
+        await getAdminedTournaments(),
+      );
+    }
+  });
 
   let autoSync = store.has('autoSync')
     ? (store.get('autoSync') as boolean)
@@ -107,17 +98,14 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('getAutoSync', () => autoSync);
 
   ipcMain.removeHandler('setAutoSync');
-  ipcMain.handle(
-    'setAutoSync',
-    (event: IpcMainInvokeEvent, newAutoSync: boolean) => {
-      if (autoSync !== newAutoSync) {
-        store.set('autoSync', newAutoSync);
-        autoSync = newAutoSync;
-        setAutoSync(newAutoSync);
-        updateClients();
-      }
-    },
-  );
+  ipcMain.handle('setAutoSync', (event, newAutoSync: boolean) => {
+    if (autoSync !== newAutoSync) {
+      store.set('autoSync', newAutoSync);
+      autoSync = newAutoSync;
+      setAutoSync(newAutoSync);
+      updateClients();
+    }
+  });
 
   let websocketErr = '';
   let websocketPort = 0;
@@ -168,36 +156,30 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('getWebsocket', () => websocket);
 
   ipcMain.removeHandler('setWebsocket');
-  ipcMain.handle(
-    'setWebsocket',
-    (event: IpcMainInvokeEvent, newWebsocket: boolean) => {
-      if (websocket !== newWebsocket) {
-        store.set('websocket', newWebsocket);
-        websocket = newWebsocket;
-        if (websocket) {
-          startWebsocket();
-        } else {
-          stopWebsocket();
-        }
+  ipcMain.handle('setWebsocket', (event, newWebsocket: boolean) => {
+    if (websocket !== newWebsocket) {
+      store.set('websocket', newWebsocket);
+      websocket = newWebsocket;
+      if (websocket) {
+        startWebsocket();
+      } else {
+        stopWebsocket();
       }
-    },
-  );
+    }
+  });
 
   ipcMain.removeHandler('getLocalTournaments');
   ipcMain.handle('getLocalTournaments', getTournaments);
 
   ipcMain.removeHandler('deleteLocalTournament');
-  ipcMain.handle(
-    'deleteLocalTournament',
-    (event: IpcMainInvokeEvent, id: number) => {
-      const currentId = getTournamentId();
-      deleteTournament(id);
-      if (id === currentId) {
-        setTournamentId(0);
-        updateClients();
-      }
-    },
-  );
+  ipcMain.handle('deleteLocalTournament', (event, id: number) => {
+    const currentId = getTournamentId();
+    deleteTournament(id);
+    if (id === currentId) {
+      setTournamentId(0);
+      updateClients();
+    }
+  });
 
   ipcMain.removeHandler('getAdminedTournaments');
   ipcMain.handle('getAdminedTournaments', async () => {
@@ -208,31 +190,25 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('getCurrentTournament', getTournament);
 
   ipcMain.removeHandler('getTournament');
-  ipcMain.handle(
-    'getTournament',
-    async (event: IpcMainInvokeEvent, slug: string) => {
-      const oldId = getTournamentId();
-      const newId = await getApiTournament(slug);
-      if (oldId !== newId) {
-        setTournamentId(newId);
-        updateClients();
-        startRefreshingTournament(newId, slug);
-      }
-    },
-  );
+  ipcMain.handle('getTournament', async (event, slug: string) => {
+    const oldId = getTournamentId();
+    const newId = await getApiTournament(slug);
+    if (oldId !== newId) {
+      setTournamentId(newId);
+      updateClients();
+      startRefreshingTournament(newId, slug);
+    }
+  });
 
   ipcMain.removeHandler('setTournament');
-  ipcMain.handle(
-    'setTournament',
-    (event: IpcMainInvokeEvent, newId: number, slug: string) => {
-      const oldId = getTournamentId();
-      if (oldId !== newId) {
-        setTournamentId(newId);
-        updateClients();
-        startRefreshingTournament(newId, slug);
-      }
-    },
-  );
+  ipcMain.handle('setTournament', (event, newId: number, slug: string) => {
+    const oldId = getTournamentId();
+    if (oldId !== newId) {
+      setTournamentId(newId);
+      updateClients();
+      startRefreshingTournament(newId, slug);
+    }
+  });
 
   ipcMain.removeHandler('refreshTournament');
   ipcMain.handle('refreshTournament', () => {
@@ -241,85 +217,67 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   ipcMain.removeHandler('retryTournament');
-  ipcMain.handle(
-    'retryTournament',
-    (event: IpcMainInvokeEvent, id: number, slug: string) => {
-      startRefreshingTournament(id, slug);
-    },
-  );
+  ipcMain.handle('retryTournament', (event, id: number, slug: string) => {
+    startRefreshingTournament(id, slug);
+  });
 
   ipcMain.removeHandler('loadEvent');
-  ipcMain.handle(
-    'loadEvent',
-    async (event: IpcMainInvokeEvent, eventId: number) => {
-      const tournamentId = getTournamentId();
-      await loadEvent(eventId, tournamentId);
-      maybeTryNow(tournamentId);
-      updateClients();
-    },
-  );
+  ipcMain.handle('loadEvent', async (event, eventId: number) => {
+    const tournamentId = getTournamentId();
+    await loadEvent(eventId, tournamentId);
+    maybeTryNow(tournamentId);
+    updateClients();
+  });
 
   ipcMain.removeHandler('getPoolSiblings');
   ipcMain.handle(
     'getPoolSiblings',
-    (event: IpcMainInvokeEvent, waveId: number | null, phaseId: number) =>
+    (event, waveId: number | null, phaseId: number) =>
       getPoolSiblings(waveId, phaseId),
   );
 
   ipcMain.removeHandler('upgradePoolSets');
-  ipcMain.handle(
-    'upgradePoolSets',
-    async (event: IpcMainInvokeEvent, poolId: number) => {
-      const previewSetId = getPreviewSetIdFromPool(poolId);
-      if (!previewSetId) {
-        throw new Error('Pool is already upgraded.');
-      }
+  ipcMain.handle('upgradePoolSets', async (event, poolId: number) => {
+    const previewSetId = getPreviewSetIdFromPool(poolId);
+    if (!previewSetId) {
+      throw new Error('Pool is already upgraded.');
+    }
 
-      await upgradePreviewSets([previewSetId]);
-      updateClients();
-    },
-  );
+    await upgradePreviewSets([previewSetId]);
+    updateClients();
+  });
 
   ipcMain.removeHandler('upgradeWaveSets');
-  ipcMain.handle(
-    'upgradeWaveSets',
-    async (event: IpcMainInvokeEvent, waveId: number) => {
-      const previewSetIds = getPreviewSetIdsFromWave(waveId);
-      if (previewSetIds.length === 0) {
-        throw new Error('Every pool in wave is already upgraded.');
-      }
+  ipcMain.handle('upgradeWaveSets', async (event, waveId: number) => {
+    const previewSetIds = getPreviewSetIdsFromWave(waveId);
+    if (previewSetIds.length === 0) {
+      throw new Error('Every pool in wave is already upgraded.');
+    }
 
-      await upgradePreviewSets(previewSetIds);
-      updateClients();
-    },
-  );
+    await upgradePreviewSets(previewSetIds);
+    updateClients();
+  });
 
   ipcMain.removeHandler('upgradePhaseSets');
-  ipcMain.handle(
-    'upgradePhaseSets',
-    async (event: IpcMainInvokeEvent, phaseId: number) => {
-      const previewSetIds = getPreviewSetIdsFromPhase(phaseId);
-      if (previewSetIds.length === 0) {
-        throw new Error('Every pool in phase is already upgraded.');
-      }
+  ipcMain.handle('upgradePhaseSets', async (event, phaseId: number) => {
+    const previewSetIds = getPreviewSetIdsFromPhase(phaseId);
+    if (previewSetIds.length === 0) {
+      throw new Error('Every pool in phase is already upgraded.');
+    }
 
-      await upgradePreviewSets(previewSetIds);
-      updateClients();
-    },
-  );
+    await upgradePreviewSets(previewSetIds);
+    updateClients();
+  });
 
   ipcMain.removeHandler('resetSet');
-  ipcMain.handle(
-    'resetSet',
-    (event: IpcMainInvokeEvent, id: number | string) => {
-      resetSetTransaction(id);
-    },
-  );
+  ipcMain.handle('resetSet', (event, id: number | string) => {
+    resetSetTransaction(id);
+  });
 
   ipcMain.removeHandler('assignSetStation');
   ipcMain.handle(
     'assignSetStation',
-    (event: IpcMainInvokeEvent, id: number | string, stationId: number) => {
+    (event, id: number | string, stationId: number) => {
       assignSetStationTransaction(id, stationId);
     },
   );
@@ -327,24 +285,26 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('assignSetStream');
   ipcMain.handle(
     'assignSetStream',
-    (event: IpcMainInvokeEvent, id: number | string, streamId: number) => {
+    (event, id: number | string, streamId: number) => {
       assignSetStreamTransaction(id, streamId);
     },
   );
 
+  ipcMain.removeHandler('callSet');
+  ipcMain.handle('callSet', (event, id: number | string) => {
+    callSetTransaction(id);
+  });
+
   ipcMain.removeHandler('startSet');
-  ipcMain.handle(
-    'startSet',
-    (event: IpcMainInvokeEvent, id: number | string) => {
-      startSetTransaction(id);
-    },
-  );
+  ipcMain.handle('startSet', (event, id: number | string) => {
+    startSetTransaction(id);
+  });
 
   ipcMain.removeHandler('reportSet');
   ipcMain.handle(
     'reportSet',
     (
-      event: IpcMainInvokeEvent,
+      event,
       id: number | string,
       winnerId: number,
       isDQ: boolean,
@@ -380,41 +340,32 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   );
 
   ipcMain.removeHandler('deleteTransaction');
-  ipcMain.handle(
-    'deleteTransaction',
-    (event: IpcMainInvokeEvent, transactionNum: number) => {
-      const tournamentId = deleteTransaction(transactionNum);
-      updateClients();
-      maybeTryNow(tournamentId);
-    },
-  );
+  ipcMain.handle('deleteTransaction', (event, transactionNum: number) => {
+    const tournamentId = deleteTransaction(transactionNum);
+    updateClients();
+    maybeTryNow(tournamentId);
+  });
 
   ipcMain.removeHandler('makeResetRecursive');
-  ipcMain.handle(
-    'makeResetRecursive',
-    (event: IpcMainInvokeEvent, transactionNum: number) => {
-      const tournamentId = makeResetRecursive(transactionNum);
-      maybeTryNow(tournamentId);
-    },
-  );
+  ipcMain.handle('makeResetRecursive', (event, transactionNum: number) => {
+    const tournamentId = makeResetRecursive(transactionNum);
+    maybeTryNow(tournamentId);
+  });
 
   ipcMain.removeHandler('preemptReset');
-  ipcMain.handle(
-    'preemptReset',
-    (event: IpcMainInvokeEvent, setId: number | string) => {
-      const transactionNum = preemptTransactionNum;
-      preemptTransactionNum -= 1;
-      const ret = resetSet(setId, transactionNum, /* preempt */ true);
-      updateClients();
-      maybeTryNow(ret.tournamentId);
-    },
-  );
+  ipcMain.handle('preemptReset', (event, setId: number | string) => {
+    const transactionNum = preemptTransactionNum;
+    preemptTransactionNum -= 1;
+    const ret = resetSet(setId, transactionNum, /* preempt */ true);
+    updateClients();
+    maybeTryNow(ret.tournamentId);
+  });
 
   ipcMain.removeHandler('preemptReport');
   ipcMain.handle(
     'preemptReport',
     (
-      event: IpcMainInvokeEvent,
+      event,
       id: number | string,
       winnerId: number,
       isDQ: boolean,
@@ -456,7 +407,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.removeHandler('getConflictResolve');
   ipcMain.handle(
     'getConflictResolve',
-    (event: IpcMainInvokeEvent, setId: number, transactionNum: number) =>
+    (event, setId: number, transactionNum: number) =>
       getConflictResolve(setId, transactionNum),
   );
 
@@ -478,7 +429,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   ipcMain.removeHandler('copy');
-  ipcMain.handle('copy', (event: IpcMainInvokeEvent, text: string) => {
+  ipcMain.handle('copy', (event, text: string) => {
     clipboard.writeText(text);
   });
 
