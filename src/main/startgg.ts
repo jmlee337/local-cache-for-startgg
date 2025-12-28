@@ -663,6 +663,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         name: group.displayIdentifier,
         bracketType: group.groupTypeId,
         state: group.state,
+        winnersTargetPhaseId: group.winnersTargetPhaseId,
       });
     });
     updateSyncResultWithSuccess();

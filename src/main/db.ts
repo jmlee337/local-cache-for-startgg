@@ -79,7 +79,8 @@ export function dbInit(window: BrowserWindow) {
       tournamentId INTEGER,
       name TEXT,
       bracketType INTEGER,
-      state INTEGER
+      state INTEGER,
+      winnersTargetPhaseId INTEGER
     )`,
   ).run();
   db.prepare(
@@ -2560,9 +2561,9 @@ export function updateEvent(
       .prepare(
         `REPLACE INTO
           pools
-            (id, waveId, phaseId, eventId, tournamentId, name, bracketType, state)
+            (id, waveId, phaseId, eventId, tournamentId, name, bracketType, state, winnersTargetPhaseId)
           VALUES
-            (@id, @waveId, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state)`,
+            (@id, @waveId, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state, @winnersTargetPhaseId)`,
       )
       .run(pool);
   });
@@ -3340,6 +3341,7 @@ export function getTournament(): RendererTournament | undefined {
                 name: dbPool.name,
                 bracketType: dbPool.bracketType,
                 waveId: dbPool.waveId,
+                winnersTargetPhaseId: dbPool.winnersTargetPhaseId,
                 sets: rendererSets,
               };
             }),

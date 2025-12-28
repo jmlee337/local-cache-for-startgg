@@ -84,6 +84,7 @@ export type RendererPool = {
   name: string;
   bracketType: number;
   waveId: number | null;
+  winnersTargetPhaseId: number | null;
   sets: RendererSet[];
 };
 
@@ -281,6 +282,7 @@ export type DbPool = {
   name: string;
   bracketType: number;
   state: number;
+  winnersTargetPhaseId: number | null;
 };
 
 export type DbPhase = {
