@@ -121,6 +121,7 @@ export function dbInit(window: BrowserWindow) {
       lProgressingPhaseId INTEGER,
       lProgressingName TEXT,
       updatedAt INTEGER,
+      completedAt INTEGER,
       syncState INTEGER NOT NULL,
       UNIQUE (identifier, phaseGroupId)
     )`,
@@ -149,6 +150,8 @@ export function dbInit(window: BrowserWindow) {
       entrant2Score INTEGER,
       winnerIdPresent INTEGER,
       winnerId INTEGER,
+      completedAtPresent INTEGER,
+      completedAt INTEGER,
       stationIdPresent INTEGER,
       stationId INTEGER,
       streamIdPresent INTEGER,
@@ -427,6 +430,9 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   if (setMutation.winnerIdPresent) {
     set.winnerId = setMutation.winnerId;
   }
+  if (setMutation.completedAtPresent) {
+    set.completedAt = setMutation.completedAt;
+  }
   if (setMutation.stationIdPresent) {
     set.stationId = setMutation.stationId;
   }
@@ -505,6 +511,8 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
     entrant2PrereqStr: dbSet.entrant2PrereqStr,
     entrant2Score: dbSet.entrant2Score,
     winnerId: dbSet.winnerId,
+    updatedAt: dbSet.updatedAt,
+    completedAt: dbSet.completedAt,
     station:
       dbSet.stationId === null
         ? null
@@ -1153,6 +1161,8 @@ export function resetSet(
           entrant2Score,
           winnerIdPresent,
           winnerId,
+          completedAtPresent,
+          completedAt,
           updatedAt
         ) VALUES (
           @id,
@@ -1170,12 +1180,15 @@ export function resetSet(
           @entrant2Score,
           1,
           @winnerId,
+          1,
+          @completedAt,
           @updatedAt
         )`,
       )
       .run({
         ...set,
         transactionNum,
+        completedAt: null,
         updatedAt,
       });
     if (wProgressionSet) {
@@ -1851,6 +1864,8 @@ export function reportSet(
           entrant2Score,
           winnerIdPresent,
           winnerId,
+          completedAtPresent,
+          completedAt,
           hasStageDataPresent,
           hasStageData,
           updatedAt
@@ -1874,6 +1889,8 @@ export function reportSet(
           @entrant2Score,
           1,
           @winnerId,
+          @completedAtPresent,
+          @completedAt,
           1,
           @hasStageData,
           @updatedAt
@@ -1884,6 +1901,8 @@ export function reportSet(
         transactionNum,
         entrant1Id,
         entrant2Id,
+        completedAtPresent: state === 3 ? null : 1,
+        completedAt: state === 3 ? null : updatedAt,
         updatedAt,
       });
     if (wProgressionSet) {
@@ -2262,6 +2281,9 @@ export function finalizeTransaction(
         if (dbSetMutation.winnerIdPresent) {
           exprs.push('winnerId = @winnerId');
         }
+        if (dbSetMutation.completedAtPresent) {
+          exprs.push('completedAt = @completedAt');
+        }
         if (dbSetMutation.stationIdPresent) {
           exprs.push('stationId = @stationId');
         }
@@ -2301,6 +2323,7 @@ export function finalizeTransaction(
               entrant2Score = @entrant2Score,
               winnerId = @winnerId,
               updatedAt = @updatedAt,
+              completedAt = @completedAt,
               stationId = @stationId,
               streamId = @streamId,
               hasStageData = @hasStageData

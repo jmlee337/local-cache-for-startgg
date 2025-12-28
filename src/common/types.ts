@@ -73,6 +73,8 @@ export type RendererSet = {
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
   winnerId: number | null;
+  updatedAt: number;
+  completedAt: number | null;
   station: RendererStation | null;
   stream: RendererStream | null;
   hasStageData: 1 | null;
@@ -202,6 +204,8 @@ export type DbSetMutation = {
   entrant2Score: number | null;
   winnerIdPresent: null | 1;
   winnerId: number | null;
+  completedAtPresent: null | 1;
+  completedAt: number | null;
   stationIdPresent: null | 1;
   stationId: number | null;
   streamIdPresent: null | 1;
@@ -257,6 +261,7 @@ export type DbSet = {
   entrant2Score: number | null;
   winnerId: number | null;
   updatedAt: number;
+  completedAt: number | null;
   stationId: number | null;
   streamId: number | null;
   hasStageData: null | 1;
@@ -400,6 +405,7 @@ export type ApiSetUpdate = {
   entrant2Score: number | null;
   winnerId: number | null;
   updatedAt: number;
+  completedAt: number | null;
   stationId: number | null;
   streamId: number | null;
   hasStageData: null | 1;

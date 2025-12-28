@@ -541,6 +541,7 @@ function dbSetsFromApiSets(
         entrant2Score: set.entrant2Score,
         winnerId: set.winnerId,
         updatedAt: set.updatedAt,
+        completedAt: set.completedAt,
         stationId: set.stationId,
         streamId: set.streamId,
         // correct placeholder entrantIds
@@ -805,6 +806,7 @@ const UPDATE_SET_INNER = `
     }
   }
   updatedAt
+  completedAt
   winnerId
 `;
 function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
@@ -824,6 +826,7 @@ function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
     entrant2Score: standing2 ? standing2.stats.score.value : null,
     winnerId: set.winnerId,
     updatedAt: set.updatedAt,
+    completedAt: set.completedAt,
     stationId: set.station?.id ?? null,
     streamId: set.stream?.id ?? null,
     hasStageData:
