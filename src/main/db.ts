@@ -53,7 +53,7 @@ export function dbInit(window: BrowserWindow) {
   db = new DatabaseContstructor(path.join(userDataPath, 'db.sqlite3'));
   db.pragma('journal_mode = WAL');
   db.prepare(
-    'CREATE TABLE IF NOT EXISTS tournaments (id INTEGER PRIMARY KEY, slug TEXT, name TEXT, startAt INTEGER)',
+    'CREATE TABLE IF NOT EXISTS tournaments (id INTEGER PRIMARY KEY, slug TEXT, name TEXT, startAt INTEGER, location TEXT)',
   ).run();
   db.prepare(
     'CREATE TABLE IF NOT EXISTS events (id INTEGER PRIMARY KEY, tournamentId INTEGER, name TEXT, slug TEXT, isOnline INTEGER)',
@@ -314,7 +314,7 @@ export function setTournamentId(newTournamentId: number) {
 }
 
 const TOURNAMENT_UPSERT_SQL =
-  'REPLACE INTO tournaments (id, name, slug, startAt) VALUES (@id, @name, @slug, @startAt)';
+  'REPLACE INTO tournaments (id, name, slug, startAt, location) VALUES (@id, @name, @slug, @startAt, @location)';
 const EVENT_UPSERT_SQL =
   'REPLACE INTO events (id, tournamentId, name, slug, isOnline) VALUES (@id, @tournamentId, @name, @slug, @isOnline)';
 export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
@@ -3292,6 +3292,7 @@ export function getTournament(): RendererTournament | undefined {
     id: dbTournament.id,
     name: dbTournament.name,
     slug: dbTournament.slug,
+    location: dbTournament.location,
     events: dbEvents.map((dbEvent) => ({
       id: dbEvent.id,
       name: dbEvent.name,

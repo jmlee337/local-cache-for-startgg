@@ -107,6 +107,7 @@ export type RendererTournament = {
   id: number;
   name: string;
   slug: string;
+  location: string;
   events: RendererEvent[];
   participants: RendererParticipant[];
   stations: RendererStation[];
@@ -308,6 +309,7 @@ export type DbTournament = {
   name: string;
   slug: string;
   startAt: number;
+  location: string;
 };
 
 export type DbTransactionSelections = {

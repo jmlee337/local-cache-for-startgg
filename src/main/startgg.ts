@@ -278,6 +278,7 @@ export async function getApiTournament(inSlug: string) {
       slug,
       name: json.entities.tournament.name,
       startAt: json.entities.tournament.startAt,
+      location: json.entities.tournament.locationDisplayName,
     };
     const events: DbEvent[] = (json.entities.event as any[]).map((event) => ({
       id: event.id,
