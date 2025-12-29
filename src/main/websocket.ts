@@ -14,6 +14,7 @@ import {
 import { ApiGameData, RendererSet, RendererTournament } from '../common/types';
 
 type Request = {
+  num: number;
   id?: number;
 } & (
   | {
@@ -36,6 +37,7 @@ type Request = {
 );
 
 type Response = {
+  num: number;
   op:
     | 'reset-set-response'
     | 'call-set-response'
@@ -118,6 +120,7 @@ export async function startWebsocketServer(port: number) {
           const json = JSON.parse(data.utf8Data) as Request;
           if (json.op === 'reset-set-request') {
             const response: Response = {
+              num: json.num,
               op: 'reset-set-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -134,6 +137,7 @@ export async function startWebsocketServer(port: number) {
             }
           } else if (json.op === 'call-set-request') {
             const response: Response = {
+              num: json.num,
               op: 'call-set-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -150,6 +154,7 @@ export async function startWebsocketServer(port: number) {
             }
           } else if (json.op === 'start-set-request') {
             const response: Response = {
+              num: json.num,
               op: 'start-set-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -166,6 +171,7 @@ export async function startWebsocketServer(port: number) {
             }
           } else if (json.op === 'assign-set-station-request') {
             const response: Response = {
+              num: json.num,
               op: 'assign-set-station-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -193,6 +199,7 @@ export async function startWebsocketServer(port: number) {
             }
           } else if (json.op === 'assign-set-stream-request') {
             const response: Response = {
+              num: json.num,
               op: 'assign-set-stream-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -220,6 +227,7 @@ export async function startWebsocketServer(port: number) {
             }
           } else if (json.op === 'report-set-request') {
             const response: Response = {
+              num: json.num,
               op: 'report-set-response',
             };
             if (json.id === undefined || !Number.isInteger(json.id)) {
@@ -257,13 +265,6 @@ export async function startWebsocketServer(port: number) {
               response.err = e instanceof Error ? e.message : e.toString();
               newConnection.sendUTF(JSON.stringify(response));
             }
-          } else {
-            newConnection.sendUTF(
-              JSON.stringify({
-                op: 'error',
-                err: `invalid request: ${json.op}`,
-              }),
-            );
           }
         });
         newConnection.on('close', () => {
