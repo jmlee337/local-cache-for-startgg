@@ -57,6 +57,7 @@ import {
   RendererPhase,
   RendererPool,
   RendererSet,
+  RendererStream,
   RendererTournament,
   TransactionType,
 } from '../common/types';
@@ -99,6 +100,16 @@ function getEntrantName(participants: RendererParticipant[]) {
     return null;
   }
   return participants.map((participant) => participant.gamerTag).join(' / ');
+}
+
+function toCombinedStreamName(stream: RendererStream) {
+  let prefix = '';
+  if (stream.streamSource === 'TWITCH') {
+    prefix = 'ttv/';
+  } else if (stream.streamSource === 'YOUTUBE') {
+    prefix = 'yt/';
+  }
+  return prefix + stream.streamName;
 }
 
 function SetEntrant({
@@ -294,9 +305,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
         {set.state !== 3 && (set.station || set.stream) && (
           <Stack flexGrow={0} justifyContent="center">
             {set.stream ? (
-              <Tooltip
-                title={`${set.stream.streamSource} ${set.stream.streamName}`}
-              >
+              <Tooltip title={toCombinedStreamName(set.stream)}>
                 <Tv />
               </Tooltip>
             ) : (
@@ -1415,9 +1424,7 @@ export default function Tournament() {
                 </Typography>
               )}
               {reportSet?.stream && (
-                <Tooltip
-                  title={`${reportSet?.stream.streamSource} ${reportSet?.stream.streamName}`}
-                >
+                <Tooltip title={toCombinedStreamName(reportSet.stream)}>
                   <Tv />
                 </Tooltip>
               )}
@@ -1922,7 +1929,7 @@ export default function Tournament() {
                       }}
                     >
                       <ListItemText>
-                        Remove from {reportSet!.stream.streamName}
+                        Remove from {toCombinedStreamName(reportSet!.stream)}
                       </ListItemText>
                     </ListItemButton>
                   )}
@@ -1950,7 +1957,9 @@ export default function Tournament() {
                             }
                           }}
                         >
-                          <ListItemText>{stream.streamName}</ListItemText>
+                          <ListItemText>
+                            {toCombinedStreamName(stream)}
+                          </ListItemText>
                         </ListItemButton>
                       ))}
                   </List>
