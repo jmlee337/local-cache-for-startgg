@@ -19,6 +19,7 @@ import {
   ConflictReason,
   DbSeed,
   DbParticipant,
+  DbSetGame,
 } from '../common/types';
 import {
   upsertTournament,
@@ -511,6 +512,7 @@ function dbSetsFromApiSets(
       .reduce((previous, current) => Math.max(previous, current), 0);
   }
   const setIdToDbSet = new Map<number | string, DbSet>();
+  const games: DbSetGame[] = [];
   apiSets
     .filter(
       (set) =>
@@ -518,9 +520,22 @@ function dbSetsFromApiSets(
         !(set.entrant1PrereqType === 'bye' && set.entrant2PrereqType === 'bye'),
     )
     .map((set): DbSet => {
-      const games = Array.isArray(set.games) ? (set.games as any[]) : [];
+      if (Array.isArray(set.games)) {
+        games.push(
+          ...(set.games as any[]).map((game: any) => ({
+            id: game.id,
+            setId: game.setId,
+            eventId: set.eventId,
+            orderNum: game.orderNum,
+            entrant1Score: game.entrant1P1Stocks,
+            entrant2Score: game.entrant2P1Stocks,
+            stageId: game.stageId,
+            updatedAt: game.updatedAt,
+          })),
+        );
+      }
       return {
-        id: 0, // autoincrement
+        id: 0, // automatically assigned
         setId: set.id,
         phaseGroupId: set.phaseGroupId,
         phaseId: set.phaseId,
@@ -575,20 +590,6 @@ function dbSetsFromApiSets(
         // computed here
         tournamentId,
         ordinal: idToDEOrdinal.get(set.id) ?? set.round - roundMax,
-        hasStageData:
-          set.entrant1CharacterIds &&
-          set.entrant1CharacterIds.length > 0 &&
-          set.entrant2CharacterIds &&
-          set.entrant2CharacterIds.length > 0 &&
-          games.length > 0 &&
-          games.every(
-            (game) =>
-              game.entrant1P1Stocks !== null &&
-              game.entrant2P1Stocks !== null &&
-              game.stageId !== null,
-          )
-            ? 1
-            : null,
         syncState: SyncState.SYNCED,
       };
     })
@@ -635,7 +636,7 @@ function dbSetsFromApiSets(
     }
     sets.push(dbSet);
   });
-  return sets;
+  return { sets, games };
 }
 
 async function refreshEvent(tournamentId: number, eventId: number) {
@@ -682,6 +683,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   const participants: DbParticipant[] = [];
   const seeds: DbSeed[] = [];
   const sets: DbSet[] = [];
+  const games: DbSetGame[] = [];
   try {
     await Promise.all(
       pools
@@ -735,13 +737,13 @@ async function refreshEvent(tournamentId: number, eventId: number) {
             );
           }
           if (json.entities.sets instanceof Array) {
-            sets.push(
-              ...dbSetsFromApiSets(
-                json.entities.sets,
-                tournamentId,
-                json.entities.groups.groupTypeId,
-              ),
+            const setsAndGames = dbSetsFromApiSets(
+              json.entities.sets,
+              tournamentId,
+              json.entities.groups.groupTypeId,
             );
+            sets.push(...setsAndGames.sets);
+            games.push(...setsAndGames.games);
           }
         }),
     );
@@ -756,6 +758,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       participants,
       seeds,
       sets,
+      games,
     );
   } catch (e: any) {
     if (isRetryableApiError(e)) {

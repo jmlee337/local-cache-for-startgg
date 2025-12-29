@@ -13,7 +13,7 @@ export enum ConflictReason {
   MISSING_ENTRANTS,
   REPORT_COMPLETED,
   UPDATE_CHANGE_WINNER,
-  UPDATE_STAGE_DATA,
+  UPDATE_REMOVE_STAGES_STOCKS,
 }
 
 export enum SyncState {
@@ -40,6 +40,12 @@ export type RendererStream = {
   id: number;
   streamName: string;
   streamSource: string;
+};
+
+export type RendererGame = {
+  entrant1Score: number | null;
+  entrant2Score: number | null;
+  stageId: number | null;
 };
 
 export type RendererParticipant = {
@@ -72,12 +78,12 @@ export type RendererSet = {
   entrant2Participants: RendererParticipant[];
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
+  games: RendererGame[];
   winnerId: number | null;
   updatedAt: number;
   completedAt: number | null;
   station: RendererStation | null;
   stream: RendererStream | null;
-  hasStageData: 1 | null;
   syncState: SyncState;
 };
 
@@ -210,8 +216,7 @@ export type DbSetMutation = {
   stationId: number | null;
   streamIdPresent: null | 1;
   streamId: number | null;
-  hasStageDataPresent: null | 1;
-  hasStageData: null | 1;
+  gamesPresent: null | 1;
 
   // locally mutable and required
   updatedAt: number;
@@ -264,10 +269,23 @@ export type DbSet = {
   completedAt: number | null;
   stationId: number | null;
   streamId: number | null;
-  hasStageData: null | 1;
 
   // we only store SYNCED, but we modify after query via setMutation
   syncState: SyncState;
+};
+
+export type DbSetGame = {
+  id: number;
+  setId: number;
+  eventId: number;
+  orderNum: number;
+  entrant1Score: number | null;
+  entrant2Score: number | null;
+  stageId: number | null;
+  updatedAt: number;
+};
+export type DbSetMutationGame = DbSetGame & {
+  transactionNum: number;
 };
 
 export type DbSeed = {

@@ -36,12 +36,39 @@ import {
   DbParticipant,
   RendererParticipant,
   PoolSiblings,
+  DbSetGame,
+  DbSetMutationGame,
+  RendererPool,
 } from '../common/types';
 
 enum SyncStatus {
   BEHIND,
   AHEAD,
   CONFLICT,
+}
+
+function dbCommonGamesHaveStagesAndScores(games: DbSetGame[]) {
+  return (
+    games.length > 0 &&
+    games.every(
+      (game) =>
+        game.entrant1Score !== null &&
+        game.entrant2Score !== null &&
+        game.stageId !== null,
+    )
+  );
+}
+
+function apiGameDatasHaveStagesAndScores(gameDatas: ApiGameData[]) {
+  return (
+    gameDatas.length > 0 &&
+    gameDatas.every(
+      (gameData) =>
+        gameData.entrant1Score !== undefined &&
+        gameData.entrant2Score !== undefined &&
+        gameData.stageId !== undefined,
+    )
+  );
 }
 
 let db: Database | undefined;
@@ -85,7 +112,7 @@ export function dbInit(window: BrowserWindow) {
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS sets (
-      id INTEGER PRIMARY KEY ASC AUTOINCREMENT,
+      id INTEGER PRIMARY KEY,
       setId NOT NULL,
       phaseGroupId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
@@ -98,7 +125,6 @@ export function dbInit(window: BrowserWindow) {
       state INTEGER,
       stationId INTEGER,
       streamId INTEGER,
-      hasStageData INTEGER,
       entrant1Id INTEGER,
       entrant1Score INTEGER,
       entrant1PrereqType TEXT,
@@ -128,7 +154,7 @@ export function dbInit(window: BrowserWindow) {
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS setMutations (
-      id INTEGER PRIMARY KEY ASC AUTOINCREMENT,
+      id INTEGER PRIMARY KEY,
       setId INTEGER NOT NULL,
       phaseGroupId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
@@ -156,9 +182,33 @@ export function dbInit(window: BrowserWindow) {
       stationId INTEGER,
       streamIdPresent INTEGER,
       streamId INTEGER,
-      hasStageDataPresent INTEGER,
-      hasStageData INTEGER,
+      gamesPresent INTEGER,
       updatedAt INTEGER NOT NULL
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS setGames(
+      id INTEGER PRIMARY KEY,
+      setId INTEGER NOT NULL,
+      eventId INTEGER NOT NULL,
+      orderNum INTEGER NOT NULL,
+      entrant1Score INTEGER,
+      entrant2Score INTEGER,
+      stageId INTEGER,
+      updatedAt INTEGER NOT NULL
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS setMutationGames(
+      id INTEGER PRIMARY KEY,
+      setId INTEGER NOT NULL,
+      eventId INTEGER NOT NULL,
+      orderNum INTEGER NOT NULL,
+      entrant1Score INTEGER,
+      entrant2Score INTEGER,
+      stageId INTEGER,
+      updatedAt INTEGER NOT NULL,
+      transactionNum INTEGER NOT NULL
     )`,
   ).run();
   db.prepare(
@@ -411,7 +461,11 @@ export function setAutoSync(newAutoSync: boolean) {
   autoSync = newAutoSync;
 }
 
-function applyMutation(set: DbSet, setMutation: DbSetMutation) {
+function applyMutation(
+  set: DbSet,
+  games: DbSetGame[],
+  setMutation: DbSetMutation,
+) {
   if (setMutation.statePresent) {
     set.state = setMutation.state!;
   }
@@ -439,8 +493,17 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
   if (setMutation.streamIdPresent) {
     set.streamId = setMutation.streamId;
   }
-  if (setMutation.hasStageDataPresent) {
-    set.hasStageData = setMutation.hasStageData;
+  if (setMutation.gamesPresent) {
+    games.length = 0;
+    games.push(
+      ...(db!
+        .prepare(
+          'SELECT * FROM setMutationGames WHERE transactionNum = @transactionNum ORDER BY orderNum ASC',
+        )
+        .all({
+          transactionNum: setMutation.transactionNum,
+        }) as DbSetMutationGame[]),
+    );
   }
   if (autoSync) {
     set.syncState = SyncState.QUEUED;
@@ -448,13 +511,18 @@ function applyMutation(set: DbSet, setMutation: DbSetMutation) {
     set.syncState = SyncState.LOCAL;
   }
 }
-function applyMutations(set: DbSet) {
+function applyMutations(set: DbSet, games: DbSetGame[]) {
   (
     db!
-      .prepare('SELECT * FROM setMutations WHERE setId = @id ORDER BY id ASC')
+      .prepare(
+        `SELECT *
+          FROM setMutations
+          WHERE setId = @id
+          ORDER BY transactionNum ASC`,
+      )
       .all(set) as DbSetMutation[]
   ).forEach((setMutation) => {
-    applyMutation(set, setMutation);
+    applyMutation(set, games, setMutation);
   });
 }
 
@@ -481,7 +549,10 @@ function getRendererStream(id: number): RendererStream | null {
 }
 
 const shortRoundTextRegex = /([A-Z]|[0-9])/g;
-function dbSetToRendererSet(dbSet: DbSet): RendererSet {
+function dbSetToRendererSet(
+  dbSet: DbSet,
+  dbSetGames: DbSetGame[],
+): RendererSet {
   const entrant1 = dbSet.entrant1Id
     ? getRendererEntrant(dbSet.entrant1Id)
     : null;
@@ -510,6 +581,11 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
     entrant2Participants: entrant2?.participants ?? [],
     entrant2PrereqStr: dbSet.entrant2PrereqStr,
     entrant2Score: dbSet.entrant2Score,
+    games: dbSetGames.map((dbGame) => ({
+      entrant1Score: dbGame.entrant1Score,
+      entrant2Score: dbGame.entrant2Score,
+      stageId: dbGame.stageId,
+    })),
     winnerId: dbSet.winnerId,
     updatedAt: dbSet.updatedAt,
     completedAt: dbSet.completedAt,
@@ -521,7 +597,6 @@ function dbSetToRendererSet(dbSet: DbSet): RendererSet {
       dbSet.streamId === null
         ? null
         : getRendererStream(dbSet.streamId) ?? null,
-    hasStageData: dbSet.hasStageData,
     syncState: dbSet.syncState,
   };
 }
@@ -706,6 +781,12 @@ export function getConflictResolve(
     );
   }
 
+  const games = db
+    .prepare(
+      'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+    )
+    .all({ setId: set.setId }) as DbSetGame[];
+
   const conflictTransactions = db
     .prepare(
       `SELECT *
@@ -736,7 +817,7 @@ export function getConflictResolve(
       eventId: set.eventId,
       phaseId: set.phaseId,
       poolId: set.phaseGroupId,
-      set: dbSetToRendererSet(set),
+      set: dbSetToRendererSet(set, games),
     },
   ];
   if (conflictTransactions[0].reason === ConflictReason.RESET_DEPENDENT_SETS) {
@@ -749,12 +830,19 @@ export function getConflictResolve(
           }
           return a.ordinal - b.ordinal;
         })
-        .map((dependentSet) => ({
-          eventId: dependentSet.eventId,
-          phaseId: dependentSet.phaseId,
-          poolId: dependentSet.phaseGroupId,
-          set: dbSetToRendererSet(dependentSet),
-        })),
+        .map((dependentSet) => {
+          const dependentSetGames = db!
+            .prepare(
+              'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+            )
+            .all({ setId: dependentSet.setId }) as DbSetGame[];
+          return {
+            eventId: dependentSet.eventId,
+            phaseId: dependentSet.phaseId,
+            poolId: dependentSet.phaseGroupId,
+            set: dbSetToRendererSet(dependentSet, dependentSetGames),
+          };
+        }),
     );
   } else if (
     conflictTransactions[0].reason === ConflictReason.MISSING_ENTRANTS
@@ -768,12 +856,20 @@ export function getConflictResolve(
           }
           return b.ordinal - a.ordinal;
         })
-        .map((dependentSet) => ({
-          eventId: dependentSet.eventId,
-          phaseId: dependentSet.phaseId,
-          poolId: dependentSet.phaseGroupId,
-          set: dbSetToRendererSet(dependentSet),
-        })),
+        .map((dependentSet) => {
+          const dependentSetGames = db!
+            .prepare(
+              'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+            )
+            .all({ setId: dependentSet.setId }) as DbSetGame[];
+
+          return {
+            eventId: dependentSet.eventId,
+            phaseId: dependentSet.phaseId,
+            poolId: dependentSet.phaseGroupId,
+            set: dbSetToRendererSet(dependentSet, dependentSetGames),
+          };
+        }),
     );
   }
 
@@ -805,10 +901,10 @@ export function getConflictResolve(
 
   const localSets: RendererConflictLocalSet[] = [];
   for (let i = 0; i < conflictTransactions.length; i += 1) {
-    applyMutation(set, setMutations[i]);
+    applyMutation(set, games, setMutations[i]);
     localSets.push({
       transactionNum: setMutations[i].transactionNum,
-      set: dbSetToRendererSet(set),
+      set: dbSetToRendererSet(set, games),
       type: conflictTransactions[i].type,
     });
   }
@@ -968,7 +1064,7 @@ export function resetSet(
     throw new Error(`no such set: ${id}`);
   }
 
-  applyMutations(set);
+  applyMutations(set, []);
   if (set.state === 1) {
     throw new Error(`set cannot be reset: ${id}`);
   }
@@ -1043,7 +1139,7 @@ export function resetSet(
       // no progressions if GF won from winners
       return;
     }
-    applyMutations(dbSet);
+    applyMutations(dbSet, []);
     if (dbSet.state !== 1) {
       dependentSetIds.push(dbSet.id);
     } else {
@@ -1085,7 +1181,7 @@ export function resetSet(
           `already have wProgressionSet: ${wProgressionSet.id}, found: ${affectedSet.id}`,
         );
       }
-      applyMutations(affectedSet);
+      applyMutations(affectedSet, []);
       if (affectedSet.state !== 1) {
         dependentSetIds.push(affectedSet.id);
       } else {
@@ -1114,7 +1210,7 @@ export function resetSet(
           `already have lProgressionSet: ${lProgressionSet.id}, found: ${affectedSet.id}`,
         );
       }
-      applyMutations(affectedSet);
+      applyMutations(affectedSet, []);
       if (affectedSet.state !== 1) {
         dependentSetIds.push(affectedSet.id);
       } else {
@@ -1163,6 +1259,7 @@ export function resetSet(
           winnerId,
           completedAtPresent,
           completedAt,
+          gamesPresent,
           updatedAt
         ) VALUES (
           @id,
@@ -1182,6 +1279,7 @@ export function resetSet(
           @winnerId,
           1,
           @completedAt,
+          1,
           @updatedAt
         )`,
       )
@@ -1285,7 +1383,7 @@ export function resetSet(
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, []),
   };
 }
 
@@ -1301,7 +1399,7 @@ export function callSet(id: number | string, transactionNum: number) {
     throw new Error(`no such set: ${id}`);
   }
 
-  applyMutations(set);
+  applyMutations(set, []);
   const { entrant1Id, entrant2Id, state } = set;
   if (state === 3) {
     throw new Error(`set is already completed: ${id}`);
@@ -1362,7 +1460,7 @@ export function callSet(id: number | string, transactionNum: number) {
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, []),
   };
 }
 
@@ -1378,7 +1476,7 @@ export function startSet(id: number | string, transactionNum: number) {
     throw new Error(`no such set: ${id}`);
   }
 
-  applyMutations(set);
+  applyMutations(set, []);
   const { entrant1Id, entrant2Id, state } = set;
   if (state === 3) {
     throw new Error(`set is already completed: ${id}`);
@@ -1439,7 +1537,7 @@ export function startSet(id: number | string, transactionNum: number) {
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, []),
   };
 }
 
@@ -1471,7 +1569,7 @@ export function assignSetStation(
     throw new Error(`no such station: ${stationId}`);
   }
 
-  applyMutations(set);
+  applyMutations(set, []);
   set.stationId = stationId;
   set.streamId = station.streamId;
 
@@ -1523,7 +1621,7 @@ export function assignSetStation(
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, []),
   };
 }
 
@@ -1545,7 +1643,7 @@ export function assignSetStream(
     throw new Error(`no such set: ${id}`);
   }
 
-  applyMutations(set);
+  applyMutations(set, []);
   const { tournamentId } = set;
   if (streamId !== 0) {
     const stream = db
@@ -1605,7 +1703,7 @@ export function assignSetStream(
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, []),
   };
 }
 
@@ -1630,15 +1728,19 @@ export function reportSet(
   if (!set) {
     throw new Error(`no such set: ${id}`);
   }
+  const games = db
+    .prepare(
+      'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+    )
+    .all({ setId: id }) as DbSetGame[];
 
-  applyMutations(set);
+  applyMutations(set, games);
   const {
     entrant1Id,
     entrant2Id,
     wProgressionSeedId,
     lProgressionSeedId,
     state,
-    hasStageData,
   } = set;
   if (!entrant1Id || !entrant2Id) {
     throw new Error(
@@ -1656,27 +1758,16 @@ export function reportSet(
   if (state === 3 && isDQ) {
     throw new Error('cannot change reported set to DQ');
   }
-  const reportHasStageData =
-    gameData.length > 0 &&
-    gameData.every(
-      (game) =>
-        game.entrant1Score !== undefined &&
-        game.entrant2Score !== undefined &&
-        game.selections.find(
-          (selection) => selection.entrantId === entrant1Id,
-        ) &&
-        game.selections.find(
-          (selection) => selection.entrantId === entrant2Id,
-        ) &&
-        game.stageId !== undefined,
-    );
-  if (state === 3 && hasStageData && !reportHasStageData) {
+  if (
+    state === 3 &&
+    dbCommonGamesHaveStagesAndScores(games) &&
+    !apiGameDatasHaveStagesAndScores(gameData)
+  ) {
     throw new Error('cannot remove stage data in update');
   }
 
   set.state = 3;
   set.winnerId = winnerId;
-  set.hasStageData = reportHasStageData ? 1 : null;
   if (isDQ) {
     set.entrant1Score = winnerId === entrant1Id ? 0 : -1;
     set.entrant2Score = winnerId === entrant2Id ? 0 : -1;
@@ -1866,8 +1957,7 @@ export function reportSet(
           winnerId,
           completedAtPresent,
           completedAt,
-          hasStageDataPresent,
-          hasStageData,
+          gamesPresent,
           updatedAt
         ) VALUES (
           @id,
@@ -1892,7 +1982,6 @@ export function reportSet(
           @completedAtPresent,
           @completedAt,
           1,
-          @hasStageData,
           @updatedAt
         )`,
       )
@@ -1905,6 +1994,50 @@ export function reportSet(
         completedAt: state === 3 ? null : updatedAt,
         updatedAt,
       });
+    games.length = 0;
+    if (gameData.length > 0) {
+      games.push(
+        ...gameData.map(
+          (game): DbSetMutationGame => ({
+            id: 0, // auto assigned
+            setId: set.id,
+            eventId: set.eventId,
+            orderNum: game.gameNum,
+            entrant1Score: game.entrant1Score ?? null,
+            entrant2Score: game.entrant2Score ?? null,
+            stageId: game.stageId ?? null,
+            updatedAt,
+            transactionNum,
+          }),
+        ),
+      );
+      games.forEach((game) => {
+        db!
+          .prepare(
+            `INSERT INTO setMutationGames (
+                setId,
+                eventId,
+                orderNum,
+                entrant1Score,
+                entrant2Score,
+                stageId,
+                updatedAt,
+                transactionNum
+              ) values (
+                @setId,
+                @eventId,
+                @orderNum,
+                @entrant1Score,
+                @entrant2Score,
+                @stageId,
+                @updatedAt,
+                @transactionNum
+              )`,
+          )
+          .run(game);
+      });
+    }
+
     if (wProgressionSet) {
       db!
         .prepare(
@@ -1996,7 +2129,7 @@ export function reportSet(
   );
   return {
     tournamentId: set.tournamentId,
-    set: dbSetToRendererSet(set),
+    set: dbSetToRendererSet(set, games),
   };
 }
 
@@ -2290,9 +2423,6 @@ export function finalizeTransaction(
         if (dbSetMutation.streamIdPresent) {
           exprs.push('streamId = @streamId');
         }
-        if (dbSetMutation.hasStageDataPresent) {
-          exprs.push('hasStageData = @hasStageData');
-        }
         if (exprs.length === 0) {
           throw new Error(
             `no mutations in dbSetMutation: ${dbSetMutation.id}, transactionNum: ${dbSetMutation.transactionNum}`,
@@ -2310,6 +2440,11 @@ export function finalizeTransaction(
         'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM setMutationGames WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
     updates.forEach((update) => {
       db!
         .prepare(
@@ -2325,8 +2460,7 @@ export function finalizeTransaction(
               updatedAt = @updatedAt,
               completedAt = @completedAt,
               stationId = @stationId,
-              streamId = @streamId,
-              hasStageData = @hasStageData
+              streamId = @streamId
             WHERE identifier = @identifier AND phaseGroupId = @phaseGroupId`,
         )
         .run(update);
@@ -2423,7 +2557,7 @@ function getSyncStatus(
         if (setMutation.transactionNum > dbTransaction.transactionNum) {
           break;
         }
-        applyMutation(mutationSet, setMutation);
+        applyMutation(mutationSet, [], setMutation);
       }
       if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
         return {
@@ -2443,7 +2577,7 @@ function getSyncStatus(
         if (setMutation.transactionNum > dbTransaction.transactionNum) {
           break;
         }
-        applyMutation(mutationSet, setMutation);
+        applyMutation(mutationSet, [], setMutation);
       }
       if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
         return {
@@ -2458,12 +2592,17 @@ function getSyncStatus(
       return { syncStatus: SyncStatus.BEHIND };
     }
     case TransactionType.REPORT: {
+      const games = db!
+        .prepare(
+          'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+        )
+        .all({ setId: afterSet.setId }) as DbSetGame[];
       const mutationSet: DbSet = { ...afterSet };
       for (const setMutation of setMutations) {
         if (setMutation.transactionNum > dbTransaction.transactionNum) {
           break;
         }
-        applyMutation(mutationSet, setMutation);
+        applyMutation(mutationSet, games, setMutation);
       }
       if (mutationSet.entrant1Id === null || mutationSet.entrant2Id === null) {
         return {
@@ -2491,21 +2630,18 @@ function getSyncStatus(
           reason: ConflictReason.UPDATE_CHANGE_WINNER,
         };
       }
-      if (afterSet.hasStageData === 1) {
+      if (dbCommonGamesHaveStagesAndScores(games)) {
         const apiTransaction = toApiTransaction(dbTransaction);
         if (apiTransaction.type !== TransactionType.REPORT) {
           throw new Error('unreachable');
         }
-        if (
-          apiTransaction.gameData.length > 0 &&
-          apiTransaction.gameData.every((game) => game.stageId !== undefined)
-        ) {
+        if (!apiGameDatasHaveStagesAndScores(apiTransaction.gameData)) {
           return {
             syncStatus: SyncStatus.CONFLICT,
-            reason: ConflictReason.UPDATE_STAGE_DATA,
+            reason: ConflictReason.UPDATE_REMOVE_STAGES_STOCKS,
           };
         }
-        return { syncStatus: SyncStatus.BEHIND };
+        return { syncStatus: SyncStatus.AHEAD };
       }
       if (
         afterSet.entrant1Score !== -1 &&
@@ -2540,6 +2676,11 @@ export function deleteTransaction(transactionNum: number) {
       .run({ transactionNum });
     db!
       .prepare(
+        'DELETE FROM setMutationGames WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
         'DELETE FROM transactionGameData WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
@@ -2563,6 +2704,7 @@ export function updateEvent(
   participants: DbParticipant[],
   seeds: DbSeed[],
   sets: DbSet[],
+  games: DbSetGame[],
 ) {
   if (!db) {
     throw new Error('not init');
@@ -2579,6 +2721,13 @@ export function updateEvent(
       )
       .run(phase);
   });
+  db.prepare(
+    `DELETE FROM phases
+      WHERE eventId = @eventId AND id NOT IN (${phases
+        .map((phase) => phase.id)
+        .join(', ')})`,
+  ).run({ eventId });
+
   pools.forEach((pool) => {
     db!
       .prepare(
@@ -2590,6 +2739,13 @@ export function updateEvent(
       )
       .run(pool);
   });
+  db.prepare(
+    `DELETE FROM pools
+      WHERE eventId = @eventId AND id NOT IN (${pools
+        .map((pool) => pool.id)
+        .join(', ')})`,
+  ).run({ eventId });
+
   entrants.forEach((entrant) => {
     db!
       .prepare(
@@ -2605,6 +2761,12 @@ export function updateEvent(
       )
       .run(entrant);
   });
+  db.prepare(
+    `DELETE FROM entrants
+      WHERE eventId = @eventId AND id NOT IN (${entrants
+        .map((entrant) => entrant.id)
+        .join(', ')})`,
+  ).run({ eventId });
 
   Array.from(entrantIdToParticipantIds.entries()).forEach(
     ([entrantId, participantIds]) => {
@@ -2692,7 +2854,6 @@ export function updateEvent(
             state,
             stationId,
             streamId,
-            hasStageData,
             entrant1Id,
             entrant1Score,
             entrant1PrereqType,
@@ -2729,7 +2890,6 @@ export function updateEvent(
             @state,
             @stationId,
             @streamId,
-            @hasStageData,
             @entrant1Id,
             @entrant1Score,
             @entrant1PrereqType,
@@ -2766,7 +2926,6 @@ export function updateEvent(
             state = @state,
             stationId = @stationId,
             streamId = @streamId,
-            hasStageData = @hasStageData,
             entrant1Id = @entrant1Id,
             entrant1Score = @entrant1Score,
             entrant1PrereqType = @entrant1PrereqType,
@@ -2797,11 +2956,44 @@ export function updateEvent(
   if (sets.length > 0) {
     db.prepare(
       `DELETE FROM sets
-        WHERE (identifier, phaseGroupId) NOT IN (VALUES ${sets
+        WHERE eventId = @eventId AND (identifier, phaseGroupId) NOT IN (VALUES ${sets
           .map((set) => `('${set.identifier}', ${set.phaseGroupId})`)
           .join(', ')})`,
-    );
+    ).run({ eventId });
   }
+
+  games.forEach((game) => {
+    db!
+      .prepare(
+        `REPLACE INTO setGames (
+          id,
+          setId,
+          eventId,
+          orderNum,
+          entrant1Score,
+          entrant2Score,
+          stageId,
+          updatedAt
+        ) values (
+          @id,
+          @setId,
+          @eventId,
+          @orderNum,
+          @entrant1Score,
+          @entrant2Score,
+          @stageId,
+          @updatedAt
+        )`,
+      )
+      .run(game);
+  });
+  db.prepare(
+    `DELETE FROM setGames
+      WHERE eventId = @eventId and id NOT IN (${games
+        .map((game) => game.id)
+        .join(', ')})`,
+  ).run({ eventId });
+
   const idToAfterSet = new Map(
     (
       db
@@ -2809,7 +3001,6 @@ export function updateEvent(
         .all({ eventId }) as DbSet[]
     ).map((dbSet) => [dbSet.id, dbSet]),
   );
-
   const setIdToDbTransactions = new Map<number, DbTransaction[]>();
   (
     db
@@ -2825,7 +3016,6 @@ export function updateEvent(
     arr.push(dbTransaction);
     setIdToDbTransactions.set(dbTransaction.setId, arr);
   });
-
   Array.from(setIdToDbTransactions.keys()).forEach((setId) => {
     const dbTransactions = setIdToDbTransactions.get(setId)!;
     const transactionNumsToDelete: number[] = [];
@@ -3024,6 +3214,11 @@ export function updateEvent(
               .run({ reportTransactionNum });
             db!
               .prepare(
+                'DELETE FROM setMutationGames WHERE transactionNum = @reportTransactionNum',
+              )
+              .run({ reportTransactionNum });
+            db!
+              .prepare(
                 `UPDATE transactionGameData
                   SET transactionNum = @reportTransactionNum
                   WHERE transactionNum = @updateTransactionNum`,
@@ -3039,6 +3234,13 @@ export function updateEvent(
             db!
               .prepare(
                 `UPDATE setMutations
+                  SET transactionNum = @reportTransactionNum
+                  WHERE transactionNum = @updateTransactionNum`,
+              )
+              .run({ reportTransactionNum, updateTransactionNum });
+            db!
+              .prepare(
+                `UPDATE setMutationGames
                   SET transactionNum = @reportTransactionNum
                   WHERE transactionNum = @updateTransactionNum`,
               )
@@ -3332,33 +3534,23 @@ export function getTournament(): RendererTournament | undefined {
           phaseOrder: dbPhase.phaseOrder,
           pools: dbPools
             .filter((dbPool) => dbPool.phaseId === dbPhase.id)
-            .map((dbPool) => {
-              const dbSets: DbSet[] = [];
-              const idToDbSet = new Map<number, DbSet>();
-              (
+            .map((dbPool): RendererPool => {
+              const rendererSets = (
                 db!
                   .prepare(
                     'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY ordinal, id',
                   )
                   .all({ id: dbPool.id }) as DbSet[]
-              ).forEach((dbSet) => {
-                dbSets.push(dbSet);
-                idToDbSet.set(dbSet.id, dbSet);
-              });
-              (
-                db!
+              ).map((dbSet) => {
+                const dbSetGames = db!
                   .prepare(
-                    'SELECT * FROM setMutations WHERE phaseGroupId = @id ORDER BY id ASC',
+                    'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
                   )
-                  .all({ id: dbPool.id }) as DbSetMutation[]
-              ).forEach((dbSetMutation) => {
-                const dbSet = idToDbSet.get(dbSetMutation.setId);
-                if (dbSet) {
-                  applyMutation(dbSet, dbSetMutation);
-                }
+                  .all({ setId: dbSet.setId }) as DbSetGame[];
+                applyMutations(dbSet, dbSetGames);
+                return dbSetToRendererSet(dbSet, dbSetGames);
               });
 
-              const rendererSets = dbSets.map(dbSetToRendererSet);
               return {
                 id: dbPool.id,
                 name: dbPool.name,
@@ -3440,6 +3632,12 @@ export function deleteTournament(id: number) {
     eventIds.forEach((eventId) => {
       db!
         .prepare('DELETE FROM entrants WHERE eventId = @eventId')
+        .run({ eventId });
+      db!
+        .prepare('DELETE FROM setGames WHERE eventId = @eventId')
+        .run({ eventId });
+      db!
+        .prepare('SELECT FROM setMutationGames WHERE eventId = @eventId')
         .run({ eventId });
     });
 

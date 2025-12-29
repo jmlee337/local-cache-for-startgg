@@ -131,6 +131,19 @@ function SetEntrant({
   );
 }
 
+function hasStagesAndScores(set: RendererSet | null): boolean {
+  return (
+    set !== null &&
+    set.games.length > 0 &&
+    set.games.every(
+      (game) =>
+        game.entrant1Score !== null &&
+        game.entrant2Score !== null &&
+        game.stageId !== null,
+    )
+  );
+}
+
 function SetListItemInner({ set }: { set: RendererSet }) {
   let titleStart = <CloudOff fontSize="small" />;
   if (set.syncState === 1) {
@@ -148,7 +161,7 @@ function SetListItemInner({ set }: { set: RendererSet }) {
       />
     );
   } else if (set.state === 3) {
-    if (set.hasStageData) {
+    if (hasStagesAndScores(set)) {
       titleEnd = (
         <FolderZip fontSize="small" style={{ margin: '-1px -9px 1px 9px' }} />
       );
@@ -1388,7 +1401,7 @@ export default function Tournament() {
               )}
             </Typography>
             <Stack direction="row" alignItems="center" spacing="8px">
-              {reportSet?.hasStageData === 1 && (
+              {hasStagesAndScores(reportSet) && (
                 <Tooltip title="Most likely hotswapped">
                   <FolderZipOutlined />
                 </Tooltip>
@@ -1448,7 +1461,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq &&
@@ -1480,7 +1493,7 @@ export default function Tournament() {
                         reportEntrant2Score >= 1) ||
                         (reportSet?.winnerId === reportSet?.entrant2Id &&
                           reportEntrant2Score <= 1) ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 1
@@ -1510,7 +1523,7 @@ export default function Tournament() {
                         reportEntrant2Score >= 2) ||
                         (reportSet?.winnerId === reportSet?.entrant2Id &&
                           reportEntrant2Score <= 2) ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 2
@@ -1537,7 +1550,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant1Score === 3
@@ -1564,7 +1577,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant1Id
@@ -1616,7 +1629,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq &&
@@ -1648,7 +1661,7 @@ export default function Tournament() {
                         reportEntrant1Score >= 1) ||
                         (reportSet?.winnerId === reportSet?.entrant1Id &&
                           reportEntrant1Score <= 1) ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 1
@@ -1678,7 +1691,7 @@ export default function Tournament() {
                         reportEntrant1Score >= 2) ||
                         (reportSet?.winnerId === reportSet?.entrant1Id &&
                           reportEntrant1Score <= 2) ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 2
@@ -1705,7 +1718,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     !reportIsDq && reportEntrant2Score === 3
@@ -1732,7 +1745,7 @@ export default function Tournament() {
                     !reportSet?.entrant2Id ||
                     (reportSet?.state === 3 &&
                       (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        reportSet?.hasStageData === 1))
+                        hasStagesAndScores(reportSet)))
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant2Id
@@ -1838,7 +1851,7 @@ export default function Tournament() {
                 !reportSet?.entrant1Id ||
                 !reportSet?.entrant2Id ||
                 (reportSet?.state === 3 &&
-                  (updateUnchanged || reportSet?.hasStageData === 1)) ||
+                  (updateUnchanged || hasStagesAndScores(reportSet))) ||
                 reporting ||
                 !reportWinnerId
               }
@@ -2189,7 +2202,7 @@ export default function Tournament() {
                     </Button>
                   )}
                   {conflictResolve.reason ===
-                    ConflictReason.UPDATE_STAGE_DATA && (
+                    ConflictReason.UPDATE_REMOVE_STAGES_STOCKS && (
                     <Paper
                       elevation={2}
                       style={{
@@ -2203,7 +2216,7 @@ export default function Tournament() {
                         lineHeight="24.5px"
                         textAlign="center"
                       >
-                        WOULD REMOVE STAGE DATA
+                        WOULD REMOVE STAGES/STOCKS
                       </Typography>
                     </Paper>
                   )}
