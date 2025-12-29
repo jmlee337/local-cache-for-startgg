@@ -723,7 +723,10 @@ function LocalTournamentItemButton({
           await set(localTournament.id, localTournament.slug);
         }}
       >
-        <ListItemText>{localTournament.name}</ListItemText>
+        <ListItemText style={{ overflowX: 'hidden', whiteSpace: 'nowrap' }}>
+          {localTournament.name}{' '}
+          <Typography variant="caption">({localTournament.slug})</Typography>
+        </ListItemText>
         {localTournament.isSynced ? (
           <Tooltip title="Fully synced">
             <CloudDone />
