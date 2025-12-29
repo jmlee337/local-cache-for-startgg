@@ -11,7 +11,7 @@ import {
   resetSetTransaction,
   startSetTransaction,
 } from './transaction';
-import { ApiGameData, RendererSet } from '../common/types';
+import { ApiGameData, RendererSet, RendererTournament } from '../common/types';
 
 type Request = {
   id?: number | string;
@@ -49,6 +49,11 @@ type Response = {
   };
 };
 
+type Event = {
+  op: 'tournament-update-event';
+  tournament?: RendererTournament;
+};
+
 const BRACKET_PROTOCOL = 'bracket-protocol';
 
 let httpServer: http.Server | null;
@@ -56,12 +61,11 @@ let websocketServer: websocket.server | null;
 const connections = new Set<connection>();
 
 function sendTournamentUpdateEvent(connection: connection) {
-  connection.sendUTF(
-    JSON.stringify({
-      op: 'tournament-update-event',
-      tournament: getLastTournament(),
-    }),
-  );
+  const event: Event = {
+    op: 'tournament-update-event',
+    tournament: getLastTournament(),
+  };
+  connection.sendUTF(JSON.stringify(event));
 }
 
 export async function startWebsocketServer(port: number) {
