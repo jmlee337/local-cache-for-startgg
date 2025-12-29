@@ -1058,7 +1058,7 @@ type ResetProgressionSet = {
   entrantNum: 1 | 2;
 };
 export function resetSet(
-  id: number | string,
+  id: number,
   transactionNum: number,
   preempt: boolean = false,
 ) {
@@ -1066,7 +1066,7 @@ export function resetSet(
     throw new Error('not init');
   }
 
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
@@ -1397,12 +1397,12 @@ export function resetSet(
   };
 }
 
-export function callSet(id: number | string, transactionNum: number) {
+export function callSet(id: number, transactionNum: number) {
   if (!db) {
     throw new Error('not init');
   }
 
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
@@ -1481,12 +1481,12 @@ export function callSet(id: number | string, transactionNum: number) {
   };
 }
 
-export function startSet(id: number | string, transactionNum: number) {
+export function startSet(id: number, transactionNum: number) {
   if (!db) {
     throw new Error('not init');
   }
 
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
@@ -1566,21 +1566,21 @@ export function startSet(id: number | string, transactionNum: number) {
 }
 
 export function assignSetStation(
-  id: number | string,
+  id: number,
   stationId: number,
   transactionNum: number,
 ) {
   if (!db) {
     throw new Error('not init');
   }
-  if (typeof id === 'string') {
-    throw new Error(`cannot assign preview set to station: ${id}`);
-  }
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`no such set: ${id}`);
+  }
+  if (typeof set.setId === 'string') {
+    throw new Error(`cannot assign preview set to station: ${id}`);
   }
 
   const { tournamentId } = set;
@@ -1650,21 +1650,21 @@ export function assignSetStation(
 }
 
 export function assignSetStream(
-  id: number | string,
+  id: number,
   streamId: number,
   transactionNum: number,
 ) {
   if (!db) {
     throw new Error('not init');
   }
-  if (typeof id === 'string') {
-    throw new Error(`cannot assign preview set to stream: ${id}`);
-  }
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
     throw new Error(`no such set: ${id}`);
+  }
+  if (typeof set.setId === 'string') {
+    throw new Error(`cannot assign preview set to stream: ${id}`);
   }
 
   applyMutations(set, []);
@@ -1736,7 +1736,7 @@ type ReportProgressionSet = ResetProgressionSet & {
   entrantId: number;
 };
 export function reportSet(
-  id: number | string,
+  id: number,
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
@@ -1746,7 +1746,7 @@ export function reportSet(
     throw new Error('not init');
   }
 
-  const set = db.prepare('SELECT * FROM sets WHERE setId = @id').get({ id }) as
+  const set = db.prepare('SELECT * FROM sets WHERE id = @id').get({ id }) as
     | DbSet
     | undefined;
   if (!set) {
@@ -1756,7 +1756,7 @@ export function reportSet(
     .prepare(
       'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
     )
-    .all({ setId: id }) as DbSetGame[];
+    .all({ setId: set.setId }) as DbSetGame[];
 
   applyMutations(set, games);
   const {

@@ -1789,7 +1789,7 @@ export default function Tournament() {
               onClick={async () => {
                 setResetting(true);
                 try {
-                  await window.electron.resetSet(reportSet!.setId);
+                  await window.electron.resetSet(reportSet!.id);
                   setReportDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
@@ -1811,7 +1811,7 @@ export default function Tournament() {
               onClick={async () => {
                 setCalling(true);
                 try {
-                  await window.electron.callSet(reportSet!.setId);
+                  await window.electron.callSet(reportSet!.id);
                   setReportDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
@@ -1837,7 +1837,7 @@ export default function Tournament() {
               onClick={async () => {
                 setStarting(true);
                 try {
-                  await window.electron.startSet(reportSet!.setId);
+                  await window.electron.startSet(reportSet!.id);
                   setReportDialogOpen(false);
                 } catch (e: any) {
                   showError(e instanceof Error ? e.message : e);
@@ -1864,14 +1864,14 @@ export default function Tournament() {
                 try {
                   if (reportPreempt) {
                     await window.electron.preemptReport(
-                      reportSet!.setId,
+                      reportSet!.id,
                       reportWinnerId,
                       reportIsDq,
                       reportGameData,
                     );
                   } else {
                     await window.electron.reportSet(
-                      reportSet!.setId,
+                      reportSet!.id,
                       reportWinnerId,
                       reportIsDq,
                       reportGameData,
@@ -1896,112 +1896,120 @@ export default function Tournament() {
             setStationStreamDialogOpen(false);
           }}
         >
-          <DialogContent>
-            {tournament && tournament.streams.length > 0 && (
-              <>
-                {reportSet?.stream && (
-                  <ListItemButton
-                    disabled={choosing}
-                    disableGutters
-                    style={{ marginTop: '8px' }}
-                    onClick={async () => {
-                      setChoosing(true);
-                      try {
-                        await window.electron.assignSetStream(
-                          reportSet!.setId,
-                          0,
-                        );
-                        setStationStreamDialogOpen(false);
-                        setReportDialogOpen(false);
-                      } catch (e: any) {
-                        showError(e instanceof Error ? e.message : e);
-                      } finally {
-                        setChoosing(false);
-                      }
+          {typeof reportSet?.setId === 'number' ? (
+            <DialogContent>
+              {tournament && tournament.streams.length > 0 && (
+                <>
+                  {reportSet?.stream && (
+                    <ListItemButton
+                      disabled={choosing}
+                      disableGutters
+                      style={{ marginTop: '8px' }}
+                      onClick={async () => {
+                        setChoosing(true);
+                        try {
+                          await window.electron.assignSetStream(
+                            reportSet!.id,
+                            0,
+                          );
+                          setStationStreamDialogOpen(false);
+                          setReportDialogOpen(false);
+                        } catch (e: any) {
+                          showError(e instanceof Error ? e.message : e);
+                        } finally {
+                          setChoosing(false);
+                        }
+                      }}
+                    >
+                      <ListItemText>
+                        Remove from {reportSet!.stream.streamName}
+                      </ListItemText>
+                    </ListItemButton>
+                  )}
+                  <List disablePadding>
+                    {tournament.streams
+                      .filter((stream) => stream.id !== reportSet?.stream?.id)
+                      .map((stream) => (
+                        <ListItemButton
+                          disabled={choosing}
+                          key={stream.id}
+                          disableGutters
+                          onClick={async () => {
+                            setChoosing(true);
+                            try {
+                              await window.electron.assignSetStream(
+                                reportSet!.id,
+                                stream.id,
+                              );
+                              setStationStreamDialogOpen(false);
+                              setReportDialogOpen(false);
+                            } catch (e: any) {
+                              showError(e instanceof Error ? e.message : e);
+                            } finally {
+                              setChoosing(false);
+                            }
+                          }}
+                        >
+                          <ListItemText>{stream.streamName}</ListItemText>
+                        </ListItemButton>
+                      ))}
+                  </List>
+                </>
+              )}
+              {tournament && tournament.stations.length > 0 && (
+                <>
+                  {reportSet?.station && (
+                    <ListItemText
+                      style={{ padding: '12px 0', margin: '8px 0 0' }}
+                    >
+                      Assigned to station {reportSet!.station.number}
+                    </ListItemText>
+                  )}
+                  <List
+                    disablePadding
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
                     }}
                   >
-                    <ListItemText>
-                      Remove from {reportSet!.stream.streamName}
-                    </ListItemText>
-                  </ListItemButton>
-                )}
-                <List disablePadding>
-                  {tournament.streams
-                    .filter((stream) => stream.id !== reportSet?.stream?.id)
-                    .map((stream) => (
-                      <ListItemButton
-                        disabled={choosing}
-                        key={stream.id}
-                        disableGutters
-                        onClick={async () => {
-                          setChoosing(true);
-                          try {
-                            await window.electron.assignSetStream(
-                              reportSet!.setId,
-                              stream.id,
-                            );
-                            setStationStreamDialogOpen(false);
-                            setReportDialogOpen(false);
-                          } catch (e: any) {
-                            showError(e instanceof Error ? e.message : e);
-                          } finally {
-                            setChoosing(false);
-                          }
-                        }}
-                      >
-                        <ListItemText>{stream.streamName}</ListItemText>
-                      </ListItemButton>
-                    ))}
-                </List>
-              </>
-            )}
-            {tournament && tournament.stations.length > 0 && (
-              <>
-                {reportSet?.station && (
-                  <ListItemText
-                    style={{ padding: '12px 0', margin: '8px 0 0' }}
-                  >
-                    Assigned to station {reportSet!.station.number}
-                  </ListItemText>
-                )}
-                <List
-                  disablePadding
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  {tournament.stations
-                    .filter((station) => station.id !== reportSet?.station?.id)
-                    .map((station) => (
-                      <ListItemButton
-                        disabled={choosing}
-                        key={station.id}
-                        style={{ flexGrow: 0 }}
-                        onClick={async () => {
-                          setChoosing(true);
-                          try {
-                            await window.electron.assignSetStation(
-                              reportSet!.setId,
-                              station.id,
-                            );
-                            setStationStreamDialogOpen(false);
-                            setReportDialogOpen(false);
-                          } catch (e: any) {
-                            showError(e instanceof Error ? e.message : e);
-                          } finally {
-                            setChoosing(false);
-                          }
-                        }}
-                      >
-                        <ListItemText>{station.number}</ListItemText>
-                      </ListItemButton>
-                    ))}
-                </List>
-              </>
-            )}
-          </DialogContent>
+                    {tournament.stations
+                      .filter(
+                        (station) => station.id !== reportSet?.station?.id,
+                      )
+                      .map((station) => (
+                        <ListItemButton
+                          disabled={choosing}
+                          key={station.id}
+                          style={{ flexGrow: 0 }}
+                          onClick={async () => {
+                            setChoosing(true);
+                            try {
+                              await window.electron.assignSetStation(
+                                reportSet!.id,
+                                station.id,
+                              );
+                              setStationStreamDialogOpen(false);
+                              setReportDialogOpen(false);
+                            } catch (e: any) {
+                              showError(e instanceof Error ? e.message : e);
+                            } finally {
+                              setChoosing(false);
+                            }
+                          }}
+                        >
+                          <ListItemText>{station.number}</ListItemText>
+                        </ListItemButton>
+                      ))}
+                  </List>
+                </>
+              )}
+            </DialogContent>
+          ) : (
+            <DialogTitle>
+              Cannot set stream or station for {reportSet?.id}
+            </DialogTitle>
+          )}
         </Dialog>
         <Dialog
           maxWidth="md"
@@ -2196,7 +2204,7 @@ export default function Tournament() {
                       variant="contained"
                       onClick={() => {
                         window.electron.preemptReset(
-                          conflictResolve.localSets[0].set.setId,
+                          conflictResolve.localSets[0].set.id,
                         );
                         setConflictDialogOpen(false);
                       }}

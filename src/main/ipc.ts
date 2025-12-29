@@ -270,33 +270,27 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   ipcMain.removeHandler('resetSet');
-  ipcMain.handle('resetSet', (event, id: number | string) => {
+  ipcMain.handle('resetSet', (event, id: number) => {
     resetSetTransaction(id);
   });
 
   ipcMain.removeHandler('assignSetStation');
-  ipcMain.handle(
-    'assignSetStation',
-    (event, id: number | string, stationId: number) => {
-      assignSetStationTransaction(id, stationId);
-    },
-  );
+  ipcMain.handle('assignSetStation', (event, id: number, stationId: number) => {
+    assignSetStationTransaction(id, stationId);
+  });
 
   ipcMain.removeHandler('assignSetStream');
-  ipcMain.handle(
-    'assignSetStream',
-    (event, id: number | string, streamId: number) => {
-      assignSetStreamTransaction(id, streamId);
-    },
-  );
+  ipcMain.handle('assignSetStream', (event, id: number, streamId: number) => {
+    assignSetStreamTransaction(id, streamId);
+  });
 
   ipcMain.removeHandler('callSet');
-  ipcMain.handle('callSet', (event, id: number | string) => {
+  ipcMain.handle('callSet', (event, id: number) => {
     callSetTransaction(id);
   });
 
   ipcMain.removeHandler('startSet');
-  ipcMain.handle('startSet', (event, id: number | string) => {
+  ipcMain.handle('startSet', (event, id: number) => {
     startSetTransaction(id);
   });
 
@@ -305,7 +299,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'reportSet',
     (
       event,
-      id: number | string,
+      id: number,
       winnerId: number,
       isDQ: boolean,
       entrantScores:
@@ -353,7 +347,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   ipcMain.removeHandler('preemptReset');
-  ipcMain.handle('preemptReset', (event, setId: number | string) => {
+  ipcMain.handle('preemptReset', (event, setId: number) => {
     const transactionNum = preemptTransactionNum;
     preemptTransactionNum -= 1;
     const ret = resetSet(setId, transactionNum, /* preempt */ true);
@@ -366,7 +360,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     'preemptReport',
     (
       event,
-      id: number | string,
+      id: number,
       winnerId: number,
       isDQ: boolean,
       entrantScores:

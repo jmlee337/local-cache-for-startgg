@@ -50,18 +50,15 @@ const electronHandler = {
     ipcRenderer.invoke('upgradeWaveSets', waveId),
   upgradePhaseSets: (phaseId: number): Promise<void> =>
     ipcRenderer.invoke('upgradePhaseSets', phaseId),
-  resetSet: (id: number | string): Promise<void> =>
-    ipcRenderer.invoke('resetSet', id),
-  assignSetStation: (id: number | string, stationId: number): Promise<void> =>
+  resetSet: (id: number): Promise<void> => ipcRenderer.invoke('resetSet', id),
+  assignSetStation: (id: number, stationId: number): Promise<void> =>
     ipcRenderer.invoke('assignSetStation', id, stationId),
-  assignSetStream: (id: number | string, streamId: number): Promise<void> =>
+  assignSetStream: (id: number, streamId: number): Promise<void> =>
     ipcRenderer.invoke('assignSetStream', id, streamId),
-  callSet: (id: number | string): Promise<void> =>
-    ipcRenderer.invoke('callSet', id),
-  startSet: (id: number | string): Promise<void> =>
-    ipcRenderer.invoke('startSet', id),
+  callSet: (id: number): Promise<void> => ipcRenderer.invoke('callSet', id),
+  startSet: (id: number): Promise<void> => ipcRenderer.invoke('startSet', id),
   reportSet: (
-    id: number | string,
+    id: number,
     winnerId: number,
     isDQ: boolean,
     entrantScores:
@@ -76,10 +73,10 @@ const electronHandler = {
     ipcRenderer.invoke('deleteTransaction', transactionNum),
   makeResetRecursive: (transactionNum: number): Promise<void> =>
     ipcRenderer.invoke('makeResetRecursive', transactionNum),
-  preemptReset: (setId: number | string): Promise<void> =>
+  preemptReset: (setId: number): Promise<void> =>
     ipcRenderer.invoke('preemptReset', setId),
   preemptReport: (
-    id: number | string,
+    id: number,
     winnerId: number,
     isDQ: boolean,
     entrantScores:

@@ -19,7 +19,7 @@ export function initTransaction(
   updateClients = initUpdateClients;
 }
 
-export function resetSetTransaction(id: number | string) {
+export function resetSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = resetSet(id, currentTransactionNum);
@@ -28,7 +28,7 @@ export function resetSetTransaction(id: number | string) {
   return { set: ret.set };
 }
 
-export function callSetTransaction(id: number | string) {
+export function callSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = callSet(id, currentTransactionNum);
@@ -37,7 +37,7 @@ export function callSetTransaction(id: number | string) {
   return { set: ret.set };
 }
 
-export function startSetTransaction(id: number | string) {
+export function startSetTransaction(id: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = startSet(id, currentTransactionNum);
@@ -46,10 +46,7 @@ export function startSetTransaction(id: number | string) {
   return { set: ret.set };
 }
 
-export function assignSetStationTransaction(
-  id: number | string,
-  stationId: number,
-) {
+export function assignSetStationTransaction(id: number, stationId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = assignSetStation(id, stationId, currentTransactionNum);
@@ -58,10 +55,7 @@ export function assignSetStationTransaction(
   return { set: ret.set };
 }
 
-export function assignSetStreamTransaction(
-  id: number | string,
-  streamId: number,
-) {
+export function assignSetStreamTransaction(id: number, streamId: number) {
   const currentTransactionNum = transactionNum;
   transactionNum += 1;
   const ret = assignSetStream(id, streamId, currentTransactionNum);
@@ -71,7 +65,7 @@ export function assignSetStreamTransaction(
 }
 
 export function reportSetTransaction(
-  id: number | string,
+  id: number,
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
