@@ -121,6 +121,7 @@ export function dbInit(window: BrowserWindow) {
       ordinal INTEGER,
       fullRoundText TEXT,
       identifier TEXT,
+      bestOf INTEGER,
       round INTEGER,
       state INTEGER,
       stationId INTEGER,
@@ -147,6 +148,7 @@ export function dbInit(window: BrowserWindow) {
       lProgressingPhaseId INTEGER,
       lProgressingName TEXT,
       updatedAt INTEGER,
+      startedAt INTEGER,
       completedAt INTEGER,
       syncState INTEGER NOT NULL,
       UNIQUE (identifier, phaseGroupId)
@@ -176,6 +178,8 @@ export function dbInit(window: BrowserWindow) {
       entrant2Score INTEGER,
       winnerIdPresent INTEGER,
       winnerId INTEGER,
+      startedAtPresent INTEGER,
+      startedAt INTEGER,
       completedAtPresent INTEGER,
       completedAt INTEGER,
       stationIdPresent INTEGER,
@@ -484,6 +488,9 @@ function applyMutation(
   if (setMutation.winnerIdPresent) {
     set.winnerId = setMutation.winnerId;
   }
+  if (setMutation.startedAtPresent) {
+    set.startedAt = setMutation.startedAt;
+  }
   if (setMutation.completedAtPresent) {
     set.completedAt = setMutation.completedAt;
   }
@@ -569,6 +576,7 @@ function dbSetToRendererSet(
       .filter((c) => c.match(shortRoundTextRegex))
       .join(''),
     identifier: dbSet.identifier,
+    bestOf: dbSet.bestOf,
     round: dbSet.round,
     state: dbSet.state,
     entrant1Id: dbSet.entrant1Id,
@@ -588,6 +596,7 @@ function dbSetToRendererSet(
     })),
     winnerId: dbSet.winnerId,
     updatedAt: dbSet.updatedAt,
+    startedAt: dbSet.startedAt,
     completedAt: dbSet.completedAt,
     station:
       dbSet.stationId === null
@@ -1233,11 +1242,14 @@ export function resetSet(
     );
   }
 
+  const updatedAt = Date.now() / 1000;
   set.state = 1;
   set.entrant1Score = null;
   set.entrant2Score = null;
   set.winnerId = null;
-  const updatedAt = Date.now() / 1000;
+  // match sgg behavior: do not reset startedAt
+  set.completedAt = null;
+  set.updatedAt = updatedAt;
   db.transaction(() => {
     db!
       .prepare(
@@ -1286,8 +1298,6 @@ export function resetSet(
       .run({
         ...set,
         transactionNum,
-        completedAt: null,
-        updatedAt,
       });
     if (wProgressionSet) {
       db!
@@ -1415,7 +1425,11 @@ export function callSet(id: number | string, transactionNum: number) {
       `set not callable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
     );
   }
+
+  const updatedAt = Date.now() / 1000;
   set.state = 6;
+  set.startedAt = updatedAt;
+  set.updatedAt = updatedAt;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -1428,6 +1442,8 @@ export function callSet(id: number | string, transactionNum: number) {
       transactionNum,
       statePresent,
       state,
+      startedAtPresent,
+      startedAt,
       updatedAt
     ) VALUES (
       @id,
@@ -1439,12 +1455,13 @@ export function callSet(id: number | string, transactionNum: number) {
       @transactionNum,
       1,
       @state,
+      1,
+      @startedAt,
       @updatedAt
     )`,
   ).run({
     ...set,
     transactionNum,
-    updatedAt: Date.now() / 1000,
   });
   insertTransaction(
     {
@@ -1492,7 +1509,11 @@ export function startSet(id: number | string, transactionNum: number) {
       `set not startable: ${id}, entrant1Id ${entrant1Id}, entrant2Id ${entrant2Id}`,
     );
   }
+
+  const updatedAt = Date.now() / 1000;
   set.state = 2;
+  set.startedAt = updatedAt;
+  set.updatedAt = updatedAt;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -1505,6 +1526,8 @@ export function startSet(id: number | string, transactionNum: number) {
       transactionNum,
       statePresent,
       state,
+      startedAtPresent,
+      startedAt,
       updatedAt
     ) VALUES (
       @id,
@@ -1516,12 +1539,13 @@ export function startSet(id: number | string, transactionNum: number) {
       @transactionNum,
       1,
       @state,
+      1,
+      @startedAt,
       @updatedAt
     )`,
   ).run({
     ...set,
     transactionNum,
-    updatedAt: Date.now() / 1000,
   });
   insertTransaction(
     {
@@ -1572,6 +1596,7 @@ export function assignSetStation(
   applyMutations(set, []);
   set.stationId = stationId;
   set.streamId = station.streamId;
+  set.updatedAt = Date.now() / 1000;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -1604,7 +1629,6 @@ export function assignSetStation(
   ).run({
     ...set,
     transactionNum,
-    updatedAt: Date.now() / 1000,
   });
   insertTransaction(
     {
@@ -1658,6 +1682,7 @@ export function assignSetStream(
   } else {
     set.streamId = null;
   }
+  set.updatedAt = Date.now() / 1000;
 
   db.prepare(
     `INSERT INTO setMutations (
@@ -1686,7 +1711,6 @@ export function assignSetStream(
   ).run({
     ...set,
     transactionNum,
-    updatedAt: Date.now() / 1000,
   });
   insertTransaction(
     {
@@ -1766,8 +1790,10 @@ export function reportSet(
     throw new Error('cannot remove stage data in update');
   }
 
+  const updatedAt = Date.now() / 1000;
   set.state = 3;
   set.winnerId = winnerId;
+  set.updatedAt = updatedAt;
   if (isDQ) {
     set.entrant1Score = winnerId === entrant1Id ? 0 : -1;
     set.entrant2Score = winnerId === entrant2Id ? 0 : -1;
@@ -1779,8 +1805,11 @@ export function reportSet(
       (game) => game.winnerId === entrant2Id,
     ).length;
   }
-  const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
+  if (state !== 3) {
+    set.completedAt = updatedAt;
+  }
 
+  const loserId = winnerId === entrant1Id ? entrant2Id : entrant1Id;
   let wProgressionSet: ReportProgressionSet | undefined;
   let lProgressionSet: ReportProgressionSet | undefined;
   if (state !== 3) {
@@ -1931,7 +1960,6 @@ export function reportSet(
       }
     }
   }
-  const updatedAt = Date.now() / 1000;
   db.transaction(() => {
     db!
       .prepare(
@@ -1992,7 +2020,6 @@ export function reportSet(
         entrant2Id,
         completedAtPresent: state === 3 ? null : 1,
         completedAt: state === 3 ? null : updatedAt,
-        updatedAt,
       });
     games.length = 0;
     if (gameData.length > 0) {
@@ -2414,6 +2441,9 @@ export function finalizeTransaction(
         if (dbSetMutation.winnerIdPresent) {
           exprs.push('winnerId = @winnerId');
         }
+        if (dbSetMutation.startedAtPresent) {
+          exprs.push('startedAt = @startedAt');
+        }
         if (dbSetMutation.completedAtPresent) {
           exprs.push('completedAt = @completedAt');
         }
@@ -2458,6 +2488,7 @@ export function finalizeTransaction(
               entrant2Score = @entrant2Score,
               winnerId = @winnerId,
               updatedAt = @updatedAt,
+              startedAt = @startedAt,
               completedAt = @completedAt,
               stationId = @stationId,
               streamId = @streamId
@@ -2850,6 +2881,7 @@ export function updateEvent(
             ordinal,
             fullRoundText,
             identifier,
+            bestOf,
             round,
             state,
             stationId,
@@ -2886,6 +2918,7 @@ export function updateEvent(
             @ordinal,
             @fullRoundText,
             @identifier,
+            @bestOf,
             @round,
             @state,
             @stationId,
@@ -2922,6 +2955,7 @@ export function updateEvent(
             tournamentId = @tournamentId,
             ordinal = @ordinal,
             fullRoundText = @fullRoundText,
+            bestOf = @bestOf,
             round = @round,
             state = @state,
             stationId = @stationId,

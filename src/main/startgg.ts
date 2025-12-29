@@ -542,6 +542,7 @@ function dbSetsFromApiSets(
         eventId: set.eventId,
         fullRoundText: set.fullRoundText,
         identifier: set.identifier,
+        bestOf: set.bestOf,
         round: set.round,
         entrant1PrereqType: set.entrant1PrereqType,
         entrant1PrereqId: set.entrant1PrereqId,
@@ -556,6 +557,7 @@ function dbSetsFromApiSets(
         entrant2Score: set.entrant2Score,
         winnerId: set.winnerId,
         updatedAt: set.updatedAt,
+        startedAt: set.startedAt,
         completedAt: set.completedAt,
         stationId: set.stationId,
         streamId: set.streamId,
@@ -809,6 +811,7 @@ const UPDATE_SET_INNER = `
     }
   }
   updatedAt
+  startedAt
   completedAt
   winnerId
 `;
@@ -829,6 +832,7 @@ function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
     entrant2Score: standing2 ? standing2.stats.score.value : null,
     winnerId: set.winnerId,
     updatedAt: set.updatedAt,
+    startedAt: set.startedAt,
     completedAt: set.completedAt,
     stationId: set.station?.id ?? null,
     streamId: set.stream?.id ?? null,
