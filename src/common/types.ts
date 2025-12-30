@@ -468,6 +468,7 @@ export type SyncResult = {
 export type WebsocketStatus = {
   err: string;
   port: number;
+  connections: string[];
 };
 
 export type PoolSiblings = {

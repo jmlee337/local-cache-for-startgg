@@ -34,6 +34,8 @@ import {
   setTournamentId,
 } from './db';
 import {
+  getWebsocketStatus,
+  initWebsocket,
   startWebsocketServer,
   stopWebsocketServer,
   updateSubscribers,
@@ -48,8 +50,6 @@ import {
   startSetTransaction,
 } from './transaction';
 import { ApiGameData } from '../common/types';
-
-const DEFAULT_PORT = 50000;
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateClients = () => {
@@ -107,49 +107,15 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     }
   });
 
-  let websocketErr = '';
-  let websocketPort = 0;
+  initWebsocket(mainWindow);
   ipcMain.removeHandler('getWebsocketStatus');
-  ipcMain.handle('getWebsocketStatus', () => ({
-    err: websocketErr,
-    port: websocketPort,
-  }));
-
-  const startWebsocket = async () => {
-    let portToTry = DEFAULT_PORT;
-    let ret = await startWebsocketServer(portToTry);
-    if (ret.err === 'Port in use') {
-      do {
-        portToTry += 1;
-        // eslint-disable-next-line no-await-in-loop
-        ret = await startWebsocketServer(portToTry);
-      } while (ret.err === 'Port in use');
-    }
-    if (ret.err) {
-      websocketErr = ret.err;
-    } else {
-      websocketPort = portToTry;
-    }
-    mainWindow.webContents.send('websocketStatus', {
-      err: websocketErr,
-      port: websocketPort,
-    });
-  };
-  const stopWebsocket = () => {
-    stopWebsocketServer();
-    websocketErr = '';
-    websocketPort = 0;
-    mainWindow.webContents.send('websocketStatus', {
-      err: websocketErr,
-      port: websocketPort,
-    });
-  };
+  ipcMain.handle('getWebsocketStatus', getWebsocketStatus);
 
   let websocket = store.has('websocket')
     ? (store.get('websocket') as boolean)
     : true;
   if (websocket) {
-    startWebsocket();
+    startWebsocketServer();
   }
 
   ipcMain.removeHandler('getWebsocket');
@@ -161,9 +127,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       store.set('websocket', newWebsocket);
       websocket = newWebsocket;
       if (websocket) {
-        startWebsocket();
+        startWebsocketServer();
       } else {
-        stopWebsocket();
+        stopWebsocketServer();
       }
     }
   });

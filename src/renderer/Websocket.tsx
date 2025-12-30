@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Box,
   Dialog,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   IconButton,
+  List,
+  ListItem,
+  ListItemText,
   Tooltip,
 } from '@mui/material';
 import { LeakAdd, LeakRemove } from '@mui/icons-material';
@@ -15,6 +18,7 @@ export default function Websocket() {
   const [websocketStatus, setWebsocketStatus] = useState<WebsocketStatus>({
     err: '',
     port: 0,
+    connections: [],
   });
   useEffect(() => {
     window.electron.onWebsocketStatus((event, newWebsocketStatus) => {
@@ -82,11 +86,20 @@ export default function Websocket() {
           {websocketStatus.err ? 'Websocket Error' : 'Websocket Running'}
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ typography: (theme) => theme.typography.body2 }}>
+          <DialogContentText>
             {websocketStatus.err
               ? websocketStatus.err
               : `ws://localhost:${websocketStatus.port}`}
-          </Box>
+          </DialogContentText>
+          {websocketStatus.port && websocketStatus.connections.length > 0 && (
+            <List disablePadding style={{ margin: '8px 0' }}>
+              {websocketStatus.connections.map((connection) => (
+                <ListItem disablePadding>
+                  <ListItemText>{connection}</ListItemText>
+                </ListItem>
+              ))}
+            </List>
+          )}
         </DialogContent>
       </Dialog>
     </>
