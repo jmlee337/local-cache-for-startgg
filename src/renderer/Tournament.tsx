@@ -32,9 +32,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
   List,
-  ListItem,
   ListItemButton,
   ListItemText,
   Paper,
@@ -670,7 +670,24 @@ function UnloadedEventListItem({
 }) {
   const [loading, setLoading] = useState(false);
   return (
-    <ListItem disablePadding style={{ justifyContent: 'space-between' }}>
+    <ListItemButton
+      disableGutters
+      style={{
+        justifyContent: 'space-between',
+        padding: '0 8px 0 0',
+      }}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          await window.electron.loadEvent(event.id);
+        } catch (e: any) {
+          const message = e instanceof Error ? e.message : e;
+          showError(message);
+        } finally {
+          setLoading(false);
+        }
+      }}
+    >
       <Stack direction="row" alignItems="center">
         <ListItemText style={{ marginRight: '8px' }}>
           {event.name} <Typography variant="caption">({event.id})</Typography>
@@ -686,27 +703,11 @@ function UnloadedEventListItem({
         )}
       </Stack>
       {loading ? (
-        <CircularProgress size="24px" style={{ padding: '8px' }} />
+        <CircularProgress size="24px" />
       ) : (
-        <Tooltip title={`Load event: ${event.name}`} placement="left">
-          <IconButton
-            onClick={async () => {
-              setLoading(true);
-              try {
-                await window.electron.loadEvent(event.id);
-              } catch (e: any) {
-                const message = e instanceof Error ? e.message : e;
-                showError(message);
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            <Download />
-          </IconButton>
-        </Tooltip>
+        <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
       )}
-    </ListItem>
+    </ListItemButton>
   );
 }
 
@@ -1352,6 +1353,7 @@ export default function Tournament() {
                 />
               ))}
             </List>
+            <Divider style={{ margin: '8px -8px' }} />
           </Collapse>
         )}
         {loadedEvents.length > 0 && (
