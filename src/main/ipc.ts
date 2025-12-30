@@ -417,4 +417,17 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     );
     app.quit();
   });
+
+  (async () => {
+    if (apiKey) {
+      try {
+        mainWindow.webContents.send(
+          'adminedTournaments',
+          await getAdminedTournaments(),
+        );
+      } catch {
+        // just catch
+      }
+    }
+  })();
 }

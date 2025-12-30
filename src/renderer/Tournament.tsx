@@ -813,14 +813,12 @@ function getDescription(type: TransactionType) {
 }
 
 export default function Tournament() {
-  const [gettingAdminedTournaments, setGettingAdminedTournaments] =
-    useState(false);
+  const [gettingTournaments, setGettingTournaments] = useState(false);
   const [adminedTournaments, setAdminedTournaments] = useState<
     AdminedTournament[]
   >([]);
   const [adminedTournamentsError, setAdminedTournamentsError] = useState('');
-  const getAdminedTournaments = async () => {
-    setGettingAdminedTournaments(true);
+  const getAdminedTournaments = useCallback(async () => {
     try {
       setAdminedTournaments(await window.electron.getAdminedTournaments());
       setAdminedTournamentsError('');
@@ -864,25 +862,26 @@ export default function Tournament() {
           `Failed to get tournaments from start.gg: ${err}`,
         );
       }
-    } finally {
-      setGettingAdminedTournaments(false);
     }
-  };
+  }, []);
   const [localTournaments, setLocalTournaments] = useState<AdminedTournament[]>(
     [],
   );
-  const getTournaments = async () => {
-    setLocalTournaments(await window.electron.getLocalTournaments());
-    getAdminedTournaments();
-  };
+  const getTournaments = useCallback(async () => {
+    try {
+      setGettingTournaments(true);
+      setLocalTournaments(await window.electron.getLocalTournaments());
+      getAdminedTournaments();
+    } finally {
+      setGettingTournaments(false);
+    }
+  }, [getAdminedTournaments]);
+
+  const [refreshing, setRefreshing] = useState(false);
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
       setAdminedTournaments(newAdminedTournaments);
     });
-  }, []);
-
-  const [refreshing, setRefreshing] = useState(false);
-  useEffect(() => {
     window.electron.onRefreshing((event, newRefreshing) => {
       setRefreshing(newRefreshing);
     });
@@ -1156,10 +1155,10 @@ export default function Tournament() {
                     Set tournament
                     <Tooltip title="Refresh">
                       <IconButton
-                        disabled={gettingAdminedTournaments}
+                        disabled={gettingTournaments}
                         onClick={getTournaments}
                       >
-                        {gettingAdminedTournaments ? (
+                        {gettingTournaments ? (
                           <CircularProgress size="24px" />
                         ) : (
                           <Refresh />

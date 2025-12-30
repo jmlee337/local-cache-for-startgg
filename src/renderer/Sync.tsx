@@ -30,6 +30,13 @@ export default function Sync() {
     inner();
   }, []);
 
+  const lastSuccessTimeStr = useMemo(() => {
+    if (syncResult.lastSuccessMs) {
+      return format(new Date(syncResult.lastSuccessMs), 'HH:mm:ss');
+    }
+    return '';
+  }, [syncResult.lastSuccessMs]);
+
   const [open, setOpen] = useState(false);
 
   const success = useMemo(
@@ -75,10 +82,7 @@ export default function Sync() {
       >
         <DialogTitle>
           {success
-            ? `Last successful sync: ${format(
-                new Date(syncResult.lastSuccessMs),
-                'HH:mm:ss',
-              )}`
+            ? `Last successful sync: ${lastSuccessTimeStr}`
             : `Offline since ${format(
                 new Date(syncResult.errorSinceMs),
                 'HH:mm:ss',
@@ -89,8 +93,7 @@ export default function Sync() {
             <>
               {syncResult.lastSuccessMs > 0 && (
                 <Box sx={{ typography: (theme) => theme.typography.body1 }}>
-                  Last successful sync:{' '}
-                  {format(new Date(syncResult.lastSuccessMs), 'HH:mm:ss')}
+                  Last successful sync: {lastSuccessTimeStr}
                 </Box>
               )}
               <Box sx={{ typography: (theme) => theme.typography.body1 }}>
