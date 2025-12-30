@@ -3543,10 +3543,17 @@ export function getTournament(): RendererTournament | undefined {
     )
     .all({ id: currentTournamentId }) as DbParticipant[];
   const dbStations = db
-    .prepare('SELECT * FROM stations WHERE tournamentId = @id')
+    .prepare(
+      'SELECT * FROM stations WHERE tournamentId = @id ORDER BY number ASC',
+    )
     .all({ id: currentTournamentId }) as DbStation[];
   const dbStreams = db
-    .prepare('SELECT * FROM streams WHERE tournamentId = @id')
+    .prepare(
+      `SELECT *
+        FROM streams
+        WHERE tournamentId = @id
+        ORDER BY streamSource ASC, streamName ASC`,
+    )
     .all({ id: currentTournamentId }) as DbStream[];
   lastTournament = {
     id: dbTournament.id,
