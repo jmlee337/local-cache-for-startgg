@@ -1,4 +1,3 @@
-// TODO field for fully synced
 export type AdminedTournament = {
   id: number;
   slug: string;
