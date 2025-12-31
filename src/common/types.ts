@@ -109,6 +109,7 @@ export type RendererEvent = {
   name: string;
   slug: string;
   isOnline: boolean;
+  videogameId: number;
   isLoaded: boolean;
   phases: RendererPhase[];
 };
@@ -332,6 +333,7 @@ export type DbEvent = {
   name: string;
   slug: string;
   isOnline: 0 | 1;
+  videogameId: number;
 };
 
 export type DbTournament = {

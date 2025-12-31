@@ -290,6 +290,7 @@ export async function getApiTournament(inSlug: string) {
       name: event.name,
       slug: event.slug,
       isOnline: event.isOnline ? 1 : 0,
+      videogameId: event.videogameId,
     }));
     upsertTournament(tournament, events);
 
