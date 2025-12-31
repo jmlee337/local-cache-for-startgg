@@ -2,7 +2,7 @@ import http from 'http';
 import type { connection } from 'websocket';
 import websocket from 'websocket';
 import { BrowserWindow } from 'electron';
-import { getLastTournament } from './db';
+import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
   assignSetStreamTransaction,
@@ -90,10 +90,13 @@ function sendStatus() {
   mainWindow?.webContents.send('websocketStatus', getWebsocketStatus());
 }
 
-function sendTournamentUpdateEvent(connection: connection) {
+function sendTournamentUpdateEvent(
+  connection: connection,
+  subscriberTournament: RendererTournament | undefined,
+) {
   const event: Event = {
     op: 'tournament-update-event',
-    tournament: getLastTournament(),
+    tournament: subscriberTournament,
   };
   connection.sendUTF(JSON.stringify(event));
 }
@@ -162,7 +165,10 @@ export async function startWebsocketServer() {
           );
           connections.add(newConnection);
           sendStatus();
-          sendTournamentUpdateEvent(newConnection);
+          sendTournamentUpdateEvent(
+            newConnection,
+            getLastSubscriberTournament(),
+          );
           newConnection.on('message', async (data) => {
             if (data.type === 'binary') {
               return;
@@ -358,6 +364,10 @@ export function initWebsocket(initMainWindow: BrowserWindow) {
   mainWindow = initMainWindow;
 }
 
-export function updateSubscribers() {
-  Array.from(connections.keys()).forEach(sendTournamentUpdateEvent);
+export function updateSubscribers(
+  subscriberTournament: RendererTournament | undefined,
+) {
+  Array.from(connections.keys()).forEach((connection) => {
+    sendTournamentUpdateEvent(connection, subscriberTournament);
+  });
 }

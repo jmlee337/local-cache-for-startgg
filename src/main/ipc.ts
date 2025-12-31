@@ -18,6 +18,7 @@ import {
   deleteTransaction,
   getConflict,
   getConflictResolve,
+  getLastSubscriberTournament,
   getLastTournament,
   getPoolSiblings,
   getPreviewSetIdFromPool,
@@ -57,7 +58,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     setImmediate(() => {
       getTournament();
       mainWindow.webContents.send('tournament', getLastTournament());
-      updateSubscribers();
+      updateSubscribers(getLastSubscriberTournament());
     });
   };
 
