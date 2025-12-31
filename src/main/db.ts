@@ -3568,6 +3568,7 @@ export function getTournament(): RendererTournament | undefined {
         ORDER BY streamSource ASC, streamName ASC`,
     )
     .all({ id: currentTournamentId }) as DbStream[];
+  // TODO decouple unloaded events here. filter views? idk
   lastTournament = {
     id: dbTournament.id,
     name: dbTournament.name,
