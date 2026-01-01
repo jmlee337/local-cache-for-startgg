@@ -104,17 +104,19 @@ export type RendererPhase = {
   phaseOrder: number;
 };
 
-export type RendererEvent = {
+export type RendererUnloadedEvent = {
   id: number;
   name: string;
   slug: string;
   isOnline: boolean;
   videogameId: number;
-  isLoaded: boolean;
+};
+
+export type RendererEvent = RendererUnloadedEvent & {
   phases: RendererPhase[];
 };
 
-export type RendererTournament = {
+export type SubscriberTournament = {
   id: number;
   name: string;
   slug: string;
@@ -123,6 +125,10 @@ export type RendererTournament = {
   participants: RendererParticipant[];
   stations: RendererStation[];
   streams: RendererStream[];
+};
+
+export type RendererTournament = SubscriberTournament & {
+  unloadedEvents: RendererUnloadedEvent[];
 };
 
 export type RendererConflict = {

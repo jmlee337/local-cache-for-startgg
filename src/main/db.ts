@@ -39,6 +39,10 @@ import {
   DbSetGame,
   DbSetMutationGame,
   RendererPool,
+  RendererEvent,
+  RendererUnloadedEvent,
+  SubscriberTournament,
+  RendererPhase,
 } from '../common/types';
 
 enum SyncStatus {
@@ -3518,9 +3522,15 @@ export function getLastSubscriberTournament() {
     return undefined;
   }
 
-  const subscriberTournament: RendererTournament = {
-    ...lastTournament,
-    events: lastTournament.events.filter((event) => event.isLoaded),
+  const subscriberTournament: SubscriberTournament = {
+    id: lastTournament.id,
+    name: lastTournament.name,
+    slug: lastTournament.slug,
+    location: lastTournament.location,
+    events: lastTournament.events,
+    participants: lastTournament.participants,
+    stations: lastTournament.stations,
+    streams: lastTournament.streams,
   };
   return subscriberTournament;
 }
@@ -3538,6 +3548,7 @@ export function getTournament(): RendererTournament | undefined {
   const dbTournament = db
     .prepare('SELECT * FROM tournaments WHERE id = @id')
     .get({ id: currentTournamentId }) as DbTournament;
+
   const dbEvents = db
     .prepare('SELECT * FROM events WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbEvent[];
@@ -3548,6 +3559,16 @@ export function getTournament(): RendererTournament | undefined {
         .all({ id: currentTournamentId }) as DbLoadedEvent[]
     ).map((loadedEvent) => loadedEvent.id),
   );
+  const unloadedEvents: DbEvent[] = [];
+  const loadedEvents: DbEvent[] = [];
+  dbEvents.forEach((dbEvent) => {
+    if (dbLoadedEventIds.has(dbEvent.id)) {
+      loadedEvents.push(dbEvent);
+    } else {
+      unloadedEvents.push(dbEvent);
+    }
+  });
+
   const dbPhases = db
     .prepare('SELECT * FROM phases WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbPhase[];
@@ -3584,50 +3605,62 @@ export function getTournament(): RendererTournament | undefined {
     name: dbTournament.name,
     slug: dbTournament.slug,
     location: dbTournament.location,
-    events: dbEvents.map((dbEvent) => ({
-      id: dbEvent.id,
-      name: dbEvent.name,
-      slug: dbEvent.slug,
-      isOnline: dbEvent.isOnline === 1,
-      videogameId: dbEvent.videogameId,
-      isLoaded: dbLoadedEventIds.has(dbEvent.id),
-      phases: dbPhases
-        .filter((dbPhase) => dbPhase.eventId === dbEvent.id)
-        .sort((a, b) => a.phaseOrder - b.phaseOrder)
-        .map((dbPhase) => ({
-          id: dbPhase.id,
-          name: dbPhase.name,
-          phaseOrder: dbPhase.phaseOrder,
-          pools: dbPools
-            .filter((dbPool) => dbPool.phaseId === dbPhase.id)
-            .map((dbPool): RendererPool => {
-              const rendererSets = (
-                db!
-                  .prepare(
-                    'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY ordinal, id',
-                  )
-                  .all({ id: dbPool.id }) as DbSet[]
-              ).map((dbSet) => {
-                const dbSetGames = db!
-                  .prepare(
-                    'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
-                  )
-                  .all({ setId: dbSet.setId }) as DbSetGame[];
-                applyMutations(dbSet, dbSetGames);
-                return dbSetToRendererSet(dbSet, dbSetGames);
-              });
+    unloadedEvents: unloadedEvents.map(
+      (dbEvent): RendererUnloadedEvent => ({
+        id: dbEvent.id,
+        name: dbEvent.name,
+        slug: dbEvent.slug,
+        isOnline: dbEvent.isOnline === 1,
+        videogameId: dbEvent.videogameId,
+      }),
+    ),
+    events: loadedEvents.map(
+      (dbEvent): RendererEvent => ({
+        id: dbEvent.id,
+        name: dbEvent.name,
+        slug: dbEvent.slug,
+        isOnline: dbEvent.isOnline === 1,
+        videogameId: dbEvent.videogameId,
+        phases: dbPhases
+          .filter((dbPhase) => dbPhase.eventId === dbEvent.id)
+          .sort((a, b) => a.phaseOrder - b.phaseOrder)
+          .map(
+            (dbPhase): RendererPhase => ({
+              id: dbPhase.id,
+              name: dbPhase.name,
+              phaseOrder: dbPhase.phaseOrder,
+              pools: dbPools
+                .filter((dbPool) => dbPool.phaseId === dbPhase.id)
+                .map((dbPool): RendererPool => {
+                  const rendererSets = (
+                    db!
+                      .prepare(
+                        'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY ordinal, id',
+                      )
+                      .all({ id: dbPool.id }) as DbSet[]
+                  ).map((dbSet) => {
+                    const dbSetGames = db!
+                      .prepare(
+                        'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
+                      )
+                      .all({ setId: dbSet.setId }) as DbSetGame[];
+                    applyMutations(dbSet, dbSetGames);
+                    return dbSetToRendererSet(dbSet, dbSetGames);
+                  });
 
-              return {
-                id: dbPool.id,
-                name: dbPool.name,
-                bracketType: dbPool.bracketType,
-                waveId: dbPool.waveId,
-                winnersTargetPhaseId: dbPool.winnersTargetPhaseId,
-                sets: rendererSets,
-              };
+                  return {
+                    id: dbPool.id,
+                    name: dbPool.name,
+                    bracketType: dbPool.bracketType,
+                    waveId: dbPool.waveId,
+                    winnersTargetPhaseId: dbPool.winnersTargetPhaseId,
+                    sets: rendererSets,
+                  };
+                }),
             }),
-        })),
-    })),
+          ),
+      }),
+    ),
     participants: dbParticipants,
     stations: dbStations,
     streams: dbStreams,

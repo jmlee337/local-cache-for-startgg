@@ -59,6 +59,7 @@ import {
   RendererSet,
   RendererStream,
   RendererTournament,
+  RendererUnloadedEvent,
   TransactionType,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
@@ -665,7 +666,7 @@ function UnloadedEventListItem({
   event,
   showError,
 }: {
-  event: RendererEvent;
+  event: RendererUnloadedEvent;
   showError: (message: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -1002,12 +1003,6 @@ export default function Tournament() {
   ]);
 
   const [unloadedOpen, setUnloadedOpen] = useState(true);
-  const unloadedEvents = tournament
-    ? tournament.events.filter((event) => !event.isLoaded)
-    : [];
-  const loadedEvents = tournament
-    ? tournament.events.filter((event) => event.isLoaded)
-    : [];
 
   let reportGameData:
     | [
@@ -1341,10 +1336,10 @@ export default function Tournament() {
         </Toolbar>
       </AppBar>
       <Stack marginTop="88px">
-        {unloadedEvents.length > 0 && (
+        {tournament && tournament.unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen} unmountOnExit>
             <List disablePadding>
-              {unloadedEvents.map((event) => (
+              {tournament.unloadedEvents.map((event) => (
                 <UnloadedEventListItem
                   key={event.id}
                   event={event}
@@ -1355,9 +1350,9 @@ export default function Tournament() {
             <Divider style={{ margin: '8px -8px' }} />
           </Collapse>
         )}
-        {loadedEvents.length > 0 && (
+        {tournament && tournament.events.length > 0 && (
           <List disablePadding style={{ margin: '0 -8px' }}>
-            {loadedEvents.map((event) => (
+            {tournament.events.map((event) => (
               <LoadedEventListItem
                 key={event.id}
                 event={event}

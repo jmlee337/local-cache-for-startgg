@@ -14,7 +14,7 @@ import {
 import {
   ApiGameData,
   RendererSet,
-  RendererTournament,
+  SubscriberTournament,
   WebsocketStatus,
 } from '../common/types';
 
@@ -58,7 +58,7 @@ type Response = {
 
 type Event = {
   op: 'tournament-update-event';
-  tournament?: RendererTournament;
+  tournament?: SubscriberTournament;
 };
 
 const BRACKET_PROTOCOL = 'bracket-protocol';
@@ -92,7 +92,7 @@ function sendStatus() {
 
 function sendTournamentUpdateEvent(
   connection: connection,
-  subscriberTournament: RendererTournament | undefined,
+  subscriberTournament: SubscriberTournament | undefined,
 ) {
   const event: Event = {
     op: 'tournament-update-event',
@@ -365,7 +365,7 @@ export function initWebsocket(initMainWindow: BrowserWindow) {
 }
 
 export function updateSubscribers(
-  subscriberTournament: RendererTournament | undefined,
+  subscriberTournament: SubscriberTournament | undefined,
 ) {
   Array.from(connections.keys()).forEach((connection) => {
     sendTournamentUpdateEvent(connection, subscriberTournament);
