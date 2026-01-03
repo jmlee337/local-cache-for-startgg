@@ -3698,6 +3698,13 @@ export function deleteTournament(id: number) {
     throw new Error(`No tournament with id: ${id}`);
   }
 
+  const dbParticipants = db
+    .prepare('SELECT * FROM participants WHERE tournamentId = @id')
+    .all({ id }) as DbParticipant[];
+  const participantIds = dbParticipants.map(
+    (dbParticipant) => dbParticipant.id,
+  );
+
   const dbEvents = db
     .prepare('SELECT * FROM events WHERE tournamentId = @id')
     .all({ id }) as DbEvent[];
@@ -3716,8 +3723,12 @@ export function deleteTournament(id: number) {
     db!
       .prepare('DELETE FROM loadedEvents WHERE tournamentId = @id')
       .run({ id });
+    db!
+      .prepare('DELETE FROM participants WHERE tournamentId = @id')
+      .run({ id });
     db!.prepare('DELETE FROM phases WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM pools WHERE tournamentId = @id').run({ id });
+    db!.prepare('DELETE FROM seeds WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM sets WHERE tournamentId = @id').run({ id });
     db!
       .prepare('DELETE FROM setMutations WHERE tournamentId = @id')
@@ -3728,6 +3739,14 @@ export function deleteTournament(id: number) {
       .prepare('DELETE FROM transactions WHERE tournamentId = @id')
       .run({ id });
 
+    db!
+      .prepare(
+        `DELETE FROM participantsToEntrant WHERE participantId IN (${participantIds.join(
+          ', ',
+        )})`,
+      )
+      .run();
+
     eventIds.forEach((eventId) => {
       db!
         .prepare('DELETE FROM entrants WHERE eventId = @eventId')
@@ -3736,7 +3755,7 @@ export function deleteTournament(id: number) {
         .prepare('DELETE FROM setGames WHERE eventId = @eventId')
         .run({ eventId });
       db!
-        .prepare('SELECT FROM setMutationGames WHERE eventId = @eventId')
+        .prepare('DELETE FROM setMutationGames WHERE eventId = @eventId')
         .run({ eventId });
     });
 
