@@ -526,16 +526,20 @@ function dbSetsFromApiSets(
     .map((set): DbSet => {
       if (Array.isArray(set.games)) {
         games.push(
-          ...(set.games as any[]).map((game: any) => ({
-            id: game.id,
-            setId: game.setId,
-            eventId: set.eventId,
-            orderNum: game.orderNum,
-            entrant1Score: game.entrant1P1Stocks,
-            entrant2Score: game.entrant2P1Stocks,
-            stageId: game.stageId,
-            updatedAt: game.updatedAt,
-          })),
+          ...(set.games as any[])
+            .filter((game: any) => game.state === 3)
+            .map((game: any) => ({
+              id: game.id,
+              setId: game.setId,
+              eventId: set.eventId,
+              orderNum: game.orderNum,
+              entrant1Score: game.entrant1P1Stocks,
+              entrant2Score: game.entrant2P1Stocks,
+              stageId: game.stageId,
+              state: game.state,
+              updatedAt: game.updatedAt,
+              winnerId: game.winnerId,
+            })),
         );
       }
       return {

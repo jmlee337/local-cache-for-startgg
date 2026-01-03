@@ -45,6 +45,7 @@ export type RendererGame = {
   entrant1Score: number | null;
   entrant2Score: number | null;
   stageId: number | null;
+  winnerId: number;
 };
 
 export type RendererParticipant = {
@@ -294,7 +295,9 @@ export type DbSetGame = {
   entrant1Score: number | null;
   entrant2Score: number | null;
   stageId: number | null;
+  state: 3;
   updatedAt: number;
+  winnerId: number;
 };
 export type DbSetMutationGame = DbSetGame & {
   transactionNum: number;

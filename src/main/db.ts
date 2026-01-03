@@ -210,7 +210,9 @@ export function dbInit(window: BrowserWindow) {
       entrant1Score INTEGER,
       entrant2Score INTEGER,
       stageId INTEGER,
-      updatedAt INTEGER NOT NULL
+      state INTEGER,
+      updatedAt INTEGER NOT NULL,
+      winnerId INTEGER
     )`,
   ).run();
   db.prepare(
@@ -222,7 +224,9 @@ export function dbInit(window: BrowserWindow) {
       entrant1Score INTEGER,
       entrant2Score INTEGER,
       stageId INTEGER,
+      state INTEGER,
       updatedAt INTEGER NOT NULL,
+      winnerId INTEGER,
       transactionNum INTEGER NOT NULL
     )`,
   ).run();
@@ -610,6 +614,7 @@ function dbSetToRendererSet(
       entrant1Score: dbGame.entrant1Score,
       entrant2Score: dbGame.entrant2Score,
       stageId: dbGame.stageId,
+      winnerId: dbGame.winnerId,
     })),
     winnerId: dbSet.winnerId,
     updatedAt: dbSet.updatedAt,
@@ -2050,7 +2055,9 @@ export function reportSet(
             entrant1Score: game.entrant1Score ?? null,
             entrant2Score: game.entrant2Score ?? null,
             stageId: game.stageId ?? null,
+            state: 3,
             updatedAt,
+            winnerId: game.winnerId,
             transactionNum,
           }),
         ),
@@ -2065,7 +2072,9 @@ export function reportSet(
                 entrant1Score,
                 entrant2Score,
                 stageId,
+                state,
                 updatedAt,
+                winnerId,
                 transactionNum
               ) values (
                 @setId,
@@ -2074,7 +2083,9 @@ export function reportSet(
                 @entrant1Score,
                 @entrant2Score,
                 @stageId,
+                @state,
                 @updatedAt,
+                @winnerId,
                 @transactionNum
               )`,
           )
@@ -3024,7 +3035,9 @@ export function updateEvent(
           entrant1Score,
           entrant2Score,
           stageId,
-          updatedAt
+          state,
+          updatedAt,
+          winnerId
         ) values (
           @id,
           @setId,
@@ -3033,7 +3046,9 @@ export function updateEvent(
           @entrant1Score,
           @entrant2Score,
           @stageId,
-          @updatedAt
+          @state,
+          @updatedAt,
+          @winnerId
         )`,
       )
       .run(game);
