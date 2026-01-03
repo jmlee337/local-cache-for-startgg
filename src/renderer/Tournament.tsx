@@ -1410,7 +1410,7 @@ export default function Tournament() {
             </Typography>
             <Stack direction="row" alignItems="center" spacing="8px">
               {hasStagesAndScores(reportSet) && (
-                <Tooltip title="Most likely hotswapped">
+                <Tooltip title="Stages and stocks reported - likely hotswapped">
                   <FolderZipOutlined />
                 </Tooltip>
               )}
