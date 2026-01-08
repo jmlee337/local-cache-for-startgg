@@ -1581,9 +1581,7 @@ export default function Tournament() {
                   disabled={
                     !reportSet?.entrant1Id ||
                     !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        hasStagesAndScores(reportSet)))
+                    reportSet?.state === 3
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant1Id
@@ -1749,9 +1747,7 @@ export default function Tournament() {
                   disabled={
                     !reportSet?.entrant1Id ||
                     !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        hasStagesAndScores(reportSet)))
+                    reportSet?.state === 3
                   }
                   variant={
                     reportWinnerId === reportSet?.entrant2Id

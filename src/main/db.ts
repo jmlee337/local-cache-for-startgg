@@ -1801,8 +1801,8 @@ export function reportSet(
   if (state === 3 && winnerId !== set.winnerId) {
     throw new Error('cannot change winner of completed set');
   }
-  if (state === 3 && isDQ) {
-    throw new Error('cannot change reported set to DQ');
+  if (state === 3 && gameData.length === 0) {
+    throw new Error('cannot update set without gameData');
   }
   if (
     state === 3 &&

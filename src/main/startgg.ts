@@ -117,6 +117,16 @@ function isRetryableApiError(e: any) {
   return false;
 }
 
+const NO_RETURN_ERROR_MESSAGE = 'no return from start.gg';
+function isNoReturnError(e: any) {
+  if (e instanceof Error) {
+    if (e.message === NO_RETURN_ERROR_MESSAGE) {
+      return true;
+    }
+  }
+  return false;
+}
+
 let mainWindow: BrowserWindow | undefined;
 const idToSlug = new Map<number, string>();
 export function startggInit(window: BrowserWindow) {
@@ -891,6 +901,9 @@ async function resetSet(
     recursive ? RESET_SET_RECURSIVE_MUTATION : RESET_SET_MUTATION,
     { setId },
   );
+  if (!data.resetSet) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.resetSet);
 }
 
@@ -911,6 +924,9 @@ async function assignSetStation(
     setId,
     stationId,
   });
+  if (!data.assignStation) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.assignStation);
 }
 
@@ -931,6 +947,9 @@ async function assignSetStream(
     setId,
     streamId,
   });
+  if (!data.assignStream) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.assignStream);
 }
 
@@ -945,6 +964,9 @@ async function callSet(setId: number | string): Promise<ApiSetUpdate> {
   }
 
   const data = await fetchGql(apiKey, CALL_SET_MUTATION, { setId });
+  if (!data.markSetCalled) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.markSetCalled);
 }
 
@@ -959,6 +981,9 @@ async function startSet(setId: number | string): Promise<ApiSetUpdate> {
   }
 
   const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
+  if (!data.markSetInProgress) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.markSetInProgress);
 }
 
@@ -988,6 +1013,9 @@ async function reportSet(
     isDQ,
     gameData,
   });
+  if (!data.reportBracketSet) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return (data.reportBracketSet as any[]).map(updateSetToApiSetUpdate);
 }
 
@@ -1017,6 +1045,9 @@ async function updateSet(
     isDQ,
     gameData,
   });
+  if (!data.updateBracketSet) {
+    throw new Error(NO_RETURN_ERROR_MESSAGE);
+  }
   return updateSetToApiSetUpdate(data.updateBracketSet);
 }
 
@@ -1052,34 +1083,34 @@ async function tryNextTransaction(id: number, slug: string) {
                 await resetSet(transaction.setId, transaction.isRecursive),
               ];
             } catch (e: any) {
-              if (e instanceof ApiError) {
-                if (
-                  e.gqlErrors.some((gqlError) =>
-                    gqlError.message.startsWith('Set not found for id: '),
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.SET_NOT_FOUND,
-                  );
-                } else if (
-                  e.gqlErrors.some(
-                    (gqlError) =>
-                      gqlError.message.startsWith(
-                        'Resetting this set will also reset ',
-                      ) &&
-                      gqlError.message.endsWith(
-                        ' dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
-                      ),
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.RESET_DEPENDENT_SETS,
-                  );
-                } else {
-                  throw e;
-                }
+              if (
+                e instanceof ApiError &&
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message.startsWith(
+                      'Resetting this set will also reset ',
+                    ) &&
+                    gqlError.message.endsWith(
+                      ' dependent sets. Please pass the argument resetDependentSets: true to this call in order to reset all dependent sets.',
+                    ),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.RESET_DEPENDENT_SETS,
+                );
+              } else if (isNoReturnError(e)) {
+                deleteTransaction(transaction.transactionNum);
               } else {
                 throw e;
               }
@@ -1103,6 +1134,8 @@ async function tryNextTransaction(id: number, slug: string) {
                   transaction.transactionNum,
                   ConflictReason.SET_NOT_FOUND,
                 );
+              } else if (isNoReturnError(e)) {
+                deleteTransaction(transaction.transactionNum);
               } else {
                 throw e;
               }
@@ -1123,6 +1156,8 @@ async function tryNextTransaction(id: number, slug: string) {
                   transaction.transactionNum,
                   ConflictReason.SET_NOT_FOUND,
                 );
+              } else if (isNoReturnError(e)) {
+                deleteTransaction(transaction.transactionNum);
               } else {
                 throw e;
               }
@@ -1131,74 +1166,78 @@ async function tryNextTransaction(id: number, slug: string) {
             try {
               updates = [await callSet(transaction.setId)];
             } catch (e: any) {
-              if (e instanceof ApiError) {
-                if (
-                  e.gqlErrors.some((gqlError) =>
-                    gqlError.message.startsWith('Set not found for id: '),
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.SET_NOT_FOUND,
-                  );
-                } else if (
-                  e.gqlErrors.some(
-                    (gqlError) =>
-                      gqlError.message ===
-                      'Cannot mark set called that is already completed.',
-                  )
-                ) {
-                  deleteTransaction(transaction.transactionNum);
-                } else if (
-                  e.gqlErrors.some(
-                    (gqlError) =>
-                      gqlError.message ===
-                      "This set can't be reported until all entrants are filled",
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.MISSING_ENTRANTS,
-                  );
-                } else {
-                  throw e;
-                }
+              if (
+                e instanceof ApiError &&
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    'Cannot mark set called that is already completed.',
+                )
+              ) {
+                deleteTransaction(transaction.transactionNum);
+              } else if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    "This set can't be reported until all entrants are filled",
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.MISSING_ENTRANTS,
+                );
+              } else if (isNoReturnError(e)) {
+                deleteTransaction(transaction.transactionNum);
+              } else {
+                throw e;
               }
             }
           } else if (transaction.type === TransactionType.START) {
             try {
               updates = [await startSet(transaction.setId)];
             } catch (e: any) {
-              if (e instanceof ApiError) {
-                if (
-                  e.gqlErrors.some((gqlError) =>
-                    gqlError.message.startsWith('Set not found for id: '),
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.SET_NOT_FOUND,
-                  );
-                } else if (
-                  e.gqlErrors.some(
-                    (gqlError) => gqlError.message === 'Set is already started',
-                  )
-                ) {
-                  deleteTransaction(transaction.transactionNum);
-                } else if (
-                  e.gqlErrors.some(
-                    (gqlError) =>
-                      gqlError.message ===
-                      "This set can't be reported until all entrants are filled",
-                  )
-                ) {
-                  markTransactionConflict(
-                    transaction.transactionNum,
-                    ConflictReason.MISSING_ENTRANTS,
-                  );
-                } else {
-                  throw e;
-                }
+              if (
+                e instanceof ApiError &&
+                e.gqlErrors.some((gqlError) =>
+                  gqlError.message.startsWith('Set not found for id: '),
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.SET_NOT_FOUND,
+                );
+              } else if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) => gqlError.message === 'Set is already started',
+                )
+              ) {
+                deleteTransaction(transaction.transactionNum);
+              } else if (
+                e instanceof ApiError &&
+                e.gqlErrors.some(
+                  (gqlError) =>
+                    gqlError.message ===
+                    "This set can't be reported until all entrants are filled",
+                )
+              ) {
+                markTransactionConflict(
+                  transaction.transactionNum,
+                  ConflictReason.MISSING_ENTRANTS,
+                );
+              } else if (isNoReturnError(e)) {
+                deleteTransaction(transaction.transactionNum);
               } else {
                 throw e;
               }
@@ -1215,64 +1254,64 @@ async function tryNextTransaction(id: number, slug: string) {
                   ),
                 ];
               } catch (e: any) {
-                if (e instanceof ApiError) {
-                  if (
-                    e.gqlErrors.some((gqlError) =>
-                      gqlError.message.startsWith('Set not found for id: '),
-                    )
-                  ) {
-                    markTransactionConflict(
-                      transaction.transactionNum,
-                      ConflictReason.SET_NOT_FOUND,
+                if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some((gqlError) =>
+                    gqlError.message.startsWith('Set not found for id: '),
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.SET_NOT_FOUND,
+                  );
+                } else if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
+                  )
+                ) {
+                  try {
+                    updates = await reportSet(
+                      transaction.setId,
+                      transaction.winnerId,
+                      transaction.isDQ,
+                      transaction.gameData,
                     );
-                  } else if (
-                    e.gqlErrors.some(
-                      (gqlError) =>
-                        gqlError.message ===
-                        'Set winner cannot be changed with this function. Use resetSet/reportBracketSet mutations instead.',
-                    )
-                  ) {
-                    try {
-                      updates = await reportSet(
-                        transaction.setId,
-                        transaction.winnerId,
-                        transaction.isDQ,
-                        transaction.gameData,
+                  } catch (e2: any) {
+                    if (
+                      e2 instanceof ApiError &&
+                      e2.gqlErrors.some(
+                        (gqlError) =>
+                          gqlError.message ===
+                          'Cannot report completed set via API.',
+                      )
+                    ) {
+                      markTransactionConflict(
+                        transaction.transactionNum,
+                        ConflictReason.UPDATE_CHANGE_WINNER,
                       );
-                    } catch (e2: any) {
-                      if (e2 instanceof ApiError) {
-                        if (
-                          e2.gqlErrors.some(
-                            (gqlError) =>
-                              gqlError.message ===
-                              'Cannot report completed set via API.',
-                          )
-                        ) {
-                          markTransactionConflict(
-                            transaction.transactionNum,
-                            ConflictReason.UPDATE_CHANGE_WINNER,
-                          );
-                        } else if (
-                          e2.gqlErrors.some(
-                            (gqlError) =>
-                              gqlError.message ===
-                              "This set can't be reported until all entrants are filled",
-                          )
-                        ) {
-                          markTransactionConflict(
-                            transaction.transactionNum,
-                            ConflictReason.MISSING_ENTRANTS,
-                          );
-                        } else {
-                          throw e2;
-                        }
-                      } else {
-                        throw e2;
-                      }
+                    } else if (
+                      e2 instanceof ApiError &&
+                      e2.gqlErrors.some(
+                        (gqlError) =>
+                          gqlError.message ===
+                          "This set can't be reported until all entrants are filled",
+                      )
+                    ) {
+                      markTransactionConflict(
+                        transaction.transactionNum,
+                        ConflictReason.MISSING_ENTRANTS,
+                      );
+                    } else if (isNoReturnError(e2)) {
+                      deleteTransaction(transaction.transactionNum);
+                    } else {
+                      throw e2;
                     }
-                  } else {
-                    throw e;
                   }
+                } else if (isNoReturnError(e)) {
+                  deleteTransaction(transaction.transactionNum);
                 } else {
                   throw e;
                 }
@@ -1286,41 +1325,42 @@ async function tryNextTransaction(id: number, slug: string) {
                   transaction.gameData,
                 );
               } catch (e: any) {
-                if (e instanceof ApiError) {
-                  if (
-                    e.gqlErrors.some((gqlError) =>
-                      gqlError.message.startsWith('Set not found for id: '),
-                    )
-                  ) {
-                    markTransactionConflict(
-                      transaction.transactionNum,
-                      ConflictReason.SET_NOT_FOUND,
-                    );
-                  } else if (
-                    e.gqlErrors.some(
-                      (gqlError) =>
-                        gqlError.message ===
-                        'Cannot report completed set via API.',
-                    )
-                  ) {
-                    markTransactionConflict(
-                      transaction.transactionNum,
-                      ConflictReason.REPORT_COMPLETED,
-                    );
-                  } else if (
-                    e.gqlErrors.some(
-                      (gqlError) =>
-                        gqlError.message ===
-                        "This set can't be reported until all entrants are filled",
-                    )
-                  ) {
-                    markTransactionConflict(
-                      transaction.transactionNum,
-                      ConflictReason.MISSING_ENTRANTS,
-                    );
-                  } else {
-                    throw e;
-                  }
+                if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some((gqlError) =>
+                    gqlError.message.startsWith('Set not found for id: '),
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.SET_NOT_FOUND,
+                  );
+                } else if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      'Cannot report completed set via API.',
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.REPORT_COMPLETED,
+                  );
+                } else if (
+                  e instanceof ApiError &&
+                  e.gqlErrors.some(
+                    (gqlError) =>
+                      gqlError.message ===
+                      "This set can't be reported until all entrants are filled",
+                  )
+                ) {
+                  markTransactionConflict(
+                    transaction.transactionNum,
+                    ConflictReason.MISSING_ENTRANTS,
+                  );
+                } else if (isNoReturnError(e)) {
+                  deleteTransaction(transaction.transactionNum);
                 } else {
                   throw e;
                 }
