@@ -534,22 +534,33 @@ function dbSetsFromApiSets(
         !(set.entrant1PrereqType === 'bye' && set.entrant2PrereqType === 'bye'),
     )
     .map((set): DbSet => {
-      if (Array.isArray(set.games)) {
+      let { entrant1Score } = set;
+      let { entrant2Score } = set;
+      if (Array.isArray(set.games) && (set.games as any[]).length > 0) {
+        entrant1Score = 0;
+        entrant2Score = 0;
         games.push(
           ...(set.games as any[])
             .filter((game: any) => game.state === 3)
-            .map((game: any) => ({
-              id: game.id,
-              setId: game.setId,
-              eventId: set.eventId,
-              orderNum: game.orderNum,
-              entrant1Score: game.entrant1P1Stocks,
-              entrant2Score: game.entrant2P1Stocks,
-              stageId: game.stageId,
-              state: game.state,
-              updatedAt: game.updatedAt,
-              winnerId: game.winnerId,
-            })),
+            .map((game: any): DbSetGame => {
+              if (game.winnerId === game.entrant1Id) {
+                entrant1Score += 1;
+              } else if (game.winnerId === game.entrant2Id) {
+                entrant2Score += 1;
+              }
+              return {
+                id: game.id,
+                setId: game.setId,
+                eventId: set.eventId,
+                orderNum: game.orderNum,
+                entrant1Score: game.entrant1P1Stocks,
+                entrant2Score: game.entrant2P1Stocks,
+                stageId: game.stageId,
+                state: game.state,
+                updatedAt: game.updatedAt,
+                winnerId: game.winnerId,
+              };
+            }),
         );
       }
       return {
@@ -571,8 +582,8 @@ function dbSetsFromApiSets(
         wProgressionSeedId: set.wProgressionSeedId,
         lProgressionSeedId: set.lProgressionSeedId,
         state: set.state,
-        entrant1Score: set.entrant1Score,
-        entrant2Score: set.entrant2Score,
+        entrant1Score,
+        entrant2Score,
         winnerId: set.winnerId,
         updatedAt: set.updatedAt,
         startedAt: set.startedAt,
