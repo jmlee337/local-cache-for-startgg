@@ -316,6 +316,17 @@ export type DbSetMutationGame = DbSetGame & {
   transactionNum: number;
 };
 
+export type DbSeedMutation = {
+  id: number;
+  seedId: number;
+  tournamentId: number;
+
+  entrantIdPresent: null | 1;
+  entrantId: number;
+
+  transactionNum: number;
+};
+
 export type DbSeed = {
   id: number;
   poolId: number;

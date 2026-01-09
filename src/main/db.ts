@@ -44,6 +44,7 @@ import {
   SubscriberTournament,
   RendererPhase,
   RendererSeed,
+  DbSeedMutation,
 } from '../common/types';
 
 enum SyncStatus {
@@ -232,7 +233,7 @@ export function dbInit(window: BrowserWindow) {
     )`,
   ).run();
   db.prepare(
-    `CREATE TABLE IF NOT EXISTS seeds(
+    `CREATE TABLE IF NOT EXISTS seeds (
       id INTEGER PRIMARY KEY,
       poolId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
@@ -244,6 +245,16 @@ export function dbInit(window: BrowserWindow) {
       originPlacement INTEGER,
       originPoolId INTEGER,
       entrantId INTEGER
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS seedMutations (
+      id INTEGER PRIMARY KEY,
+      seedId INTEGER NOT NULL,
+      tournamentId INTEGER NOT NULL,
+      entrantIdPresent INTEGER,
+      entrantId INTEGER,
+      transactionNum INTEGER NOT NULL
     )`,
   ).run();
   db.prepare(
@@ -561,6 +572,23 @@ function applyMutations(set: DbSet, games: DbSetGame[]) {
       .all(set) as DbSetMutation[]
   ).forEach((setMutation) => {
     applyMutation(set, games, setMutation);
+  });
+}
+
+function applySeedMutations(seed: DbSeed) {
+  (
+    db!
+      .prepare(
+        `SELECT *
+          FROM seedMutations
+          WHERE seedId = @id
+          ORDER BY transactionNum ASC`,
+      )
+      .all(seed) as DbSeedMutation[]
+  ).forEach((dbSeedMutation) => {
+    if (dbSeedMutation.entrantIdPresent) {
+      seed.entrantId = dbSeedMutation.entrantId;
+    }
   });
 }
 
@@ -1428,7 +1456,55 @@ export function resetSet(
           updatedAt,
         });
     }
+    if (wProgressionSeedId && wProgressionSet) {
+      db!
+        .prepare(
+          `INSERT INTO seedMutations (
+            seedId,
+            tournamentId,
+            entrantIdPresent,
+            entrantId,
+            transactionNum
+          ) VALUES (
+            @seedId,
+            @tournamentId,
+            1,
+            null,
+            @transactionNum
+          )`,
+        )
+        .run({
+          ...wProgressionSet,
+          seedId: wProgressionSeedId,
+          transactionNum,
+        });
+    }
+    if (lProgressionSeedId && lProgressionSet) {
+      db!
+        .prepare(
+          `INSERT INTO seedMutations (
+            seedId,
+            tournamentId,
+            entrantIdPresent,
+            entrantId,
+            transactionNum
+          ) VALUES (
+            @seedId,
+            @tournamentId,
+            1,
+            null,
+            @transactionNum
+          )`,
+        )
+        .run({
+          ...lProgressionSet,
+          seedId: lProgressionSeedId,
+          transactionNum,
+        });
+    }
   })();
+  // TODO: seedMutations if reset un-completes an RR pool
+
   insertTransaction(
     {
       transactionNum,
@@ -2194,7 +2270,55 @@ export function reportSet(
           updatedAt,
         });
     }
+    if (wProgressionSeedId && wProgressionSet) {
+      db!
+        .prepare(
+          `INSERT INTO seedMutations (
+            seedId,
+            tournamentId,
+            entrantIdPresent,
+            entrantId,
+            transactionNum
+          ) VALUES (
+            @seedId,
+            @tournamentId,
+            1,
+            @entrantId,
+            @transactionNum
+          )`,
+        )
+        .run({
+          ...wProgressionSet,
+          seedId: wProgressionSeedId,
+          transactionNum,
+        });
+    }
+    if (lProgressionSeedId && lProgressionSet) {
+      db!
+        .prepare(
+          `INSERT INTO seedMutations (
+            seedId,
+            tournamentId,
+            entrantIdPresent,
+            entrantId,
+            transactionNum
+          ) VALUES (
+            @seedId,
+            @tournamentId,
+            1,
+            @entrantId,
+            @transactionNum
+          )`,
+        )
+        .run({
+          ...lProgressionSet,
+          seedId: lProgressionSeedId,
+          transactionNum,
+        });
+    }
   })();
+  // TODO: seedMutations if report completes an RR pool
+
   insertTransaction(
     {
       transactionNum,
@@ -2520,6 +2644,25 @@ export function finalizeTransaction(
           .prepare(`UPDATE sets SET ${exprs.join(', ')} WHERE id = @setId`)
           .run({ ...dbSetMutation, updatedAt });
       });
+
+      // of course, start.gg does not return seed updates at all so apply those
+      // here as well.
+      (
+        db!
+          .prepare(
+            'SELECT * FROM seedMutations WHERE transactionNum = @transactionNum',
+          )
+          .all({ transactionNum }) as DbSeedMutation[]
+      ).forEach((dbSeedMutation) => {
+        if (!dbSeedMutation.entrantIdPresent) {
+          throw new Error(
+            `no mutations in dbSeedMutation: ${dbSeedMutation.id}, transactionNum: ${dbSeedMutation.transactionNum}`,
+          );
+        }
+        db!
+          .prepare(`UPDATE seeds SET entrantId = @entrantId WHERE id = @seedId`)
+          .run(dbSeedMutation);
+      });
     }
 
     db!
@@ -2530,6 +2673,11 @@ export function finalizeTransaction(
     db!
       .prepare(
         'DELETE FROM setMutationGames WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM seedMutations WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
     updates.forEach((update) => {
@@ -2765,6 +2913,11 @@ export function deleteTransaction(transactionNum: number) {
     db!
       .prepare(
         'DELETE FROM setMutationGames WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'DELETE FROM seedMutations WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
     db!
@@ -3314,6 +3467,7 @@ export function updateEvent(
           const reportTransactionNum = reportTransactions[0].transactionNum;
           const updateTransactionNum = reportTransactions[1].transactionNum;
           db!.transaction(() => {
+            // leave any seedMutations alone
             db!
               .prepare(
                 'DELETE FROM transactionGameData WHERE transactionNum = @reportTransactionNum',
@@ -3741,6 +3895,7 @@ export function getTournament(): RendererTournament | undefined {
                       )
                       .all({ id: dbPool.id }) as DbSeed[]
                   ).map((dbSeed): RendererSeed => {
+                    applySeedMutations(dbSeed);
                     let entrant: {
                       id: number;
                       participants: RendererParticipant[];
@@ -3867,6 +4022,9 @@ export function deleteTournament(id: number) {
     db!.prepare('DELETE FROM sets WHERE tournamentId = @id').run({ id });
     db!
       .prepare('DELETE FROM setMutations WHERE tournamentId = @id')
+      .run({ id });
+    db!
+      .prepare('DELETE FROM seedMutations WHERE tournamentId = @id')
       .run({ id });
     db!.prepare('DELETE FROM stations WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM streams WHERE tournamentId = @id').run({ id });
