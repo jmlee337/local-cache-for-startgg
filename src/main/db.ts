@@ -233,9 +233,15 @@ export function dbInit(window: BrowserWindow) {
   db.prepare(
     `CREATE TABLE IF NOT EXISTS seeds(
       id INTEGER PRIMARY KEY,
+      poolId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
       eventId INTEGER NOT NULL,
       tournamentId INTEGER NOT NULL,
+      seedNum INTEGER NOT NULL,
+      groupSeedNum INTEGER NOT NULL,
+      placeholderName TEXT,
+      originPlacement INTEGER,
+      originPoolId INTEGER,
       entrantId INTEGER
     )`,
   ).run();
@@ -2882,9 +2888,29 @@ export function updateEvent(
     db!
       .prepare(
         `REPLACE INTO seeds (
-          id, phaseId, eventId, tournamentId, entrantId
+          id,
+          poolId,
+          phaseId,
+          eventId,
+          tournamentId,
+          seedNum,
+          groupSeedNum,
+          placeholderName,
+          originPlacement,
+          originPoolId,
+          entrantId
         ) values (
-          @id, @phaseId, @eventId, @tournamentId, @entrantId
+          @id,
+          @poolId,
+          @phaseId,
+          @eventId,
+          @tournamentId,
+          @seedNum,
+          @groupSeedNum,
+          @placeholderName,
+          @originPlacement,
+          @originPoolId,
+          @entrantId
         )`,
       )
       .run(seed);

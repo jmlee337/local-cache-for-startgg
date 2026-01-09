@@ -1,6 +1,7 @@
 import EventEmitter from 'events';
 import { BrowserWindow } from 'electron';
 import AsyncLock from 'async-lock';
+import Bottleneck from 'bottleneck';
 import {
   AdminedTournament,
   ApiError,
@@ -39,6 +40,10 @@ import {
 const lock = new AsyncLock();
 const KEY = 'key';
 
+const limiter = new Bottleneck({
+  minTime: 1000,
+});
+
 let apiKey = '';
 export function setApiKey(newApiKey: string) {
   apiKey = newApiKey;
@@ -76,14 +81,16 @@ async function wrappedFetch(
 }
 
 async function fetchGql(key: string, query: string, variables: any) {
-  const json = await wrappedFetch('https://api.start.gg/gql/alpha', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  const json = await limiter.schedule(() =>
+    wrappedFetch('https://api.start.gg/gql/alpha', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, variables }),
+    }),
+  );
   if (json.errors) {
     throw new ApiError({
       message: json.errors.map((error: any) => error.message).join(', '),
@@ -222,14 +229,6 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
   }
 }
 
-async function oneSecondPromise() {
-  return new Promise<void>((resolve) => {
-    setTimeout(() => {
-      resolve();
-    }, 1000);
-  });
-}
-
 const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
@@ -344,9 +343,7 @@ export async function getApiTournament(inSlug: string) {
         );
       }
       page += 1;
-      if (page <= nextData.tournament.participants.pageInfo.totalPages) {
-        await oneSecondPromise();
-      } else {
+      if (page > nextData.tournament.participants.pageInfo.totalPages) {
         break;
       }
     }
@@ -670,6 +667,84 @@ function dbSetsFromApiSets(
   return { sets, games };
 }
 
+const PHASE_SEEDS_QUERY = `
+  query phaseSeeds($phaseId: ID, $page: Int) {
+    phase(id: $phaseId) {
+      seeds(query: {page: $page, perPage: 332}) {
+        pageInfo {
+          totalPages
+        }
+        nodes {
+          id
+          phaseGroup {
+            id
+          }
+          seedNum
+          groupSeedNum
+          placeholderName
+          progressionSource {
+            originPlacement
+            originPhaseGroup {
+              id
+            }
+          }
+          entrant {
+            id
+          }
+        }
+      }
+    }
+  }
+`;
+async function getSeeds(
+  phaseIds: number[],
+  eventId: number,
+  tournamentId: number,
+): Promise<DbSeed[]> {
+  if (phaseIds.length === 0) {
+    return [];
+  }
+
+  const seeds: DbSeed[] = [];
+  for (let i = 0; i < phaseIds.length; i += 1) {
+    const phaseId = phaseIds[i];
+    let page = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const nextData = await fetchGql(apiKey, PHASE_SEEDS_QUERY, {
+        page,
+        phaseId,
+      });
+      const { nodes } = nextData.phase.seeds;
+      if (Array.isArray(nodes)) {
+        seeds.push(
+          ...nodes.map(
+            (node): DbSeed => ({
+              id: node.id,
+              poolId: node.phaseGroup.id,
+              phaseId,
+              eventId,
+              tournamentId,
+              seedNum: node.seedNum,
+              groupSeedNum: node.groupSeedNum,
+              placeholderName: node.placeholderName,
+              originPlacement: node.progressionSource?.originPlacement ?? null,
+              originPoolId: node.progressionSource?.originPhaseGroup.id ?? null,
+              entrantId: node.entrant?.id ?? null,
+            }),
+          ),
+        );
+      }
+      page += 1;
+      if (page > nextData.phase.seeds.pageInfo.totalPages) {
+        break;
+      }
+    }
+  }
+  return seeds;
+}
+
 async function refreshEvent(tournamentId: number, eventId: number) {
   const phases: DbPhase[] = [];
   const pools: DbPool[] = [];
@@ -709,10 +784,15 @@ async function refreshEvent(tournamentId: number, eventId: number) {
     throw e;
   }
 
+  const seedsPromise = getSeeds(
+    phases.map((phase) => phase.id),
+    eventId,
+    tournamentId,
+  );
+
   const idToEntrant = new Map<number, DbEntrant>();
   const entrantIdToParticipantIds = new Map<number, number[]>();
   const participants: DbParticipant[] = [];
-  const seeds: DbSeed[] = [];
   const sets: DbSet[] = [];
   const games: DbSetGame[] = [];
   try {
@@ -754,19 +834,6 @@ async function refreshEvent(tournamentId: number, eventId: number) {
               );
             });
           }
-          if (json.entities.seeds instanceof Array) {
-            seeds.push(
-              ...json.entities.seeds.map((seed: any) => ({
-                id: seed.id,
-                phaseId: seed.phaseId,
-                eventId,
-                tournamentId,
-                entrantId: Number.isInteger(seed.entrantId)
-                  ? seed.entrantId
-                  : null,
-              })),
-            );
-          }
           if (json.entities.sets instanceof Array) {
             const setsAndGames = dbSetsFromApiSets(
               json.entities.sets,
@@ -778,6 +845,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
           }
         }),
     );
+    const seeds = await seedsPromise;
     updateSyncResultWithSuccess();
     updateEvent(
       tournamentId,
@@ -1396,8 +1464,6 @@ async function tryNextTransaction(id: number, slug: string) {
           transaction = getNextTransaction();
           if (!transaction) {
             break;
-          } else {
-            await oneSecondPromise();
           }
         }
       }
