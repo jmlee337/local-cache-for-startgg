@@ -120,7 +120,10 @@ export function dbInit(window: BrowserWindow) {
       name TEXT,
       bracketType INTEGER,
       state INTEGER,
-      winnersTargetPhaseId INTEGER
+      winnersTargetPhaseId INTEGER,
+      tiebreakMethod1 TEXT,
+      tiebreakMethod2 TEXT,
+      tiebreakMethod3 TEXT
     )`,
   ).run();
   db.prepare(
@@ -2973,10 +2976,33 @@ export function updateEvent(
     db!
       .prepare(
         `REPLACE INTO
-          pools
-            (id, waveId, phaseId, eventId, tournamentId, name, bracketType, state, winnersTargetPhaseId)
-          VALUES
-            (@id, @waveId, @phaseId, @eventId, @tournamentId, @name, @bracketType, @state, @winnersTargetPhaseId)`,
+          pools (
+            id,
+            waveId,
+            phaseId,
+            eventId,
+            tournamentId,
+            name,
+            bracketType,
+            state,
+            winnersTargetPhaseId,
+            tiebreakMethod1,
+            tiebreakMethod2,
+            tiebreakMethod3
+          ) VALUES (
+            @id,
+            @waveId,
+            @phaseId,
+            @eventId,
+            @tournamentId,
+            @name,
+            @bracketType,
+            @state,
+            @winnersTargetPhaseId,
+            @tiebreakMethod1,
+            @tiebreakMethod2,
+            @tiebreakMethod3
+          )`,
       )
       .run(pool);
   });

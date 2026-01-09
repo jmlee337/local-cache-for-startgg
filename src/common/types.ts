@@ -341,6 +341,12 @@ export type DbSeed = {
   entrantId: number | null;
 };
 
+export enum DbTiebreakMethod {
+  WINS = 'wins',
+  HEAD_TO_HEAD = 'head_to_head',
+  GAME_RATIO = 'game_ratio',
+}
+
 export type DbPool = {
   id: number;
   waveId: number | null;
@@ -351,6 +357,9 @@ export type DbPool = {
   bracketType: number;
   state: number;
   winnersTargetPhaseId: number | null;
+  tiebreakMethod1: DbTiebreakMethod | null;
+  tiebreakMethod2: DbTiebreakMethod | null;
+  tiebreakMethod3: DbTiebreakMethod | null;
 };
 
 export type DbPhase = {

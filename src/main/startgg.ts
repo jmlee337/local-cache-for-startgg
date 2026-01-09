@@ -762,6 +762,9 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       });
     });
     json.entities.groups.forEach((group: any) => {
+      const tiebreakOrder = Array.isArray(group.tiebreakOrder)
+        ? (group.tiebreakOrder as any[])
+        : [];
       pools.push({
         id: group.id,
         waveId: group.waveId,
@@ -772,6 +775,9 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         bracketType: group.groupTypeId,
         state: group.state,
         winnersTargetPhaseId: group.winnersTargetPhaseId,
+        tiebreakMethod1: tiebreakOrder[0] ? tiebreakOrder[0].type : null,
+        tiebreakMethod2: tiebreakOrder[1] ? tiebreakOrder[1].type : null,
+        tiebreakMethod3: tiebreakOrder[2] ? tiebreakOrder[2].type : null,
       });
     });
     updateSyncResultWithSuccess();
