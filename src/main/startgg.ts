@@ -1488,13 +1488,29 @@ async function tryNextTransaction(id: number, slug: string) {
   });
 }
 
+export function queueRefresh(id: number) {
+  const slug = idToSlug.get(id);
+  if (!slug) {
+    throw new Error(`tournamentId not found ${id}`);
+  }
+
+  lock.acquire(KEY, (release) => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    release();
+    tryNextTransaction(id, slug);
+  });
+}
+
 export function maybeTryNow(id: number) {
   const slug = idToSlug.get(id);
   if (!slug) {
     throw new Error(`tournamentId not found ${id}`);
   }
 
-  if (!lock.isBusy()) {
+  if (!lock.isBusy(KEY)) {
     if (timeout) {
       clearTimeout(timeout);
       timeout = null;

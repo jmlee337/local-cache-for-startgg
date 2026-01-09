@@ -11,6 +11,7 @@ import {
   startggInit,
   maybeTryNow,
   upgradePreviewSets,
+  queueRefresh,
 } from './startgg';
 import {
   dbInit,
@@ -179,7 +180,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
 
   ipcMain.removeHandler('refreshTournament');
   ipcMain.handle('refreshTournament', () => {
-    maybeTryNow(getTournamentId());
+    queueRefresh(getTournamentId());
     updateClients();
   });
 
@@ -192,7 +193,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('loadEvent', async (event, eventId: number) => {
     const tournamentId = getTournamentId();
     await loadEvent(eventId, tournamentId);
-    maybeTryNow(tournamentId);
+    queueRefresh(tournamentId);
     updateClients();
   });
 
