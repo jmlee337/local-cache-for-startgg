@@ -43,6 +43,7 @@ import {
   RendererUnloadedEvent,
   SubscriberTournament,
   RendererPhase,
+  RendererSeed,
 } from '../common/types';
 
 enum SyncStatus {
@@ -260,14 +261,16 @@ export function dbInit(window: BrowserWindow) {
   ).run();
   db.prepare(
     `CREATE TABLE IF NOT EXISTS participantsToEntrant (
+      tournamentId INTEGER NOT NULL,
       participantId INTEGER,
       entrantId INTEGER,
       PRIMARY KEY (participantId, entrantId)
     )`,
   ).run();
   db.prepare(
-    `CREATE TABLE IF NOT EXISTS entrants(
+    `CREATE TABLE IF NOT EXISTS entrants (
       id INTEGER PRIMARY KEY,
+      tournamentId INTEGER NOT NULL,
       eventId INTEGER NOT NULL,
       name TEXT
     )`,
@@ -338,10 +341,11 @@ export function dbInit(window: BrowserWindow) {
   };
 }
 
-function getRendererEntrant(id: number): {
-  name: string | null;
+type RendererEntrant = {
+  name: string;
   participants: RendererParticipant[];
-} {
+};
+function getRendererEntrant(id: number): RendererEntrant {
   if (!db) {
     throw new Error('not init');
   }
@@ -586,13 +590,32 @@ const shortRoundTextRegex = /([A-Z]|[0-9])/g;
 function dbSetToRendererSet(
   dbSet: DbSet,
   dbSetGames: DbSetGame[],
+  idToRendererEntrant?: Map<number, RendererEntrant>,
 ): RendererSet {
-  const entrant1 = dbSet.entrant1Id
-    ? getRendererEntrant(dbSet.entrant1Id)
-    : null;
-  const entrant2 = dbSet.entrant2Id
-    ? getRendererEntrant(dbSet.entrant2Id)
-    : null;
+  let entrant1: RendererEntrant | null = null;
+  if (dbSet.entrant1Id) {
+    if (idToRendererEntrant) {
+      const rendererEntrant = idToRendererEntrant.get(dbSet.entrant1Id);
+      if (!rendererEntrant) {
+        throw new Error(`entrant not found ${dbSet.entrant1Id}`);
+      }
+      entrant1 = rendererEntrant;
+    } else {
+      entrant1 = getRendererEntrant(dbSet.entrant1Id);
+    }
+  }
+  let entrant2: RendererEntrant | null = null;
+  if (dbSet.entrant2Id) {
+    if (idToRendererEntrant) {
+      const rendererEntrant = idToRendererEntrant.get(dbSet.entrant2Id);
+      if (!rendererEntrant) {
+        throw new Error(`entrant not found ${dbSet.entrant2Id}`);
+      }
+      entrant2 = rendererEntrant;
+    } else {
+      entrant2 = getRendererEntrant(dbSet.entrant2Id);
+    }
+  }
   return {
     id: dbSet.id,
     setId: dbSet.setId,
@@ -2816,10 +2839,12 @@ export function updateEvent(
       .prepare(
         `REPLACE INTO entrants (
           id,
+          tournamentId,
           eventId,
           name
         ) values (
           @id,
+          @tournamentId,
           @eventId,
           @name
         )`,
@@ -2839,12 +2864,12 @@ export function updateEvent(
         db!
           .prepare(
             `REPLACE INTO participantsToEntrant (
-              participantId, entrantId
+              tournamentId, participantId, entrantId
             ) VALUES (
-              @participantId, @entrantId
+              @tournamentId, @participantId, @entrantId
             )`,
           )
-          .run({ participantId, entrantId });
+          .run({ tournamentId, participantId, entrantId });
       });
       db!
         .prepare(
@@ -3628,6 +3653,42 @@ export function getTournament(): RendererTournament | undefined {
       'SELECT * FROM participants WHERE tournamentId = @id ORDER BY gamerTag ASC',
     )
     .all({ id: currentTournamentId }) as DbParticipant[];
+  const idToParticipant = new Map(
+    dbParticipants.map((participant) => [participant.id, participant]),
+  );
+  const entrantIdToParticipants = new Map<number, DbParticipant[]>();
+  (
+    db
+      .prepare('SELECT * FROM participantsToEntrant WHERE tournamentId = @id')
+      .all({ id: currentTournamentId }) as DbParticipantToEntrant[]
+  ).forEach((dbParticipantToEntrant) => {
+    const participant = idToParticipant.get(
+      dbParticipantToEntrant.participantId,
+    );
+    if (participant) {
+      const { entrantId } = dbParticipantToEntrant;
+      const participants = entrantIdToParticipants.get(entrantId);
+      if (participants) {
+        participants.push(participant);
+      } else {
+        entrantIdToParticipants.set(entrantId, [participant]);
+      }
+    }
+  });
+  const idToRendererEntrant = new Map<number, RendererEntrant>();
+  (
+    db
+      .prepare('SELECT * FROM entrants WHERE tournamentId = @id')
+      .all({ id: currentTournamentId }) as DbEntrant[]
+  ).forEach((dbEntrant) => {
+    const participants = entrantIdToParticipants.get(dbEntrant.id);
+    if (participants) {
+      idToRendererEntrant.set(dbEntrant.id, {
+        name: dbEntrant.name,
+        participants,
+      });
+    }
+  });
   const dbStations = db
     .prepare(
       'SELECT * FROM stations WHERE tournamentId = @id ORDER BY number ASC',
@@ -3673,6 +3734,37 @@ export function getTournament(): RendererTournament | undefined {
               pools: dbPools
                 .filter((dbPool) => dbPool.phaseId === dbPhase.id)
                 .map((dbPool): RendererPool => {
+                  const seeds = (
+                    db!
+                      .prepare(
+                        'SELECT * FROM seeds WHERE poolId = @id ORDER BY groupSeedNum ASC',
+                      )
+                      .all({ id: dbPool.id }) as DbSeed[]
+                  ).map((dbSeed): RendererSeed => {
+                    let entrant: {
+                      id: number;
+                      participants: RendererParticipant[];
+                    } | null = null;
+                    if (dbSeed.entrantId !== null) {
+                      const participants = entrantIdToParticipants.get(
+                        dbSeed.entrantId,
+                      );
+                      if (participants !== undefined) {
+                        entrant = {
+                          id: dbSeed.entrantId,
+                          participants,
+                        };
+                      }
+                    }
+
+                    return {
+                      id: dbSeed.id,
+                      seedNum: dbSeed.seedNum,
+                      groupSeedNum: dbSeed.groupSeedNum,
+                      placeholder: dbSeed.placeholderName,
+                      entrant,
+                    };
+                  });
                   const rendererSets = (
                     db!
                       .prepare(
@@ -3686,7 +3778,11 @@ export function getTournament(): RendererTournament | undefined {
                       )
                       .all({ setId: dbSet.setId }) as DbSetGame[];
                     applyMutations(dbSet, dbSetGames);
-                    return dbSetToRendererSet(dbSet, dbSetGames);
+                    return dbSetToRendererSet(
+                      dbSet,
+                      dbSetGames,
+                      idToRendererEntrant,
+                    );
                   });
 
                   return {
@@ -3695,6 +3791,7 @@ export function getTournament(): RendererTournament | undefined {
                     bracketType: dbPool.bracketType,
                     waveId: dbPool.waveId,
                     winnersTargetPhaseId: dbPool.winnersTargetPhaseId,
+                    seeds,
                     sets: rendererSets,
                   };
                 }),
@@ -3739,13 +3836,6 @@ export function deleteTournament(id: number) {
     throw new Error(`No tournament with id: ${id}`);
   }
 
-  const dbParticipants = db
-    .prepare('SELECT * FROM participants WHERE tournamentId = @id')
-    .all({ id }) as DbParticipant[];
-  const participantIds = dbParticipants.map(
-    (dbParticipant) => dbParticipant.id,
-  );
-
   const dbEvents = db
     .prepare('SELECT * FROM events WHERE tournamentId = @id')
     .all({ id }) as DbEvent[];
@@ -3767,6 +3857,10 @@ export function deleteTournament(id: number) {
     db!
       .prepare('DELETE FROM participants WHERE tournamentId = @id')
       .run({ id });
+    db!
+      .prepare('DELETE FROM participantsToEntrant WHERE tournamentId = @id')
+      .run({ id });
+    db!.prepare('DELETE FROM entrants WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM phases WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM pools WHERE tournamentId = @id').run({ id });
     db!.prepare('DELETE FROM seeds WHERE tournamentId = @id').run({ id });
@@ -3780,18 +3874,7 @@ export function deleteTournament(id: number) {
       .prepare('DELETE FROM transactions WHERE tournamentId = @id')
       .run({ id });
 
-    db!
-      .prepare(
-        `DELETE FROM participantsToEntrant WHERE participantId IN (${participantIds.join(
-          ', ',
-        )})`,
-      )
-      .run();
-
     eventIds.forEach((eventId) => {
-      db!
-        .prepare('DELETE FROM entrants WHERE eventId = @eventId')
-        .run({ eventId });
       db!
         .prepare('DELETE FROM setGames WHERE eventId = @eventId')
         .run({ eventId });

@@ -89,12 +89,24 @@ export type RendererSet = {
   syncState: SyncState;
 };
 
+export type RendererSeed = {
+  id: number;
+  seedNum: number;
+  groupSeedNum: number;
+  placeholder: string | null;
+  entrant: {
+    id: number;
+    participants: RendererParticipant[];
+  } | null;
+};
+
 export type RendererPool = {
   id: number;
   name: string;
   bracketType: number;
   waveId: number | null;
   winnersTargetPhaseId: number | null;
+  seeds: RendererSeed[];
   sets: RendererSet[];
 };
 
@@ -192,6 +204,7 @@ export type DbParticipantToEntrant = {
 
 export type DbEntrant = {
   id: number;
+  tournamentId: number;
   eventId: number;
   name: string;
 };

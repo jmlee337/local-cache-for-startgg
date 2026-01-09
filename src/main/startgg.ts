@@ -808,6 +808,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
             jsonEntrants.forEach((entrant) => {
               idToEntrant.set(entrant.id, {
                 id: entrant.id,
+                tournamentId,
                 eventId: entrant.eventId,
                 name: entrant.name,
               });
