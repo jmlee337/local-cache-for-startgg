@@ -46,6 +46,7 @@ import {
   RendererSeed,
   DbSeedMutation,
 } from '../common/types';
+import getPlacementToEntrantId from './standing';
 
 enum SyncStatus {
   BEHIND,
@@ -1164,7 +1165,7 @@ export function resetSet(
   let wProgressionSet: ResetProgressionSet | undefined;
   let lProgressionSet: ResetProgressionSet | undefined;
   const dependentSetIds: number[] = [];
-  const { wProgressionSeedId, lProgressionSeedId } = set;
+  const { wProgressionSeedId, lProgressionSeedId, state } = set;
   const maybeAssignProgression = (
     setId: number,
     phaseGroupId: number,
@@ -1315,6 +1316,60 @@ export function resetSet(
           entrantNum:
             affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
         };
+      }
+    }
+  }
+  const rrProgressions: {
+    seedId: number;
+    progressionSet: ResetProgressionSet;
+  }[] = [];
+  if (state === 3) {
+    const dbPool = db
+      .prepare('SELECT * FROM pools WHERE id = @phaseGroupId')
+      .get(set) as DbPool;
+    if (dbPool.bracketType === 3) {
+      if (
+        (
+          db
+            .prepare(
+              'SELECT * FROM sets WHERE phaseGroupId = @id AND id != @setId',
+            )
+            .all({ ...dbPool, setId: set.id }) as DbSet[]
+        )
+          .map((dbSet) => {
+            applyMutations(dbSet, []);
+            return dbSet.state;
+          })
+          .every((rrState) => rrState === 3)
+      ) {
+        (
+          db
+            .prepare('SELECT * FROM seeds WHERE originPoolId = @id')
+            .all(dbPool) as DbSeed[]
+        ).forEach((dbSeed) => {
+          const affectedSet = db!
+            .prepare(
+              'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+            )
+            .get({ seedId: dbSeed.id }) as DbSet | undefined;
+          if (affectedSet) {
+            applyMutations(affectedSet, []);
+            if (affectedSet.state !== 1) {
+              dependentSetIds.push(affectedSet.id);
+            } else {
+              const progressionSet: ResetProgressionSet = {
+                id: affectedSet.id,
+                phaseGroupId: affectedSet.phaseGroupId,
+                phaseId: affectedSet.phaseId,
+                eventId: affectedSet.eventId,
+                tournamentId: affectedSet.tournamentId,
+                identifier: affectedSet.identifier,
+                entrantNum: affectedSet.entrant1PrereqId === dbSeed.id ? 1 : 2,
+              };
+              rrProgressions.push({ seedId: dbSeed.id, progressionSet });
+            }
+          }
+        });
       }
     }
   }
@@ -1505,9 +1560,69 @@ export function resetSet(
           transactionNum,
         });
     }
+    if (rrProgressions.length > 0) {
+      rrProgressions.forEach(({ seedId, progressionSet }) => {
+        db!
+          .prepare(
+            `INSERT INTO seedMutations (
+              seedId,
+              tournamentId,
+              entrantIdPresent,
+              entrantId,
+              transactionNum
+            ) VALUES (
+              @seedId,
+              @tournamentId,
+              1,
+              null,
+              @transactionNum
+            )`,
+          )
+          .run({
+            seedId,
+            tournamentId: set.tournamentId,
+            transactionNum,
+          });
+        db!
+          .prepare(
+            `INSERT INTO setMutations (
+                setId,
+                phaseGroupId,
+                phaseId,
+                eventId,
+                tournamentId,
+                identifier,
+                transactionNum,
+                requiresUpdateHack,
+                statePresent,
+                state,
+                entrant${progressionSet.entrantNum}IdPresent,
+                entrant${progressionSet.entrantNum}Id,
+                updatedAt
+              ) VALUES (
+                @id,
+                @phaseGroupId,
+                @phaseId,
+                @eventId,
+                @tournamentId,
+                @identifier,
+                @transactionNum,
+                1,
+                1,
+                1,
+                1,
+                null,
+                @updatedAt
+              )`,
+          )
+          .run({
+            ...progressionSet,
+            transactionNum,
+            updatedAt,
+          });
+      });
+    }
   })();
-  // TODO: seedMutations if reset un-completes an RR pool
-
   insertTransaction(
     {
       transactionNum,
@@ -2090,6 +2205,72 @@ export function reportSet(
       }
     }
   }
+
+  const rrProgressions: {
+    seedId: number;
+    progressionSet: ReportProgressionSet;
+  }[] = [];
+  if (state !== 3) {
+    const dbPool = db
+      .prepare('SELECT * FROM pools WHERE id = @phaseGroupId')
+      .get(set) as DbPool;
+    if (dbPool.bracketType === 3) {
+      const rrSets = (
+        db
+          .prepare(
+            'SELECT * FROM sets WHERE phaseGroupId = @id AND id != @setId',
+          )
+          .all({ ...dbPool, setId: set.id }) as DbSet[]
+      ).map((dbSet) => {
+        applyMutations(dbSet, []);
+        return dbSet;
+      });
+      if (rrSets.every((rrSet) => rrSet.state === 3)) {
+        const dbSeeds = db
+          .prepare('SELECT * FROM seeds WHERE poolId = @id')
+          .all(dbPool) as DbSeed[];
+        const placementToEntrantId = getPlacementToEntrantId(
+          dbPool,
+          [set, ...rrSets],
+          dbSeeds,
+        );
+        (
+          db
+            .prepare(
+              'SELECT * FROM seeds WHERE originPoolId = @id ORDER BY originPlacement ASC',
+            )
+            .all(dbPool) as DbSeed[]
+        ).forEach((dbSeed) => {
+          if (dbSeed.originPlacement !== null) {
+            const entrantId = placementToEntrantId.get(dbSeed.originPlacement);
+            if (entrantId) {
+              const affectedSet = db!
+                .prepare(
+                  'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
+                )
+                .get({ seedId: dbSeed.id }) as DbSet | undefined;
+              if (affectedSet) {
+                const progressionSet: ReportProgressionSet = {
+                  id: affectedSet.id,
+                  phaseGroupId: affectedSet.phaseGroupId,
+                  phaseId: affectedSet.phaseId,
+                  eventId: affectedSet.eventId,
+                  tournamentId: affectedSet.tournamentId,
+                  identifier: affectedSet.identifier,
+                  requiresUpdateHack: true,
+                  entrantNum:
+                    affectedSet.entrant1PrereqId === dbSeed.id ? 1 : 2,
+                  entrantId,
+                };
+                rrProgressions.push({ seedId: dbSeed.id, progressionSet });
+              }
+            }
+          }
+        });
+      }
+    }
+  }
+
   db.transaction(() => {
     db!
       .prepare(
@@ -2318,6 +2499,66 @@ export function reportSet(
           seedId: lProgressionSeedId,
           transactionNum,
         });
+    }
+    if (rrProgressions.length > 0) {
+      rrProgressions.forEach(({ seedId, progressionSet }) => {
+        db!
+          .prepare(
+            `INSERT INTO seedMutations (
+              seedId,
+              tournamentId,
+              entrantIdPresent,
+              entrantId,
+              transactionNum
+            ) VALUES (
+              @seedId,
+              @tournamentId,
+              1,
+              @entrantId,
+              @transactionNum
+            )`,
+          )
+          .run({
+            seedId,
+            tournamentId: set.tournamentId,
+            entrantId: progressionSet.entrantId,
+            transactionNum,
+          });
+        db!
+          .prepare(
+            `INSERT INTO setMutations (
+                setId,
+                phaseGroupId,
+                phaseId,
+                eventId,
+                tournamentId,
+                identifier,
+                transactionNum,
+                requiresUpdateHack,
+                entrant${progressionSet.entrantNum}IdPresent,
+                entrant${progressionSet.entrantNum}Id,
+                updatedAt
+              ) VALUES (
+                @id,
+                @phaseGroupId,
+                @phaseId,
+                @eventId,
+                @tournamentId,
+                @identifier,
+                @transactionNum,
+                @requiresUpdateHack,
+                1,
+                @entrantId,
+                @updatedAt
+              )`,
+          )
+          .run({
+            ...progressionSet,
+            transactionNum,
+            requiresUpdateHack: progressionSet.requiresUpdateHack ? 1 : null,
+            updatedAt,
+          });
+      });
     }
   })();
   // TODO: seedMutations if report completes an RR pool
