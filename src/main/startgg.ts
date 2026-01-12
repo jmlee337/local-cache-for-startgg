@@ -6,7 +6,6 @@ import {
   AdminedTournament,
   ApiError,
   ApiGameData,
-  ApiSetUpdate,
   TransactionType,
   DbEntrant,
   DbEvent,
@@ -878,92 +877,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
 
 const UPDATE_SET_INNER = `
   id
-  phaseGroup {
-    id
-  }
-  identifier
-  state
-  slots {
-    entrant {
-      id
-    }
-    standing {
-      stats {
-        score {
-          value
-        }
-      }
-    }
-  }
-  station {
-    id
-  }
-  stream {
-    id
-  }
-  games {
-    entrant1Score
-    entrant2Score
-    selections {
-      entrant {
-        id
-      }
-      selectionType
-    }
-    stage {
-      id
-    }
-  }
-  updatedAt
-  startedAt
-  completedAt
-  winnerId
 `;
-function updateSetToApiSetUpdate(set: any): ApiSetUpdate {
-  const games = Array.isArray(set.games) ? (set.games as any[]) : [];
-  const entrant1 = set.slots[0].entrant;
-  const standing1 = set.slots[0].standing;
-  const entrant2 = set.slots[1].entrant;
-  const standing2 = set.slots[1].standing;
-  return {
-    setId: set.id,
-    phaseGroupId: set.phaseGroup.id,
-    identifier: set.identifier,
-    state: set.state,
-    entrant1Id: entrant1 ? entrant1.id : null,
-    entrant1Score: standing1 ? standing1.stats.score.value : null,
-    entrant2Id: entrant2 ? entrant2.id : null,
-    entrant2Score: standing2 ? standing2.stats.score.value : null,
-    winnerId: set.winnerId,
-    updatedAt: set.updatedAt,
-    startedAt: set.startedAt,
-    completedAt: set.completedAt,
-    stationId: set.station?.id ?? null,
-    streamId: set.stream?.id ?? null,
-    hasStageData:
-      games.length > 0 &&
-      games.every(
-        (game) =>
-          game.entrant1Score !== null &&
-          game.entrant2Score !== null &&
-          game.selections &&
-          (game.selections as any[]).find(
-            (selection) =>
-              selection.entrant.id === entrant1.id &&
-              selection.selectionType === 'CHARACTER',
-          ) &&
-          (game.selections as any[]).find(
-            (selection) =>
-              selection.entrant.id === entrant2.id &&
-              selection.selectionType === 'CHARACTER',
-          ) &&
-          game.stage,
-      )
-        ? 1
-        : null,
-  };
-}
-
 const RESET_SET_MUTATION = `
   mutation resetSet($setId: ID!) {
     resetSet(setId: $setId) {${UPDATE_SET_INNER}}
@@ -974,10 +888,7 @@ const RESET_SET_RECURSIVE_MUTATION = `
     resetSet(setId: $setId, resetDependentSets: true) {${UPDATE_SET_INNER}}
   }
 `;
-async function resetSet(
-  setId: number | string,
-  recursive: boolean,
-): Promise<ApiSetUpdate> {
+async function resetSet(setId: number | string, recursive: boolean) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -990,7 +901,6 @@ async function resetSet(
   if (!data.resetSet) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.resetSet);
 }
 
 const ASSIGN_SET_STATION_MUTATION = `
@@ -998,10 +908,7 @@ const ASSIGN_SET_STATION_MUTATION = `
     assignStation(setId: $setId, stationId: $stationId) {${UPDATE_SET_INNER}}
   }
 `;
-async function assignSetStation(
-  setId: number | string,
-  stationId: number,
-): Promise<ApiSetUpdate> {
+async function assignSetStation(setId: number | string, stationId: number) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1013,7 +920,6 @@ async function assignSetStation(
   if (!data.assignStation) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.assignStation);
 }
 
 const ASSIGN_SET_STREAM_MUTATION = `
@@ -1021,10 +927,7 @@ const ASSIGN_SET_STREAM_MUTATION = `
     assignStream(setId: $setId, streamId: $streamId) {${UPDATE_SET_INNER}}
   }
 `;
-async function assignSetStream(
-  setId: number | string,
-  streamId: number,
-): Promise<ApiSetUpdate> {
+async function assignSetStream(setId: number | string, streamId: number) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1036,7 +939,6 @@ async function assignSetStream(
   if (!data.assignStream) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.assignStream);
 }
 
 const CALL_SET_MUTATION = `
@@ -1044,7 +946,7 @@ const CALL_SET_MUTATION = `
     markSetCalled(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function callSet(setId: number | string): Promise<ApiSetUpdate> {
+async function callSet(setId: number | string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1053,7 +955,6 @@ async function callSet(setId: number | string): Promise<ApiSetUpdate> {
   if (!data.markSetCalled) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.markSetCalled);
 }
 
 const START_SET_MUTATION = `
@@ -1061,7 +962,7 @@ const START_SET_MUTATION = `
     markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function startSet(setId: number | string): Promise<ApiSetUpdate> {
+async function startSet(setId: number | string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1070,7 +971,6 @@ async function startSet(setId: number | string): Promise<ApiSetUpdate> {
   if (!data.markSetInProgress) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.markSetInProgress);
 }
 
 const REPORT_SET_MUTATION = `
@@ -1102,7 +1002,6 @@ async function reportSet(
   if (!data.reportBracketSet) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return (data.reportBracketSet as any[]).map(updateSetToApiSetUpdate);
 }
 
 const UPDATE_SET_MUTATION = `
@@ -1120,7 +1019,7 @@ async function updateSet(
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
-): Promise<ApiSetUpdate> {
+) {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1134,7 +1033,6 @@ async function updateSet(
   if (!data.updateBracketSet) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
-  return updateSetToApiSetUpdate(data.updateBracketSet);
 }
 
 const emitter = new EventEmitter();
@@ -1162,12 +1060,9 @@ async function tryNextTransaction(id: number, slug: string) {
       if (transaction) {
         // eslint-disable-next-line no-constant-condition
         while (true) {
-          let updates: ApiSetUpdate[] = [];
           if (transaction.type === TransactionType.RESET) {
             try {
-              updates = [
-                await resetSet(transaction.setId, transaction.isRecursive),
-              ];
+              await resetSet(transaction.setId, transaction.isRecursive);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1203,12 +1098,7 @@ async function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.ASSIGN_STATION) {
             try {
-              updates = [
-                await assignSetStation(
-                  transaction.setId,
-                  transaction.stationId,
-                ),
-              ];
+              await assignSetStation(transaction.setId, transaction.stationId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1228,9 +1118,7 @@ async function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
             try {
-              updates = [
-                await assignSetStream(transaction.setId, transaction.streamId),
-              ];
+              await assignSetStream(transaction.setId, transaction.streamId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1250,7 +1138,7 @@ async function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.CALL) {
             try {
-              updates = [await callSet(transaction.setId)];
+              await callSet(transaction.setId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1291,7 +1179,7 @@ async function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.START) {
             try {
-              updates = [await startSet(transaction.setId)];
+              await startSet(transaction.setId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1331,14 +1219,12 @@ async function tryNextTransaction(id: number, slug: string) {
           } else if (transaction.type === TransactionType.REPORT) {
             if (transaction.isUpdate) {
               try {
-                updates = [
-                  await updateSet(
-                    transaction.setId,
-                    transaction.winnerId,
-                    transaction.isDQ,
-                    transaction.gameData,
-                  ),
-                ];
+                await updateSet(
+                  transaction.setId,
+                  transaction.winnerId,
+                  transaction.isDQ,
+                  transaction.gameData,
+                );
               } catch (e: any) {
                 if (
                   e instanceof ApiError &&
@@ -1359,7 +1245,7 @@ async function tryNextTransaction(id: number, slug: string) {
                   )
                 ) {
                   try {
-                    updates = await reportSet(
+                    await reportSet(
                       transaction.setId,
                       transaction.winnerId,
                       transaction.isDQ,
@@ -1404,7 +1290,7 @@ async function tryNextTransaction(id: number, slug: string) {
               }
             } else {
               try {
-                updates = await reportSet(
+                await reportSet(
                   transaction.setId,
                   transaction.winnerId,
                   transaction.isDQ,
@@ -1452,20 +1338,20 @@ async function tryNextTransaction(id: number, slug: string) {
                 }
               }
             }
+          } else {
+            throw new Error('unreachable');
           }
-          if (updates.length > 0) {
-            finalizeTransaction(transaction.transactionNum, updates);
-            if (
-              transaction.type === TransactionType.RESET &&
-              transaction.isRecursive
-            ) {
-              await getApiTournament(slug);
-              await Promise.all(
-                getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
-              );
-            }
-            emitter.emit('transaction');
+          finalizeTransaction(transaction.transactionNum);
+          if (
+            transaction.type === TransactionType.RESET &&
+            transaction.isRecursive
+          ) {
+            await getApiTournament(slug);
+            await Promise.all(
+              getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
+            );
           }
+          emitter.emit('transaction');
           updateSyncResultWithSuccess();
 
           transaction = getNextTransaction();

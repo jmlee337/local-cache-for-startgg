@@ -212,6 +212,7 @@ export type DbEntrant = {
 export type DbSetMutation = {
   id: number;
   setId: number;
+  originSetId: number;
   phaseGroupId: number;
   phaseId: number;
   eventId: number;
@@ -319,10 +320,13 @@ export type DbSetMutationGame = DbSetGame & {
 export type DbSeedMutation = {
   id: number;
   seedId: number;
+  originSetId: number;
+  eventId: number;
   tournamentId: number;
 
   entrantIdPresent: null | 1;
   entrantId: number;
+  updatedAt: number;
 
   transactionNum: number;
 };
@@ -466,24 +470,6 @@ export type ApiTransaction = {
       isUpdate: boolean;
     }
 );
-
-export type ApiSetUpdate = {
-  setId: number;
-  phaseGroupId: number;
-  identifier: string;
-  state: number;
-  entrant1Id: number | null;
-  entrant1Score: number | null;
-  entrant2Id: number | null;
-  entrant2Score: number | null;
-  winnerId: number | null;
-  updatedAt: number;
-  startedAt: number | null;
-  completedAt: number | null;
-  stationId: number | null;
-  streamId: number | null;
-  hasStageData: null | 1;
-};
 
 export class ApiError extends Error {
   public fetch: boolean;

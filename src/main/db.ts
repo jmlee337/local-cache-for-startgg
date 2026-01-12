@@ -4,7 +4,6 @@ import { app, BrowserWindow } from 'electron';
 import { mkdirSync } from 'fs';
 import {
   AdminedTournament,
-  ApiSetUpdate,
   ApiTransaction,
   TransactionType,
   DbEntrant,
@@ -175,6 +174,7 @@ export function dbInit(window: BrowserWindow) {
     `CREATE TABLE IF NOT EXISTS setMutations (
       id INTEGER PRIMARY KEY,
       setId INTEGER NOT NULL,
+      originSetId INTEGER NOT NULL,
       phaseGroupId INTEGER NOT NULL,
       phaseId INTEGER NOT NULL,
       eventId INTEGER NOT NULL,
@@ -182,7 +182,6 @@ export function dbInit(window: BrowserWindow) {
       identifier TEXT NOT NULL,
       transactionNum INTEGER NOT NULL,
       isReleased INTEGER,
-      requiresUpdateHack INTEGER,
       statePresent INTEGER,
       state INTEGER,
       entrant1IdPresent INTEGER,
@@ -255,9 +254,12 @@ export function dbInit(window: BrowserWindow) {
     `CREATE TABLE IF NOT EXISTS seedMutations (
       id INTEGER PRIMARY KEY,
       seedId INTEGER NOT NULL,
+      originSetId INTEGER NOT NULL,
+      eventId INTEGER NOT NULL,
       tournamentId INTEGER NOT NULL,
       entrantIdPresent INTEGER,
       entrantId INTEGER,
+      updatedAt INTEGER NOT NULL,
       transactionNum INTEGER NOT NULL
     )`,
   ).run();
@@ -1392,6 +1394,7 @@ export function resetSet(
       .prepare(
         `INSERT INTO setMutations (
           setId,
+          originSetId,
           phaseGroupId,
           phaseId,
           eventId,
@@ -1411,6 +1414,7 @@ export function resetSet(
           gamesPresent,
           updatedAt
         ) VALUES (
+          @id,
           @id,
           @phaseGroupId,
           @phaseId,
@@ -1441,13 +1445,13 @@ export function resetSet(
         .prepare(
           `INSERT INTO setMutations (
             setId,
+            originSetId,
             phaseGroupId,
             phaseId,
             eventId,
             tournamentId,
             identifier,
             transactionNum,
-            requiresUpdateHack,
             statePresent,
             state,
             entrant${wProgressionSet.entrantNum}IdPresent,
@@ -1455,6 +1459,7 @@ export function resetSet(
             updatedAt
           ) VALUES (
             @id,
+            @originSetId,
             @phaseGroupId,
             @phaseId,
             @eventId,
@@ -1464,13 +1469,13 @@ export function resetSet(
             1,
             1,
             1,
-            1,
             null,
             @updatedAt
           )`,
         )
         .run({
           ...wProgressionSet,
+          originSetId: id,
           transactionNum,
           updatedAt,
         });
@@ -1480,13 +1485,13 @@ export function resetSet(
         .prepare(
           `INSERT INTO setMutations (
             setId,
+            originSetId,
             phaseGroupId,
             phaseId,
             eventId,
             tournamentId,
             identifier,
             transactionNum,
-            requiresUpdateHack,
             statePresent,
             state,
             entrant${lProgressionSet.entrantNum}IdPresent,
@@ -1494,6 +1499,7 @@ export function resetSet(
             updatedAt
           ) VALUES (
             @id,
+            @originSetId,
             @phaseGroupId,
             @phaseId,
             @eventId,
@@ -1503,13 +1509,13 @@ export function resetSet(
             1,
             1,
             1,
-            1,
             null,
             @updatedAt
           )`,
         )
         .run({
           ...lProgressionSet,
+          originSetId: id,
           transactionNum,
           updatedAt,
         });
@@ -1519,22 +1525,30 @@ export function resetSet(
         .prepare(
           `INSERT INTO seedMutations (
             seedId,
+            originSetId,
+            eventId,
             tournamentId,
             entrantIdPresent,
             entrantId,
-            transactionNum
+            transactionNum,
+            updatedAt
           ) VALUES (
             @seedId,
+            @originSetId,
+            @eventId,
             @tournamentId,
             1,
             null,
-            @transactionNum
+            @transactionNum,
+            @updatedAt
           )`,
         )
         .run({
           ...wProgressionSet,
           seedId: wProgressionSeedId,
+          originSetId: id,
           transactionNum,
+          updatedAt,
         });
     }
     if (lProgressionSeedId && lProgressionSet) {
@@ -1542,22 +1556,30 @@ export function resetSet(
         .prepare(
           `INSERT INTO seedMutations (
             seedId,
+            originSetId,
+            eventId,
             tournamentId,
             entrantIdPresent,
             entrantId,
-            transactionNum
+            transactionNum,
+            updatedAt
           ) VALUES (
             @seedId,
+            @originSetId,
+            @eventId,
             @tournamentId,
             1,
             null,
-            @transactionNum
+            @transactionNum,
+            @updatedAt
           )`,
         )
         .run({
           ...lProgressionSet,
           seedId: lProgressionSeedId,
+          originSetId: id,
           transactionNum,
+          updatedAt,
         });
     }
     if (rrProgressions.length > 0) {
@@ -1566,34 +1588,43 @@ export function resetSet(
           .prepare(
             `INSERT INTO seedMutations (
               seedId,
+              originSetId,
+              eventId,
               tournamentId,
               entrantIdPresent,
               entrantId,
-              transactionNum
+              transactionNum,
+              updatedAt
             ) VALUES (
               @seedId,
+              @originSetId,
+              @eventId,
               @tournamentId,
               1,
               null,
-              @transactionNum
+              @transactionNum,
+              @updatedAt
             )`,
           )
           .run({
             seedId,
+            originSetId: id,
+            eventId: set.eventId,
             tournamentId: set.tournamentId,
             transactionNum,
+            updatedAt,
           });
         db!
           .prepare(
             `INSERT INTO setMutations (
                 setId,
+                originSetId,
                 phaseGroupId,
                 phaseId,
                 eventId,
                 tournamentId,
                 identifier,
                 transactionNum,
-                requiresUpdateHack,
                 statePresent,
                 state,
                 entrant${progressionSet.entrantNum}IdPresent,
@@ -1601,6 +1632,7 @@ export function resetSet(
                 updatedAt
               ) VALUES (
                 @id,
+                @originSetId,
                 @phaseGroupId,
                 @phaseId,
                 @eventId,
@@ -1610,13 +1642,13 @@ export function resetSet(
                 1,
                 1,
                 1,
-                1,
                 null,
                 @updatedAt
               )`,
           )
           .run({
             ...progressionSet,
+            originSetId: id,
             transactionNum,
             updatedAt,
           });
@@ -1679,6 +1711,7 @@ export function callSet(id: number, transactionNum: number) {
   db.prepare(
     `INSERT INTO setMutations (
       setId,
+      originSetId,
       phaseGroupId,
       phaseId,
       eventId,
@@ -1691,6 +1724,7 @@ export function callSet(id: number, transactionNum: number) {
       startedAt,
       updatedAt
     ) VALUES (
+      @id,
       @id,
       @phaseGroupId,
       @phaseId,
@@ -1763,6 +1797,7 @@ export function startSet(id: number, transactionNum: number) {
   db.prepare(
     `INSERT INTO setMutations (
       setId,
+      originSetId,
       phaseGroupId,
       phaseId,
       eventId,
@@ -1775,6 +1810,7 @@ export function startSet(id: number, transactionNum: number) {
       startedAt,
       updatedAt
     ) VALUES (
+      @id,
       @id,
       @phaseGroupId,
       @phaseId,
@@ -1846,6 +1882,7 @@ export function assignSetStation(
   db.prepare(
     `INSERT INTO setMutations (
       setId,
+      originSetId,
       phaseGroupId,
       phaseId,
       eventId,
@@ -1858,6 +1895,7 @@ export function assignSetStation(
       streamId,
       updatedAt
     ) VALUES (
+      @id,
       @id,
       @phaseGroupId,
       @phaseId,
@@ -1932,6 +1970,7 @@ export function assignSetStream(
   db.prepare(
     `INSERT INTO setMutations (
       setId,
+      originSetId,
       phaseGroupId,
       phaseId,
       eventId,
@@ -1942,6 +1981,7 @@ export function assignSetStream(
       streamId,
       updatedAt
     ) VALUES (
+      @id,
       @id,
       @phaseGroupId,
       @phaseId,
@@ -1977,7 +2017,6 @@ export function assignSetStream(
 }
 
 type ReportProgressionSet = ResetProgressionSet & {
-  requiresUpdateHack: boolean;
   entrantId: number;
 };
 export function reportSet(
@@ -2087,7 +2126,6 @@ export function reportSet(
           eventId,
           tournamentId,
           identifier,
-          requiresUpdateHack: false,
           entrantNum,
           entrantId: winnerId,
         };
@@ -2105,7 +2143,6 @@ export function reportSet(
           eventId,
           tournamentId,
           identifier,
-          requiresUpdateHack: false,
           entrantNum,
           entrantId: loserId,
         };
@@ -2171,7 +2208,6 @@ export function reportSet(
           eventId: affectedSet.eventId,
           tournamentId: affectedSet.tournamentId,
           identifier: affectedSet.identifier,
-          requiresUpdateHack: true,
           entrantNum:
             affectedSet.entrant1PrereqId === wProgressionSeedId ? 1 : 2,
           entrantId: winnerId,
@@ -2197,7 +2233,6 @@ export function reportSet(
           eventId: affectedSet.eventId,
           tournamentId: affectedSet.tournamentId,
           identifier: affectedSet.identifier,
-          requiresUpdateHack: true,
           entrantNum:
             affectedSet.entrant1PrereqId === lProgressionSeedId ? 1 : 2,
           entrantId: loserId,
@@ -2257,7 +2292,6 @@ export function reportSet(
                   eventId: affectedSet.eventId,
                   tournamentId: affectedSet.tournamentId,
                   identifier: affectedSet.identifier,
-                  requiresUpdateHack: true,
                   entrantNum:
                     affectedSet.entrant1PrereqId === dbSeed.id ? 1 : 2,
                   entrantId,
@@ -2276,6 +2310,7 @@ export function reportSet(
       .prepare(
         `INSERT INTO setMutations (
           setId,
+          originSetId,
           phaseGroupId,
           phaseId,
           eventId,
@@ -2299,6 +2334,7 @@ export function reportSet(
           gamesPresent,
           updatedAt
         ) VALUES (
+          @id,
           @id,
           @phaseGroupId,
           @phaseId,
@@ -2387,25 +2423,25 @@ export function reportSet(
         .prepare(
           `INSERT INTO setMutations (
             setId,
+            originSetId,
             phaseGroupId,
             phaseId,
             eventId,
             tournamentId,
             identifier,
             transactionNum,
-            requiresUpdateHack,
             entrant${wProgressionSet.entrantNum}IdPresent,
             entrant${wProgressionSet.entrantNum}Id,
             updatedAt
           ) VALUES (
             @id,
+            @originSetId,
             @phaseGroupId,
             @phaseId,
             @eventId,
             @tournamentId,
             @identifier,
             @transactionNum,
-            @requiresUpdateHack,
             1,
             @entrantId,
             @updatedAt
@@ -2413,8 +2449,8 @@ export function reportSet(
         )
         .run({
           ...wProgressionSet,
+          originSetId: id,
           transactionNum,
-          requiresUpdateHack: wProgressionSet.requiresUpdateHack ? 1 : null,
           updatedAt,
         });
     }
@@ -2423,25 +2459,25 @@ export function reportSet(
         .prepare(
           `INSERT INTO setMutations (
             setId,
+            originSetId,
             phaseGroupId,
             phaseId,
             eventId,
             tournamentId,
             identifier,
             transactionNum,
-            requiresUpdateHack,
             entrant${lProgressionSet.entrantNum}IdPresent,
             entrant${lProgressionSet.entrantNum}Id,
             updatedAt
           ) VALUES (
             @id,
+            @originSetId,
             @phaseGroupId,
             @phaseId,
             @eventId,
             @tournamentId,
             @identifier,
             @transactionNum,
-            @requiresUpdateHack,
             1,
             @entrantId,
             @updatedAt
@@ -2449,8 +2485,8 @@ export function reportSet(
         )
         .run({
           ...lProgressionSet,
+          originSetId: id,
           transactionNum,
-          requiresUpdateHack: lProgressionSet.requiresUpdateHack ? 1 : null,
           updatedAt,
         });
     }
@@ -2459,22 +2495,30 @@ export function reportSet(
         .prepare(
           `INSERT INTO seedMutations (
             seedId,
+            originSetId,
+            eventId,
             tournamentId,
             entrantIdPresent,
             entrantId,
-            transactionNum
+            transactionNum,
+            updatedAt
           ) VALUES (
             @seedId,
+            @originSetId,
+            @eventId,
             @tournamentId,
             1,
             @entrantId,
-            @transactionNum
+            @transactionNum,
+            @updatedAt
           )`,
         )
         .run({
           ...wProgressionSet,
           seedId: wProgressionSeedId,
+          originSetId: id,
           transactionNum,
+          updatedAt,
         });
     }
     if (lProgressionSeedId && lProgressionSet) {
@@ -2482,22 +2526,30 @@ export function reportSet(
         .prepare(
           `INSERT INTO seedMutations (
             seedId,
+            originSetId,
+            eventId,
             tournamentId,
             entrantIdPresent,
             entrantId,
-            transactionNum
+            transactionNum,
+            updatedAt
           ) VALUES (
             @seedId,
+            @originSetId,
+            @eventId,
             @tournamentId,
             1,
             @entrantId,
-            @transactionNum
+            @transactionNum,
+            @updatedAt
           )`,
         )
         .run({
           ...lProgressionSet,
           seedId: lProgressionSeedId,
+          originSetId: id,
           transactionNum,
+          updatedAt,
         });
     }
     if (rrProgressions.length > 0) {
@@ -2506,47 +2558,56 @@ export function reportSet(
           .prepare(
             `INSERT INTO seedMutations (
               seedId,
+              originSetId,
+              eventId,
               tournamentId,
               entrantIdPresent,
               entrantId,
-              transactionNum
+              transactionNum,
+              updatedAt
             ) VALUES (
               @seedId,
+              @originSetId,
+              @eventId,
               @tournamentId,
               1,
               @entrantId,
-              @transactionNum
+              @transactionNum,
+              @updatedAt
             )`,
           )
           .run({
             seedId,
+            originSetId: id,
+            eventId: set.eventId,
             tournamentId: set.tournamentId,
             entrantId: progressionSet.entrantId,
             transactionNum,
+            updatedAt,
           });
         db!
           .prepare(
             `INSERT INTO setMutations (
                 setId,
+                originSetId,
                 phaseGroupId,
                 phaseId,
                 eventId,
                 tournamentId,
                 identifier,
                 transactionNum,
-                requiresUpdateHack,
                 entrant${progressionSet.entrantNum}IdPresent,
                 entrant${progressionSet.entrantNum}Id,
                 updatedAt
               ) VALUES (
                 @id,
+                @originSetId,
                 @phaseGroupId,
                 @phaseId,
                 @eventId,
                 @tournamentId,
                 @identifier,
                 @transactionNum,
-                @requiresUpdateHack,
                 1,
                 @entrantId,
                 @updatedAt
@@ -2554,8 +2615,8 @@ export function reportSet(
           )
           .run({
             ...progressionSet,
+            originSetId: id,
             transactionNum,
-            requiresUpdateHack: progressionSet.requiresUpdateHack ? 1 : null,
             updatedAt,
           });
       });
@@ -2801,10 +2862,7 @@ export function getNextTransaction() {
   return null;
 }
 
-export function finalizeTransaction(
-  transactionNum: number,
-  updates: ApiSetUpdate[],
-) {
+export function finalizeTransaction(transactionNum: number) {
   if (!db) {
     throw new Error('not init');
   }
@@ -2825,126 +2883,6 @@ export function finalizeTransaction(
         'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
-
-    // start.gg does not return sets affected by resetSet or sets affected by
-    // reportBracketSet if they are in a different phase/phaseGroup so we
-    // have to hack it a little.
-    if (updates.length > 0) {
-      const { updatedAt } = updates[0];
-      (
-        db!
-          .prepare(
-            `SELECT *
-              FROM setMutations
-              WHERE transactionNum = @transactionNum
-                AND requiresUpdateHack = 1
-                AND (identifier, phaseGroupId) NOT IN (VALUES ${updates
-                  .map(
-                    (update) =>
-                      `('${update.identifier}', ${update.phaseGroupId})`,
-                  )
-                  .join(', ')})`,
-          )
-          .all({ transactionNum }) as DbSetMutation[]
-      ).forEach((dbSetMutation) => {
-        const exprs: string[] = [];
-        if (dbSetMutation.statePresent) {
-          exprs.push('state = @state');
-        }
-        if (dbSetMutation.entrant1IdPresent) {
-          exprs.push('entrant1Id = @entrant1Id');
-        }
-        if (dbSetMutation.entrant1ScorePresent) {
-          exprs.push('entrant1Score = @entrant1Score');
-        }
-        if (dbSetMutation.entrant2IdPresent) {
-          exprs.push('entrant2Id = @entrant2Id');
-        }
-        if (dbSetMutation.entrant2ScorePresent) {
-          exprs.push('entrant2Score = @entrant2Score');
-        }
-        if (dbSetMutation.winnerIdPresent) {
-          exprs.push('winnerId = @winnerId');
-        }
-        if (dbSetMutation.startedAtPresent) {
-          exprs.push('startedAt = @startedAt');
-        }
-        if (dbSetMutation.completedAtPresent) {
-          exprs.push('completedAt = @completedAt');
-        }
-        if (dbSetMutation.stationIdPresent) {
-          exprs.push('stationId = @stationId');
-        }
-        if (dbSetMutation.streamIdPresent) {
-          exprs.push('streamId = @streamId');
-        }
-        if (exprs.length === 0) {
-          throw new Error(
-            `no mutations in dbSetMutation: ${dbSetMutation.id}, transactionNum: ${dbSetMutation.transactionNum}`,
-          );
-        }
-        exprs.push('updatedAt = @updatedAt');
-        db!
-          .prepare(`UPDATE sets SET ${exprs.join(', ')} WHERE id = @setId`)
-          .run({ ...dbSetMutation, updatedAt });
-      });
-
-      // of course, start.gg does not return seed updates at all so apply those
-      // here as well.
-      (
-        db!
-          .prepare(
-            'SELECT * FROM seedMutations WHERE transactionNum = @transactionNum',
-          )
-          .all({ transactionNum }) as DbSeedMutation[]
-      ).forEach((dbSeedMutation) => {
-        if (!dbSeedMutation.entrantIdPresent) {
-          throw new Error(
-            `no mutations in dbSeedMutation: ${dbSeedMutation.id}, transactionNum: ${dbSeedMutation.transactionNum}`,
-          );
-        }
-        db!
-          .prepare(`UPDATE seeds SET entrantId = @entrantId WHERE id = @seedId`)
-          .run(dbSeedMutation);
-      });
-    }
-
-    db!
-      .prepare(
-        'DELETE FROM setMutations WHERE transactionNum = @transactionNum',
-      )
-      .run({ transactionNum });
-    db!
-      .prepare(
-        'DELETE FROM setMutationGames WHERE transactionNum = @transactionNum',
-      )
-      .run({ transactionNum });
-    db!
-      .prepare(
-        'DELETE FROM seedMutations WHERE transactionNum = @transactionNum',
-      )
-      .run({ transactionNum });
-    updates.forEach((update) => {
-      db!
-        .prepare(
-          `UPDATE sets
-            SET
-              setId = @setId,
-              state = @state,
-              entrant1Id = @entrant1Id,
-              entrant1Score = @entrant1Score,
-              entrant2Id = @entrant2Id,
-              entrant2Score = @entrant2Score,
-              winnerId = @winnerId,
-              updatedAt = @updatedAt,
-              startedAt = @startedAt,
-              completedAt = @completedAt,
-              stationId = @stationId,
-              streamId = @streamId
-            WHERE identifier = @identifier AND phaseGroupId = @phaseGroupId`,
-        )
-        .run(update);
-    });
   })();
 }
 
@@ -3382,22 +3320,14 @@ export function updateEvent(
             identifier,
             bestOf,
             round,
-            state,
-            stationId,
-            streamId,
-            entrant1Id,
-            entrant1Score,
             entrant1PrereqType,
             entrant1PrereqId,
             entrant1PrereqCondition,
             entrant1PrereqStr,
-            entrant2Id,
-            entrant2Score,
             entrant2PrereqType,
             entrant2PrereqId,
             entrant2PrereqCondition,
             entrant2PrereqStr,
-            winnerId,
             wProgressionSeedId,
             wProgressingPhaseGroupId,
             wProgressingPhaseId,
@@ -3406,7 +3336,17 @@ export function updateEvent(
             lProgressingPhaseGroupId,
             lProgressingPhaseId,
             lProgressingName,
+            state,
+            entrant1Id,
+            entrant1Score,
+            entrant2Id,
+            entrant2Score,
+            winnerId,
             updatedAt,
+            startedAt,
+            completedAt,
+            stationId,
+            streamId,
             syncState
           ) values (
             @setId,
@@ -3419,22 +3359,14 @@ export function updateEvent(
             @identifier,
             @bestOf,
             @round,
-            @state,
-            @stationId,
-            @streamId,
-            @entrant1Id,
-            @entrant1Score,
             @entrant1PrereqType,
             @entrant1PrereqId,
             @entrant1PrereqCondition,
             @entrant1PrereqStr,
-            @entrant2Id,
-            @entrant2Score,
             @entrant2PrereqType,
             @entrant2PrereqId,
             @entrant2PrereqCondition,
             @entrant2PrereqStr,
-            @winnerId,
             @wProgressionSeedId,
             @wProgressingPhaseGroupId,
             @wProgressingPhaseId,
@@ -3443,7 +3375,17 @@ export function updateEvent(
             @lProgressingPhaseGroupId,
             @lProgressingPhaseId,
             @lProgressingName,
+            @state,
+            @entrant1Id,
+            @entrant1Score,
+            @entrant2Id,
+            @entrant2Score,
+            @winnerId,
             @updatedAt,
+            @startedAt,
+            @completedAt,
+            @stationId,
+            @streamId,
             0
           )
           ON CONFLICT(identifier, phaseGroupId)
@@ -3456,22 +3398,14 @@ export function updateEvent(
             fullRoundText = @fullRoundText,
             bestOf = @bestOf,
             round = @round,
-            state = @state,
-            stationId = @stationId,
-            streamId = @streamId,
-            entrant1Id = @entrant1Id,
-            entrant1Score = @entrant1Score,
             entrant1PrereqType = @entrant1PrereqType,
             entrant1PrereqId = @entrant1PrereqId,
             entrant1PrereqCondition = @entrant1PrereqCondition,
             entrant1PrereqStr = @entrant1PrereqStr,
-            entrant2Id = @entrant2Id,
-            entrant2Score = @entrant2Score,
             entrant2PrereqType = @entrant2PrereqType,
             entrant2PrereqId = @entrant2PrereqId,
             entrant2PrereqCondition = @entrant2PrereqCondition,
             entrant2PrereqStr = @entrant2PrereqStr,
-            winnerId = @winnerId,
             wProgressionSeedId = @wProgressionSeedId,
             wProgressingPhaseGroupId = @wProgressingPhaseGroupId,
             wProgressingPhaseId = @wProgressingPhaseId,
@@ -3480,9 +3414,18 @@ export function updateEvent(
             lProgressingPhaseGroupId = @lProgressingPhaseGroupId,
             lProgressingPhaseId = @lProgressingPhaseId,
             lProgressingName = @lProgressingName,
+            state = @state,
+            entrant1Id = @entrant1Id,
+            entrant1Score = @entrant1Score,
+            entrant2Id = @entrant2Id,
+            entrant2Score = @entrant2Score,
+            winnerId = @winnerId,
             updatedAt = @updatedAt,
-            syncState = @syncState
-          WHERE updatedAt <= @updatedAt`,
+            startedAt = @startedAt,
+            completedAt = @completedAt,
+            stationId = @stationId,
+            streamId = @streamId,
+            syncState = @syncState`,
       )
       .run(set);
   });
@@ -3538,6 +3481,44 @@ export function updateEvent(
         .all({ eventId }) as DbSet[]
     ).map((dbSet) => [dbSet.id, dbSet]),
   );
+
+  // check for deletable mutations
+  (
+    db
+      .prepare('SELECT * FROM setMutations WHERE eventId = @eventId')
+      .all({ eventId }) as DbSetMutation[]
+  ).forEach((dbSetMutation) => {
+    const afterSet = idToAfterSet.get(dbSetMutation.originSetId);
+    if (afterSet && afterSet.updatedAt >= dbSetMutation.updatedAt) {
+      db!.prepare('DELETE FROM setMutations WHERE id = @id').run(dbSetMutation);
+    }
+  });
+  (
+    db
+      .prepare('SELECT * FROM setMutationGames WHERE eventId = @eventId')
+      .all({ eventId }) as DbSetMutationGame[]
+  ).forEach((dbSetMutationGame) => {
+    const afterSet = idToAfterSet.get(dbSetMutationGame.setId);
+    if (afterSet && afterSet.updatedAt >= dbSetMutationGame.updatedAt) {
+      db!
+        .prepare('DELETE FROM setMutationGames WHERE id = @id')
+        .run(dbSetMutationGame);
+    }
+  });
+  (
+    db
+      .prepare('SELECT * FROM seedMutations WHERE eventId = @eventId')
+      .all({ eventId }) as DbSeedMutation[]
+  ).forEach((dbSeedMutation) => {
+    const afterSet = idToAfterSet.get(dbSeedMutation.originSetId);
+    if (afterSet && afterSet.updatedAt >= dbSeedMutation.updatedAt) {
+      db!
+        .prepare('DELETE FROM seedMutations WHERE id = @id')
+        .run(dbSeedMutation);
+    }
+  });
+
+  // pending transaction coalesce/conflicts
   const setIdToDbTransactions = new Map<number, DbTransaction[]>();
   (
     db
