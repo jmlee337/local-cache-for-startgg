@@ -1,4 +1,4 @@
-import { DbPool, DbSeed, DbSet, DbTiebreakMethod } from '../common/types';
+import { DbPool, DbSeed, DbSet, TiebreakMethod } from '../common/types';
 
 type StandingData = {
   setsWon: number;
@@ -6,6 +6,7 @@ type StandingData = {
   gamesWon: number;
   gameWinRatio: number;
   beatenEntrantIds: Set<number>;
+  h2hPoints: number | null;
 };
 function newStandingData(): StandingData {
   const standingData: StandingData = {
@@ -14,6 +15,7 @@ function newStandingData(): StandingData {
     gamesWon: 0,
     gameWinRatio: 0,
     beatenEntrantIds: new Set(),
+    h2hPoints: null,
   };
   return standingData;
 }
@@ -110,34 +112,25 @@ function sortByHeadToHead(
   sortableEntrants: SortableEntrant[],
   sortFunctions: SortFunction[],
 ) {
-  const entrantIdToH2hScore = new Map(
-    sortableEntrants.map((sortableEntrant) => {
-      let h2hScore = 0;
-      sortableEntrants.forEach((oppEntrant) => {
-        if (oppEntrant.entrantId) {
-          if (
-            sortableEntrant.standingData.beatenEntrantIds.has(
-              oppEntrant.entrantId,
-            )
-          ) {
-            h2hScore += 1;
-          }
-        }
-      });
-      return [sortableEntrant.entrantId, h2hScore];
-    }),
-  );
+  sortableEntrants.forEach((entrant) => {
+    entrant.standingData.h2hPoints = 0;
+    sortableEntrants.forEach((oppEntrant) => {
+      if (entrant.standingData.beatenEntrantIds.has(oppEntrant.entrantId)) {
+        (entrant.standingData.h2hPoints as number) += 1;
+      }
+    });
+  });
   sortableEntrants.sort(
     (a, b) =>
-      entrantIdToH2hScore.get(b.entrantId)! -
-      entrantIdToH2hScore.get(a.entrantId)!,
+      (b.standingData.h2hPoints as number) -
+      (a.standingData.h2hPoints as number),
   );
 
   let start = 0;
-  let compareH2hScore = entrantIdToH2hScore.get(sortableEntrants[0].entrantId)!;
+  let compareH2hScore = sortableEntrants[0].standingData.h2hPoints as number;
   const tieSegments: TieSegment[] = [];
   for (let i = 1; i < sortableEntrants.length; i += 1) {
-    const h2hScore = entrantIdToH2hScore.get(sortableEntrants[i].entrantId)!;
+    const h2hScore = sortableEntrants[i].standingData.h2hPoints as number;
     if (compareH2hScore !== h2hScore) {
       if (start < i - 1) {
         tieSegments.push({ start, end: i });
@@ -162,24 +155,24 @@ function sortByHeadToHead(
   }
 }
 
-function toSortFunction(tiebreakMethod: DbTiebreakMethod) {
-  if (tiebreakMethod === DbTiebreakMethod.WINS) {
+function toSortFunction(tiebreakMethod: TiebreakMethod) {
+  if (tiebreakMethod === TiebreakMethod.WINS) {
     return sortBySetWins;
   }
-  if (tiebreakMethod === DbTiebreakMethod.GAME_RATIO) {
+  if (tiebreakMethod === TiebreakMethod.GAME_RATIO) {
     return sortByGameWins;
   }
-  if (tiebreakMethod === DbTiebreakMethod.HEAD_TO_HEAD) {
+  if (tiebreakMethod === TiebreakMethod.HEAD_TO_HEAD) {
     return sortByHeadToHead;
   }
   throw new Error('unreachable');
 }
 
-export default function getPlacementToEntrantId(
+export default function getPlacementToSortableEntrant(
   dbPool: DbPool,
   dbSets: DbSet[],
   dbSeeds: DbSeed[],
-): Map<number, number> {
+): Map<number, SortableEntrant> {
   if (dbPool.bracketType !== 3) {
     throw new Error(
       `wrong bracketType: ${dbPool.bracketType} for pool: ${dbPool.id}`,
@@ -218,8 +211,9 @@ export default function getPlacementToEntrantId(
       dbSet.state !== 3 ||
       !dbSet.winnerId
     ) {
-      throw new Error(`set doesn't have winner: ${dbSet.id}`);
+      return;
     }
+
     const entrant1Score = dbSet.entrant1Score ?? 0;
     const entrant2Score = dbSet.entrant2Score ?? 0;
     const totalGames = entrant1Score + entrant2Score;
@@ -262,12 +256,11 @@ export default function getPlacementToEntrantId(
       standingData,
     }),
   );
+  if (sortableEntrants.length > 0) {
+    sortFunctions[0](sortableEntrants, sortFunctions.slice(1));
+  }
 
-  sortFunctions[0](sortableEntrants, sortFunctions.slice(1));
   return new Map(
-    sortableEntrants.map((sortableEntrant, i) => [
-      i + 1,
-      sortableEntrant.entrantId,
-    ]),
+    sortableEntrants.map((sortableEntrant, i) => [i + 1, sortableEntrant]),
   );
 }

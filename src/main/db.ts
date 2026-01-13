@@ -44,8 +44,9 @@ import {
   RendererPhase,
   RendererSeed,
   DbSeedMutation,
+  RendererStanding,
 } from '../common/types';
-import getPlacementToEntrantId from './standing';
+import getPlacementToSortableEntrant from './standing';
 
 enum SyncStatus {
   BEHIND,
@@ -2264,7 +2265,7 @@ export function reportSet(
         const dbSeeds = db
           .prepare('SELECT * FROM seeds WHERE poolId = @id')
           .all(dbPool) as DbSeed[];
-        const placementToEntrantId = getPlacementToEntrantId(
+        const placementToSortableEntrant = getPlacementToSortableEntrant(
           dbPool,
           [set, ...rrSets],
           dbSeeds,
@@ -2277,8 +2278,10 @@ export function reportSet(
             .all(dbPool) as DbSeed[]
         ).forEach((dbSeed) => {
           if (dbSeed.originPlacement !== null) {
-            const entrantId = placementToEntrantId.get(dbSeed.originPlacement);
-            if (entrantId) {
+            const sortableEntrant = placementToSortableEntrant.get(
+              dbSeed.originPlacement,
+            );
+            if (sortableEntrant) {
               const affectedSet = db!
                 .prepare(
                   'SELECT * FROM sets WHERE entrant1PrereqId = @seedId OR entrant2PrereqId = @seedId',
@@ -2294,7 +2297,7 @@ export function reportSet(
                   identifier: affectedSet.identifier,
                   entrantNum:
                     affectedSet.entrant1PrereqId === dbSeed.id ? 1 : 2,
-                  entrantId,
+                  entrantId: sortableEntrant.entrantId,
                 };
                 rrProgressions.push({ seedId: dbSeed.id, progressionSet });
               }
@@ -4136,13 +4139,12 @@ export function getTournament(): RendererTournament | undefined {
               pools: dbPools
                 .filter((dbPool) => dbPool.phaseId === dbPhase.id)
                 .map((dbPool): RendererPool => {
-                  const seeds = (
-                    db!
-                      .prepare(
-                        'SELECT * FROM seeds WHERE poolId = @id ORDER BY groupSeedNum ASC',
-                      )
-                      .all({ id: dbPool.id }) as DbSeed[]
-                  ).map((dbSeed): RendererSeed => {
+                  const dbSeeds = db!
+                    .prepare(
+                      'SELECT * FROM seeds WHERE poolId = @id ORDER BY groupSeedNum ASC',
+                    )
+                    .all({ id: dbPool.id }) as DbSeed[];
+                  const seeds = dbSeeds.map((dbSeed): RendererSeed => {
                     applySeedMutations(dbSeed);
                     let entrant: {
                       id: number;
@@ -4168,25 +4170,60 @@ export function getTournament(): RendererTournament | undefined {
                       entrant,
                     };
                   });
-                  const rendererSets = (
+                  const dbSets: DbSet[] = [];
+                  const rendererSets: RendererSet[] = [];
+                  (
                     db!
                       .prepare(
                         'SELECT * FROM sets WHERE phaseGroupId = @id ORDER BY ordinal, id',
                       )
                       .all({ id: dbPool.id }) as DbSet[]
-                  ).map((dbSet) => {
+                  ).forEach((dbSet) => {
                     const dbSetGames = db!
                       .prepare(
                         'SELECT * FROM setGames WHERE setId = @setId ORDER BY orderNum ASC',
                       )
                       .all({ setId: dbSet.setId }) as DbSetGame[];
                     applyMutations(dbSet, dbSetGames);
-                    return dbSetToRendererSet(
-                      dbSet,
-                      dbSetGames,
-                      idToRendererEntrant,
+                    dbSets.push(dbSet);
+                    rendererSets.push(
+                      dbSetToRendererSet(
+                        dbSet,
+                        dbSetGames,
+                        idToRendererEntrant,
+                      ),
                     );
                   });
+
+                  const standings: RendererStanding[] = [];
+                  if (dbPool.bracketType === 3) {
+                    const placementToSortableEntrant =
+                      getPlacementToSortableEntrant(dbPool, dbSets, dbSeeds);
+                    Array.from(placementToSortableEntrant.entries()).forEach(
+                      ([standingNum, sortableEntrant]) => {
+                        const rendererEntrant = idToRendererEntrant.get(
+                          sortableEntrant.entrantId,
+                        );
+                        if (rendererEntrant) {
+                          standings.push({
+                            standingNum,
+                            entrant: {
+                              id: sortableEntrant.entrantId,
+                              participants: rendererEntrant.participants,
+                            },
+                            setWins: sortableEntrant.standingData.setsWon,
+                            gamesWon: sortableEntrant.standingData.gamesWon,
+                            gamesLost:
+                              sortableEntrant.standingData.gamesPlayed -
+                              sortableEntrant.standingData.gamesWon,
+                            gameRatio:
+                              sortableEntrant.standingData.gameWinRatio,
+                            h2hPoints: sortableEntrant.standingData.h2hPoints,
+                          });
+                        }
+                      },
+                    );
+                  }
 
                   return {
                     id: dbPool.id,
@@ -4194,7 +4231,11 @@ export function getTournament(): RendererTournament | undefined {
                     bracketType: dbPool.bracketType,
                     waveId: dbPool.waveId,
                     winnersTargetPhaseId: dbPool.winnersTargetPhaseId,
+                    tiebreakMethod1: dbPool.tiebreakMethod1,
+                    tiebreakMethod2: dbPool.tiebreakMethod2,
+                    tiebreakMethod3: dbPool.tiebreakMethod3,
                     seeds,
+                    standings,
                     sets: rendererSets,
                   };
                 }),

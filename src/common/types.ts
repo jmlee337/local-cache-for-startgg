@@ -100,13 +100,36 @@ export type RendererSeed = {
   } | null;
 };
 
+export type RendererStanding = {
+  standingNum: number;
+  entrant: {
+    id: number;
+    participants: RendererParticipant[];
+  };
+  setWins: number;
+  gamesWon: number;
+  gamesLost: number;
+  gameRatio: number;
+  h2hPoints: number | null;
+};
+
+export enum TiebreakMethod {
+  WINS = 'wins',
+  HEAD_TO_HEAD = 'head_to_head',
+  GAME_RATIO = 'game_ratio',
+}
+
 export type RendererPool = {
   id: number;
   name: string;
   bracketType: number;
   waveId: number | null;
   winnersTargetPhaseId: number | null;
+  tiebreakMethod1: TiebreakMethod | null;
+  tiebreakMethod2: TiebreakMethod | null;
+  tiebreakMethod3: TiebreakMethod | null;
   seeds: RendererSeed[];
+  standings: RendererStanding[];
   sets: RendererSet[];
 };
 
@@ -345,12 +368,6 @@ export type DbSeed = {
   entrantId: number | null;
 };
 
-export enum DbTiebreakMethod {
-  WINS = 'wins',
-  HEAD_TO_HEAD = 'head_to_head',
-  GAME_RATIO = 'game_ratio',
-}
-
 export type DbPool = {
   id: number;
   waveId: number | null;
@@ -361,9 +378,9 @@ export type DbPool = {
   bracketType: number;
   state: number;
   winnersTargetPhaseId: number | null;
-  tiebreakMethod1: DbTiebreakMethod | null;
-  tiebreakMethod2: DbTiebreakMethod | null;
-  tiebreakMethod3: DbTiebreakMethod | null;
+  tiebreakMethod1: TiebreakMethod | null;
+  tiebreakMethod2: TiebreakMethod | null;
+  tiebreakMethod3: TiebreakMethod | null;
 };
 
 export type DbPhase = {

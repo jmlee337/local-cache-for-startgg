@@ -7,6 +7,7 @@ import {
   Edit,
   FolderZip,
   FolderZipOutlined,
+  FormatListNumbered,
   Group,
   HourglassTop,
   KeyboardArrowDown,
@@ -39,6 +40,11 @@ import {
   ListItemText,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Toolbar,
   Tooltip,
@@ -57,9 +63,11 @@ import {
   RendererPhase,
   RendererPool,
   RendererSet,
+  RendererStanding,
   RendererStream,
   RendererTournament,
   RendererUnloadedEvent,
+  TiebreakMethod,
   TransactionType,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
@@ -350,6 +358,124 @@ function SetListItemButton({
   );
 }
 
+function TiebreakMethodHeader({
+  tiebreakMethod,
+}: {
+  tiebreakMethod: TiebreakMethod;
+}) {
+  if (tiebreakMethod === TiebreakMethod.WINS) {
+    return <TableCell>Set Wins</TableCell>;
+  }
+  if (tiebreakMethod === TiebreakMethod.GAME_RATIO) {
+    return <TableCell>Game Count</TableCell>;
+  }
+  if (tiebreakMethod === TiebreakMethod.HEAD_TO_HEAD) {
+    return <TableCell>H2H Points</TableCell>;
+  }
+}
+
+function TiebreakMethodBody({
+  tiebreakMethod,
+  standing,
+}: {
+  tiebreakMethod: TiebreakMethod;
+  standing: RendererStanding;
+}) {
+  if (tiebreakMethod === TiebreakMethod.WINS) {
+    return <TableCell>{standing.setWins}</TableCell>;
+  }
+  if (tiebreakMethod === TiebreakMethod.GAME_RATIO) {
+    return (
+      <TableCell>
+        {standing.gamesWon} - {standing.gamesLost} (
+        {(standing.gameRatio * 100).toFixed(2)}%)
+      </TableCell>
+    );
+  }
+  if (tiebreakMethod === TiebreakMethod.HEAD_TO_HEAD) {
+    return <TableCell>{standing.h2hPoints ?? 'N/A'}</TableCell>;
+  }
+}
+
+function Standings({
+  pool,
+  standings,
+}: {
+  pool: RendererPool;
+  standings: RendererStanding[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Tooltip placement="right" title="Standings">
+        <IconButton
+          onClick={(ev) => {
+            ev.stopPropagation();
+            setOpen(true);
+          }}
+        >
+          <FormatListNumbered />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      >
+        <DialogTitle>Pool {pool.name} Standings</DialogTitle>
+        <DialogContent>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell />
+                {pool.tiebreakMethod1 !== null && (
+                  <TiebreakMethodHeader tiebreakMethod={pool.tiebreakMethod1} />
+                )}
+                {pool.tiebreakMethod2 !== null && (
+                  <TiebreakMethodHeader tiebreakMethod={pool.tiebreakMethod2} />
+                )}
+                {pool.tiebreakMethod3 !== null && (
+                  <TiebreakMethodHeader tiebreakMethod={pool.tiebreakMethod3} />
+                )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {standings.map((standing) => (
+                <TableRow key={standing.standingNum}>
+                  <TableCell>
+                    {standing.entrant.participants
+                      .map((participant) => participant.gamerTag)
+                      .join(' / ')}
+                  </TableCell>
+                  {pool.tiebreakMethod1 !== null && (
+                    <TiebreakMethodBody
+                      tiebreakMethod={pool.tiebreakMethod1}
+                      standing={standing}
+                    />
+                  )}
+                  {pool.tiebreakMethod2 !== null && (
+                    <TiebreakMethodBody
+                      tiebreakMethod={pool.tiebreakMethod2}
+                      standing={standing}
+                    />
+                  )}
+                  {pool.tiebreakMethod3 !== null && (
+                    <TiebreakMethodBody
+                      tiebreakMethod={pool.tiebreakMethod3}
+                      standing={standing}
+                    />
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 function PoolListItem({
   pool,
   conflict,
@@ -392,12 +518,12 @@ function PoolListItem({
           {pool.sets.length > 0 && (
             <>
               {typeof pool.sets[0].setId === 'number' && (
-                <Tooltip title="Locked" placement="right">
+                <Tooltip title="Locked" placement="left">
                   <LockPerson style={{ marginLeft: '8px' }} />
                 </Tooltip>
               )}
               {typeof pool.sets[0].setId === 'string' && (
-                <Tooltip title="Lock" placement="right">
+                <Tooltip title="Lock" placement="left">
                   <IconButton
                     color="warning"
                     onClick={(ev) => {
@@ -410,6 +536,9 @@ function PoolListItem({
                 </Tooltip>
               )}
             </>
+          )}
+          {pool.standings.length > 0 && (
+            <Standings pool={pool} standings={pool.standings} />
           )}
         </Stack>
         {open ? (
