@@ -528,7 +528,7 @@ function PoolListItem({
               </Tooltip>
             )}
             {typeof pool.sets[0].setId === 'string' && (
-              <Tooltip title="Lock" placement="left">
+              <Tooltip title="Lock" placement="right">
                 <IconButton
                   color="warning"
                   onClick={() => {
@@ -547,36 +547,39 @@ function PoolListItem({
       </ListItem>
       <Collapse in={open && ancestorsOpen} unmountOnExit>
         <Stack alignItems="start">
-          <ListItemButton
-            disableGutters
-            style={{
-              flexGrow: 0,
-              gap: '8px',
-              height: '32px',
-              marginLeft: '-36px',
-              padding: '0 8px 0 60px',
-            }}
-            onClick={() => {
-              setCompletedOpen(!completedOpen);
-            }}
+          <Tooltip
+            placement="left"
+            title={
+              completedOpen ? 'Hide completed sets' : 'Show completed sets'
+            }
           >
-            <ListItemText style={{ flexGrow: 0 }}>
-              <Typography variant="caption">completed</Typography>
-            </ListItemText>
-            {completedOpen ? (
-              <Tooltip placement="left" title="Hide completed sets">
+            <ListItemButton
+              disableGutters
+              style={{
+                flexGrow: 0,
+                gap: '8px',
+                height: '32px',
+                marginLeft: '-36px',
+                padding: '0 8px 0 60px',
+              }}
+              onClick={() => {
+                setCompletedOpen(!completedOpen);
+              }}
+            >
+              <ListItemText style={{ flexGrow: 0 }}>
+                <Typography variant="caption">completed</Typography>
+              </ListItemText>
+              {completedOpen ? (
                 <Visibility
                   sx={{ color: (theme) => theme.palette.text.secondary }}
                 />
-              </Tooltip>
-            ) : (
-              <Tooltip placement="left" title="Show completed sets">
+              ) : (
                 <VisibilityOff
                   sx={{ color: (theme) => theme.palette.text.secondary }}
                 />
-              </Tooltip>
-            )}
-          </ListItemButton>
+              )}
+            </ListItemButton>
+          </Tooltip>
           {winnersSets.length > 0 && (
             <Stack
               direction="row"
@@ -1075,6 +1078,7 @@ export default function Tournament() {
     [],
   );
 
+  const [unloadedOpen, setUnloadedOpen] = useState(true);
   const [tournament, setTournament] = useState<RendererTournament | null>(null);
   useEffect(() => {
     (async () => {
@@ -1120,7 +1124,12 @@ export default function Tournament() {
           }
         }
       }
-      setTournament(newTournament);
+      setTournament((oldTournament) => {
+        if (oldTournament === null || oldTournament.id !== newTournament.id) {
+          setUnloadedOpen(newTournament.events.length === 0);
+        }
+        return newTournament;
+      });
     });
   }, [
     reportDialogOpen,
@@ -1130,8 +1139,6 @@ export default function Tournament() {
     reportSet,
     setReportState,
   ]);
-
-  const [unloadedOpen, setUnloadedOpen] = useState(true);
 
   let reportGameData:
     | [
@@ -1214,12 +1221,7 @@ export default function Tournament() {
           color: (theme) => theme.palette.text.primary,
         }}
       >
-        <Toolbar
-          disableGutters
-          style={{
-            paddingRight: '8px',
-          }}
-        >
+        <Toolbar disableGutters>
           <Stack width="100%">
             <Stack
               direction="row"
@@ -1420,22 +1422,6 @@ export default function Tournament() {
                 <Websocket />
               </Stack>
               <Stack direction="row" alignItems="center">
-                <Tooltip title="Refresh">
-                  <span>
-                    <IconButton
-                      disabled={!tournament || refreshing}
-                      onClick={() => {
-                        window.electron.refreshTournament();
-                      }}
-                    >
-                      {refreshing ? (
-                        <CircularProgress size="24px" />
-                      ) : (
-                        <Refresh />
-                      )}
-                    </IconButton>
-                  </span>
-                </Tooltip>
                 <ConnectCodes participants={tournament?.participants ?? []} />
                 <Discords participants={tournament?.participants ?? []} />
                 {unloadedOpen ? (
@@ -1459,6 +1445,22 @@ export default function Tournament() {
                     </IconButton>
                   </Tooltip>
                 )}
+                <Tooltip title="Refresh">
+                  <span>
+                    <IconButton
+                      disabled={!tournament || refreshing}
+                      onClick={() => {
+                        window.electron.refreshTournament();
+                      }}
+                    >
+                      {refreshing ? (
+                        <CircularProgress size="24px" />
+                      ) : (
+                        <Refresh />
+                      )}
+                    </IconButton>
+                  </span>
+                </Tooltip>
               </Stack>
             </Stack>
           </Stack>

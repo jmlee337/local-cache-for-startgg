@@ -8,6 +8,7 @@ import {
   DialogTitle,
   FormControlLabel,
   IconButton,
+  Link,
   Stack,
   Switch,
   TextField,
@@ -100,13 +101,13 @@ export default function Settings({
             Get your start.gg API key by clicking “Create new token” in the
             <br />
             “Personal Access Tokens” tab of{' '}
-            <a
+            <Link
               href="https://start.gg/admin/profile/developer"
               target="_blank"
               rel="noreferrer"
             >
               this page
-            </a>
+            </Link>
             . Keep it private!
           </DialogContentText>
           <Stack alignItems="center" direction="row" gap="8px">
