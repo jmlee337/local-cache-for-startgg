@@ -214,8 +214,12 @@ export default function getPlacementToSortableEntrant(
       return;
     }
 
-    const entrant1Score = dbSet.entrant1Score ?? 0;
-    const entrant2Score = dbSet.entrant2Score ?? 0;
+    let entrant1Score = dbSet.entrant1Score ?? 0;
+    let entrant2Score = dbSet.entrant2Score ?? 0;
+    if (entrant1Score < 0 || entrant2Score < 0) {
+      entrant1Score = 0;
+      entrant2Score = 0;
+    }
     const totalGames = entrant1Score + entrant2Score;
 
     let entrant1StandingData = entrantIdToStandingData.get(dbSet.entrant1Id);
