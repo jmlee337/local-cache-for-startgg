@@ -482,6 +482,7 @@ function PoolListItem({
   conflict,
   phaseId,
   ancestorsOpen,
+  initiallyOpen,
   openUpgradeDialog,
   reportSet,
 }: {
@@ -489,10 +490,11 @@ function PoolListItem({
   conflict: RendererConflict | null;
   phaseId: number;
   ancestorsOpen: boolean;
+  initiallyOpen: boolean;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (poolId: number, set: RendererSet) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [completedOpen, setCompletedOpen] = useState(true);
 
   const winnersSets = pool.sets.filter((set) => set.round > 0);
@@ -654,16 +656,18 @@ function PhaseListItem({
   phase,
   conflict,
   ancestorsOpen,
+  initiallyOpen,
   openUpgradeDialog,
   reportSet,
 }: {
   phase: RendererPhase;
   conflict: RendererConflict | null;
   ancestorsOpen: boolean;
+  initiallyOpen: boolean;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (phaseId: number, poolId: number, set: RendererSet) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
 
   return (
     <Stack marginLeft="20px" alignItems="start">
@@ -700,6 +704,7 @@ function PhaseListItem({
               conflict={conflict}
               phaseId={phase.id}
               ancestorsOpen={open && ancestorsOpen}
+              initiallyOpen={phase.pools.length === 1}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(poolId: number, set: RendererSet) =>
                 reportSet(phase.id, poolId, set)
@@ -714,11 +719,13 @@ function PhaseListItem({
 function LoadedEventListItem({
   event,
   conflict,
+  initiallyOpen,
   openUpgradeDialog,
   reportSet,
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
+  initiallyOpen: boolean;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (
     eventId: number,
@@ -727,7 +734,7 @@ function LoadedEventListItem({
     set: RendererSet,
   ) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
 
   return (
     <Stack alignItems="start">
@@ -772,6 +779,7 @@ function LoadedEventListItem({
               phase={phase}
               conflict={conflict}
               ancestorsOpen={open}
+              initiallyOpen={event.phases.length === 1}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(phaseId: number, poolId: number, set: RendererSet) =>
                 reportSet(event.id, phaseId, poolId, set)
@@ -1478,6 +1486,7 @@ export default function Tournament() {
                 key={event.id}
                 event={event}
                 conflict={conflict}
+                initiallyOpen={tournament.events.length === 1}
                 openUpgradeDialog={async (
                   pool: RendererPool,
                   phaseId: number,
