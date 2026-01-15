@@ -36,6 +36,7 @@ import {
   Divider,
   IconButton,
   List,
+  ListItem,
   ListItemButton,
   ListItemText,
   Paper,
@@ -409,8 +410,7 @@ function Standings({
     <>
       <Tooltip placement="right" title="Standings">
         <IconButton
-          onClick={(ev) => {
-            ev.stopPropagation();
+          onClick={() => {
             setOpen(true);
           }}
         >
@@ -418,6 +418,7 @@ function Standings({
         </IconButton>
       </Tooltip>
       <Dialog
+        keepMounted={false}
         open={open}
         onClose={() => {
           setOpen(false);
@@ -499,67 +500,59 @@ function PoolListItem({
 
   return (
     <Box marginLeft="16px">
-      <ListItemButton
-        disabled={pool.sets.length === 0}
-        disableGutters
-        style={{
-          justifyContent: 'space-between',
-          marginLeft: '-32px',
-          padding: '0 16px 0 32px',
-        }}
-        onClick={() => {
-          setOpen((oldOpen) => !oldOpen);
-        }}
-      >
-        <Stack direction="row" alignItems="center">
+      <ListItem disablePadding>
+        <ListItemButton
+          disabled={pool.sets.length === 0}
+          disableGutters
+          style={{
+            flexGrow: 0,
+            marginLeft: '-32px',
+            padding: '0 8px 0 32px',
+          }}
+          onClick={() => {
+            setOpen((oldOpen) => !oldOpen);
+          }}
+        >
+          {open ? <KeyboardArrowDown /> : <KeyboardArrowRight />}
           <ListItemText style={{ flexGrow: 0 }}>
             {pool.name} <Typography variant="caption">({pool.id})</Typography>
           </ListItemText>
-          {pool.sets.length > 0 && (
-            <>
-              {typeof pool.sets[0].setId === 'number' && (
-                <Tooltip title="Locked" placement="left">
-                  <LockPerson style={{ marginLeft: '8px' }} />
-                </Tooltip>
-              )}
-              {typeof pool.sets[0].setId === 'string' && (
-                <Tooltip title="Lock" placement="left">
-                  <IconButton
-                    color="warning"
-                    onClick={(ev) => {
-                      ev.stopPropagation();
-                      openUpgradeDialog(pool, phaseId);
-                    }}
-                  >
-                    <LockOpen />
-                  </IconButton>
-                </Tooltip>
-              )}
-            </>
-          )}
-          {pool.standings.length > 0 && (
-            <Standings pool={pool} standings={pool.standings} />
-          )}
-        </Stack>
-        {open ? (
-          <Tooltip placement="left" title="Hide sets">
-            <KeyboardArrowDown />
-          </Tooltip>
-        ) : (
-          <Tooltip placement="left" title="Show sets">
-            <KeyboardArrowRight />
-          </Tooltip>
+        </ListItemButton>
+        {pool.sets.length > 0 && (
+          <>
+            {typeof pool.sets[0].setId === 'number' && (
+              <Tooltip title="Locked" placement="left">
+                <LockPerson style={{ marginLeft: '8px', marginRight: '8px' }} />
+              </Tooltip>
+            )}
+            {typeof pool.sets[0].setId === 'string' && (
+              <Tooltip title="Lock" placement="left">
+                <IconButton
+                  color="warning"
+                  onClick={() => {
+                    openUpgradeDialog(pool, phaseId);
+                  }}
+                >
+                  <LockOpen />
+                </IconButton>
+              </Tooltip>
+            )}
+          </>
         )}
-      </ListItemButton>
+        {pool.standings.length > 0 && (
+          <Standings pool={pool} standings={pool.standings} />
+        )}
+      </ListItem>
       <Collapse in={open && ancestorsOpen} unmountOnExit>
-        <>
+        <Stack alignItems="start">
           <ListItemButton
             disableGutters
             style={{
-              justifyContent: 'space-between',
+              flexGrow: 0,
+              gap: '8px',
               height: '32px',
-              marginLeft: '-48px',
-              padding: '0 16px 0 64px',
+              marginLeft: '-36px',
+              padding: '0 8px 0 60px',
             }}
             onClick={() => {
               setCompletedOpen(!completedOpen);
@@ -587,8 +580,8 @@ function PoolListItem({
               direction="row"
               flexWrap="wrap"
               gap="8px"
-              marginLeft="16px"
-              marginRight="32px"
+              marginLeft="24px"
+              marginRight="8px"
             >
               {winnersSets
                 .sort((a, b) => {
@@ -651,7 +644,7 @@ function PoolListItem({
                 )}
             </Stack>
           )}
-        </>
+        </Stack>
       </Collapse>
     </Box>
   );
@@ -673,21 +666,18 @@ function PhaseListItem({
   const [open, setOpen] = useState(false);
 
   return (
-    <Box marginLeft="16px">
+    <Stack marginLeft="20px" alignItems="start">
       <ListItemButton
         disableGutters
         style={{
-          justifyContent: 'space-between',
+          flexGrow: 0,
           marginLeft: '-16px',
-          padding: '0 16px 0 16px',
+          padding: '0 8px 0 16px',
         }}
         onClick={() => {
           setOpen((oldOpen) => !oldOpen);
         }}
       >
-        <ListItemText>
-          {phase.name} <Typography variant="caption">({phase.id})</Typography>
-        </ListItemText>
         {open ? (
           <Tooltip placement="left" title="Hide pools">
             <KeyboardArrowDown />
@@ -697,6 +687,9 @@ function PhaseListItem({
             <KeyboardArrowRight />
           </Tooltip>
         )}
+        <ListItemText>
+          {phase.name} <Typography variant="caption">({phase.id})</Typography>
+        </ListItemText>
       </ListItemButton>
       <Collapse in={open}>
         {phase.pools.length > 0 &&
@@ -714,7 +707,7 @@ function PhaseListItem({
             />
           ))}
       </Collapse>
-    </Box>
+    </Stack>
   );
 }
 
@@ -737,17 +730,25 @@ function LoadedEventListItem({
   const [open, setOpen] = useState(false);
 
   return (
-    <>
+    <Stack alignItems="start">
       <ListItemButton
         disableGutters
         style={{
-          justifyContent: 'space-between',
-          padding: '0 16px 0 8px',
+          padding: '0 8px 0 4px',
         }}
         onClick={() => {
           setOpen((oldOpen) => !oldOpen);
         }}
       >
+        {open ? (
+          <Tooltip placement="left" title="Hide phases">
+            <KeyboardArrowDown />
+          </Tooltip>
+        ) : (
+          <Tooltip placement="left" title="Show phases">
+            <KeyboardArrowRight />
+          </Tooltip>
+        )}
         <Stack direction="row" alignItems="center">
           <ListItemText style={{ marginRight: '8px' }}>
             {event.name} <Typography variant="caption">({event.id})</Typography>
@@ -762,15 +763,6 @@ function LoadedEventListItem({
             </Tooltip>
           )}
         </Stack>
-        {open ? (
-          <Tooltip placement="left" title="Hide phases">
-            <KeyboardArrowDown />
-          </Tooltip>
-        ) : (
-          <Tooltip placement="left" title="Show phases">
-            <KeyboardArrowRight />
-          </Tooltip>
-        )}
       </ListItemButton>
       <Collapse in={open}>
         {event.phases.length > 0 &&
@@ -787,7 +779,7 @@ function LoadedEventListItem({
             />
           ))}
       </Collapse>
-    </>
+    </Stack>
   );
 }
 
