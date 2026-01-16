@@ -52,7 +52,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AdminedTournament,
   ApiError,
@@ -64,7 +64,6 @@ import {
   RendererParticipant,
   RendererPhase,
   RendererPool,
-  RendererSeed,
   RendererSet,
   RendererStanding,
   RendererStream,
@@ -400,17 +399,38 @@ function TiebreakMethodBody({
   }
 }
 
-function Seeds({
-  phaseName,
-  seeds,
-}: {
-  phaseName: string;
-  seeds: RendererSeed[];
-}) {
+function Seeds({ phase }: { phase: RendererPhase }) {
   const [open, setOpen] = useState(false);
+
+  const waves = useMemo(() => {
+    const waveIdToPools = new Map<number, RendererPool[]>();
+    phase.pools.forEach((pool) => {
+      const waveId = pool.waveId ?? 0;
+      let pools = waveIdToPools.get(waveId);
+      if (!pools) {
+        pools = [];
+        waveIdToPools.set(waveId, pools);
+      }
+      pools.push(pool);
+    });
+    return Array.from(waveIdToPools.entries())
+      .sort(([aWaveId], [bWaveId]) => {
+        if (aWaveId === 0) {
+          return 1;
+        }
+        if (bWaveId === 0) {
+          return -1;
+        }
+        return aWaveId - bWaveId;
+      })
+      .map(([id, pools]) => ({
+        id,
+        pools,
+      }));
+  }, [phase.pools]);
   return (
     <>
-      <Tooltip placement="right" title="Seeds">
+      <Tooltip placement="right" title="Seeding">
         <IconButton
           onClick={() => {
             setOpen(true);
@@ -420,30 +440,96 @@ function Seeds({
         </IconButton>
       </Tooltip>
       <Dialog
+        fullWidth
         keepMounted={false}
         open={open}
         onClose={() => {
           setOpen(false);
         }}
       >
-        <DialogTitle>{phaseName} Seeds</DialogTitle>
+        <DialogTitle>{phase.name} Seeding</DialogTitle>
         <DialogContent>
-          <Table>
-            <TableBody>
-              {seeds.map((seed, i) => (
-                <TableRow key={seed.id}>
-                  <TableCell>{i + 1}</TableCell>
-                  <TableCell>
-                    {seed.entrant
-                      ? seed.entrant.participants
-                          .map((participant) => participant.gamerTag)
-                          .join(' / ')
-                      : seed.placeholder}
-                  </TableCell>
+          <Stack
+            direction="row"
+            alignItems="start"
+            justifyContent="space-between"
+          >
+            {phase.pools.length > 1 && (
+              <Stack>
+                {waves.map((wave) => (
+                  <Stack
+                    key={wave.id}
+                    direction="row"
+                    alignItems="start"
+                    justifyContent="start"
+                    flexWrap="wrap"
+                  >
+                    {wave.pools.map((pool) => (
+                      <Table
+                        key={pool.id}
+                        size="small"
+                        style={{
+                          flexGrow: 0,
+                          tableLayout: 'fixed',
+                          width: '160px',
+                        }}
+                      >
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>{pool.name}</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {phase.seeds
+                            .filter((seed) => seed.poolId === pool.id)
+                            .map((seed) => (
+                              <TableRow key={seed.id}>
+                                <TableCell
+                                  style={{
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}
+                                >
+                                  {seed.entrant
+                                    ? seed.entrant.participants
+                                        .map(
+                                          (participant) => participant.gamerTag,
+                                        )
+                                        .join(' / ')
+                                    : seed.placeholder}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                        </TableBody>
+                      </Table>
+                    ))}
+                  </Stack>
+                ))}
+              </Stack>
+            )}
+            <Table size="small" style={{ flexGrow: 0, width: 'auto' }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell />
+                  <TableCell>Overall</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {phase.seeds.map((seed) => (
+                  <TableRow key={seed.id}>
+                    <TableCell>{seed.seedNum}</TableCell>
+                    <TableCell>
+                      {seed.entrant
+                        ? seed.entrant.participants
+                            .map((participant) => participant.gamerTag)
+                            .join(' / ')
+                        : seed.placeholder}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Stack>
         </DialogContent>
       </Dialog>
     </>
@@ -743,9 +829,7 @@ function PhaseListItem({
             {phase.name} <Typography variant="caption">({phase.id})</Typography>
           </ListItemText>
         </ListItemButton>
-        {phase.seeds.length > 0 && (
-          <Seeds phaseName={phase.name} seeds={phase.seeds} />
-        )}
+        {phase.seeds.length > 0 && <Seeds phase={phase} />}
       </ListItem>
       <Collapse in={open}>
         {phase.pools.length > 0 &&
