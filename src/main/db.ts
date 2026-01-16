@@ -4131,45 +4131,47 @@ export function getTournament(): RendererTournament | undefined {
         phases: dbPhases
           .filter((dbPhase) => dbPhase.eventId === dbEvent.id)
           .sort((a, b) => a.phaseOrder - b.phaseOrder)
-          .map(
-            (dbPhase): RendererPhase => ({
+          .map((dbPhase): RendererPhase => {
+            const dbSeeds = db!
+              .prepare(
+                'SELECT * FROM seeds WHERE phaseId = @id ORDER BY seedNum ASC',
+              )
+              .all({ id: dbPhase.id }) as DbSeed[];
+            const seeds = dbSeeds.map((dbSeed): RendererSeed => {
+              applySeedMutations(dbSeed);
+              let entrant: {
+                id: number;
+                participants: RendererParticipant[];
+              } | null = null;
+              if (dbSeed.entrantId !== null) {
+                const participants = entrantIdToParticipants.get(
+                  dbSeed.entrantId,
+                );
+                if (participants !== undefined) {
+                  entrant = {
+                    id: dbSeed.entrantId,
+                    participants,
+                  };
+                }
+              }
+
+              return {
+                id: dbSeed.id,
+                poolId: dbSeed.poolId,
+                seedNum: dbSeed.seedNum,
+                groupSeedNum: dbSeed.groupSeedNum,
+                placeholder: dbSeed.placeholderName,
+                entrant,
+              };
+            });
+            return {
               id: dbPhase.id,
               name: dbPhase.name,
               phaseOrder: dbPhase.phaseOrder,
+              seeds,
               pools: dbPools
                 .filter((dbPool) => dbPool.phaseId === dbPhase.id)
                 .map((dbPool): RendererPool => {
-                  const dbSeeds = db!
-                    .prepare(
-                      'SELECT * FROM seeds WHERE poolId = @id ORDER BY groupSeedNum ASC',
-                    )
-                    .all({ id: dbPool.id }) as DbSeed[];
-                  const seeds = dbSeeds.map((dbSeed): RendererSeed => {
-                    applySeedMutations(dbSeed);
-                    let entrant: {
-                      id: number;
-                      participants: RendererParticipant[];
-                    } | null = null;
-                    if (dbSeed.entrantId !== null) {
-                      const participants = entrantIdToParticipants.get(
-                        dbSeed.entrantId,
-                      );
-                      if (participants !== undefined) {
-                        entrant = {
-                          id: dbSeed.entrantId,
-                          participants,
-                        };
-                      }
-                    }
-
-                    return {
-                      id: dbSeed.id,
-                      seedNum: dbSeed.seedNum,
-                      groupSeedNum: dbSeed.groupSeedNum,
-                      placeholder: dbSeed.placeholderName,
-                      entrant,
-                    };
-                  });
                   const dbSets: DbSet[] = [];
                   const rendererSets: RendererSet[] = [];
                   (
@@ -4234,13 +4236,12 @@ export function getTournament(): RendererTournament | undefined {
                     tiebreakMethod1: dbPool.tiebreakMethod1,
                     tiebreakMethod2: dbPool.tiebreakMethod2,
                     tiebreakMethod3: dbPool.tiebreakMethod3,
-                    seeds,
                     standings,
                     sets: rendererSets,
                   };
                 }),
-            }),
-          ),
+            };
+          }),
       }),
     ),
     participants: dbParticipants,

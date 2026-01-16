@@ -91,6 +91,7 @@ export type RendererSet = {
 
 export type RendererSeed = {
   id: number;
+  poolId: number;
   seedNum: number;
   groupSeedNum: number;
   placeholder: string | null;
@@ -128,7 +129,6 @@ export type RendererPool = {
   tiebreakMethod1: TiebreakMethod | null;
   tiebreakMethod2: TiebreakMethod | null;
   tiebreakMethod3: TiebreakMethod | null;
-  seeds: RendererSeed[];
   standings: RendererStanding[];
   sets: RendererSet[];
 };
@@ -138,6 +138,7 @@ export type RendererPhase = {
   name: string;
   pools: RendererPool[];
   phaseOrder: number;
+  seeds: RendererSeed[];
 };
 
 export type RendererUnloadedEvent = {

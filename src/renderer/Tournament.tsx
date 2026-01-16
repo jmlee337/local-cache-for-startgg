@@ -14,6 +14,7 @@ import {
   KeyboardArrowRight,
   LockOpen,
   LockPerson,
+  LowPriority,
   NotificationsActive,
   Refresh,
   RestartAlt,
@@ -63,6 +64,7 @@ import {
   RendererParticipant,
   RendererPhase,
   RendererPool,
+  RendererSeed,
   RendererSet,
   RendererStanding,
   RendererStream,
@@ -398,13 +400,57 @@ function TiebreakMethodBody({
   }
 }
 
-function Standings({
-  pool,
-  standings,
+function Seeds({
+  phaseName,
+  seeds,
 }: {
-  pool: RendererPool;
-  standings: RendererStanding[];
+  phaseName: string;
+  seeds: RendererSeed[];
 }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Tooltip placement="right" title="Seeds">
+        <IconButton
+          onClick={() => {
+            setOpen(true);
+          }}
+        >
+          <LowPriority />
+        </IconButton>
+      </Tooltip>
+      <Dialog
+        keepMounted={false}
+        open={open}
+        onClose={() => {
+          setOpen(false);
+        }}
+      >
+        <DialogTitle>{phaseName} Seeds</DialogTitle>
+        <DialogContent>
+          <Table>
+            <TableBody>
+              {seeds.map((seed, i) => (
+                <TableRow key={seed.id}>
+                  <TableCell>{i + 1}</TableCell>
+                  <TableCell>
+                    {seed.entrant
+                      ? seed.entrant.participants
+                          .map((participant) => participant.gamerTag)
+                          .join(' / ')
+                      : seed.placeholder}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function Standings({ pool }: { pool: RendererPool }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -442,7 +488,7 @@ function Standings({
               </TableRow>
             </TableHead>
             <TableBody>
-              {standings.map((standing) => (
+              {pool.standings.map((standing) => (
                 <TableRow key={standing.standingNum}>
                   <TableCell>
                     {standing.entrant.participants
@@ -541,9 +587,7 @@ function PoolListItem({
             )}
           </>
         )}
-        {pool.standings.length > 0 && (
-          <Standings pool={pool} standings={pool.standings} />
-        )}
+        {pool.standings.length > 0 && <Standings pool={pool} />}
       </ListItem>
       <Collapse in={open && ancestorsOpen} unmountOnExit>
         <Stack alignItems="start">
@@ -674,30 +718,35 @@ function PhaseListItem({
 
   return (
     <Stack marginLeft="20px" alignItems="start">
-      <ListItemButton
-        disableGutters
-        style={{
-          flexGrow: 0,
-          marginLeft: '-16px',
-          padding: '0 8px 0 16px',
-        }}
-        onClick={() => {
-          setOpen((oldOpen) => !oldOpen);
-        }}
-      >
-        {open ? (
-          <Tooltip placement="left" title="Hide pools">
-            <KeyboardArrowDown />
-          </Tooltip>
-        ) : (
-          <Tooltip placement="left" title="Show pools">
-            <KeyboardArrowRight />
-          </Tooltip>
+      <ListItem disablePadding>
+        <ListItemButton
+          disableGutters
+          style={{
+            flexGrow: 0,
+            marginLeft: '-16px',
+            padding: '0 8px 0 16px',
+          }}
+          onClick={() => {
+            setOpen((oldOpen) => !oldOpen);
+          }}
+        >
+          {open ? (
+            <Tooltip placement="left" title="Hide pools">
+              <KeyboardArrowDown />
+            </Tooltip>
+          ) : (
+            <Tooltip placement="left" title="Show pools">
+              <KeyboardArrowRight />
+            </Tooltip>
+          )}
+          <ListItemText>
+            {phase.name} <Typography variant="caption">({phase.id})</Typography>
+          </ListItemText>
+        </ListItemButton>
+        {phase.seeds.length > 0 && (
+          <Seeds phaseName={phase.name} seeds={phase.seeds} />
         )}
-        <ListItemText>
-          {phase.name} <Typography variant="caption">({phase.id})</Typography>
-        </ListItemText>
-      </ListItemButton>
+      </ListItem>
       <Collapse in={open}>
         {phase.pools.length > 0 &&
           phase.pools.map((pool) => (
