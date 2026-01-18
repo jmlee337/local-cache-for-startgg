@@ -440,12 +440,12 @@ function Seeds({ phase }: { phase: RendererPhase }) {
         </IconButton>
       </Tooltip>
       <Dialog
-        fullWidth
         keepMounted={false}
         open={open}
         onClose={() => {
           setOpen(false);
         }}
+        style={{ maxWidth: 'initial' }}
       >
         <DialogTitle>{phase.name} Seeding</DialogTitle>
         <DialogContent>
@@ -453,6 +453,7 @@ function Seeds({ phase }: { phase: RendererPhase }) {
             direction="row"
             alignItems="start"
             justifyContent="space-between"
+            spacing="8px"
           >
             {phase.pools.length > 1 && (
               <Stack>
