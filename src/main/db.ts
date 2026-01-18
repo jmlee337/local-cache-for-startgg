@@ -334,6 +334,8 @@ export function dbInit(window: BrowserWindow) {
       gameNum INTEGER,
       winnerId INTEGER NOT NULL,
       stageId INTEGER,
+      entrant1Score INTEGER,
+      entrant2Score INTEGER,
       PRIMARY KEY (transactionNum, gameNum)
     )`,
   ).run();
@@ -1102,9 +1104,19 @@ function insertTransaction(
         db!
           .prepare(
             `INSERT INTO transactionGameData (
-              transactionNum, gameNum, winnerId, stageId
+              transactionNum,
+              gameNum,
+              winnerId,
+              stageId,
+              entrant1Score,
+              entrant2Score
             ) VALUES (
-             @transactionNum, @gameNum, @winnerId, @stageId
+              @transactionNum,
+              @gameNum,
+              @winnerId,
+              @stageId,
+              @entrant1Score,
+              @entrant2Score
             )`,
           )
           .run({
@@ -1112,6 +1124,8 @@ function insertTransaction(
             gameNum: gameData.gameNum,
             winnerId: gameData.winnerId,
             stageId: gameData.stageId ?? null,
+            entrant1Score: gameData.entrant1Score ?? null,
+            entrant2Score: gameData.entrant2Score ?? null,
           });
         gameData.selections.forEach((selection) => {
           db!
@@ -2740,6 +2754,8 @@ function toApiTransaction(dbTransaction: DbTransaction): ApiTransaction {
       gameNum: gameData.gameNum,
       winnerId: gameData.winnerId,
       stageId: gameData.stageId ?? undefined,
+      entrant1Score: gameData.entrant1Score ?? undefined,
+      entrant2Score: gameData.entrant2Score ?? undefined,
       selections: gameNumToSelections.get(gameData.gameNum) || [],
     })),
     isUpdate: dbTransaction.isUpdate === 1,
