@@ -749,8 +749,8 @@ function PoolListItem({
               direction="row"
               flexWrap="wrap"
               gap="8px"
-              marginLeft="16px"
-              marginRight="32px"
+              marginLeft="24px"
+              marginRight="8px"
               marginTop="8px"
             >
               {losersSets
