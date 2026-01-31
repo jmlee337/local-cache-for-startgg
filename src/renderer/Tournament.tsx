@@ -81,6 +81,7 @@ import UpgradeDialog from './UpgradeDialog';
 import Discords from './Discords';
 import ConnectCodes from './ConnectCodes';
 
+const LIST_ITEM_HEIGHT = '34px';
 const SET_FIXED_WIDTH = '162px';
 
 const CONFLICT_BACKGROUND_COLOR = '#ed6c02';
@@ -432,6 +433,7 @@ function Seeds({ phase }: { phase: RendererPhase }) {
     <>
       <Tooltip placement="right" title="Seeding">
         <IconButton
+          size="small"
           onClick={() => {
             setOpen(true);
           }}
@@ -543,6 +545,7 @@ function Standings({ pool }: { pool: RendererPool }) {
     <>
       <Tooltip placement="right" title="Standings">
         <IconButton
+          size="small"
           onClick={() => {
             setOpen(true);
           }}
@@ -635,7 +638,7 @@ function PoolListItem({
 
   return (
     <Box marginLeft="16px">
-      <ListItem disablePadding>
+      <ListItem disablePadding style={{ height: LIST_ITEM_HEIGHT }}>
         <ListItemButton
           disabled={pool.sets.length === 0}
           disableGutters
@@ -805,7 +808,7 @@ function PhaseListItem({
 
   return (
     <Stack marginLeft="20px" alignItems="start">
-      <ListItem disablePadding>
+      <ListItem disablePadding style={{ height: LIST_ITEM_HEIGHT }}>
         <ListItemButton
           disableGutters
           style={{
@@ -875,38 +878,41 @@ function LoadedEventListItem({
 
   return (
     <Stack alignItems="start">
-      <ListItemButton
-        disableGutters
-        style={{
-          gap: '8px',
-          padding: '0 8px',
-        }}
-        onClick={() => {
-          setOpen((oldOpen) => !oldOpen);
-        }}
-      >
-        {open ? (
-          <Tooltip placement="left" title="Hide phases">
-            <KeyboardArrowDown />
-          </Tooltip>
-        ) : (
-          <Tooltip placement="left" title="Show phases">
-            <KeyboardArrowRight />
-          </Tooltip>
-        )}
-        <ListItemText>
-          {event.name} <Typography variant="caption">({event.id})</Typography>
-        </ListItemText>
-        {event.isOnline ? (
-          <Tooltip title="Online" placement="right">
-            <Router />
-          </Tooltip>
-        ) : (
-          <Tooltip title="Offline" placement="right">
-            <Group />
-          </Tooltip>
-        )}
-      </ListItemButton>
+      <ListItem disablePadding style={{ height: LIST_ITEM_HEIGHT }}>
+        <ListItemButton
+          disableGutters
+          style={{
+            flexGrow: 0,
+            gap: '8px',
+            padding: '0 8px',
+          }}
+          onClick={() => {
+            setOpen((oldOpen) => !oldOpen);
+          }}
+        >
+          {open ? (
+            <Tooltip placement="left" title="Hide phases">
+              <KeyboardArrowDown />
+            </Tooltip>
+          ) : (
+            <Tooltip placement="left" title="Show phases">
+              <KeyboardArrowRight />
+            </Tooltip>
+          )}
+          <ListItemText>
+            {event.name} <Typography variant="caption">({event.id})</Typography>
+          </ListItemText>
+          {event.isOnline ? (
+            <Tooltip title="Online" placement="right">
+              <Router />
+            </Tooltip>
+          ) : (
+            <Tooltip title="Offline" placement="right">
+              <Group />
+            </Tooltip>
+          )}
+        </ListItemButton>
+      </ListItem>
       <Collapse in={open}>
         {event.phases.length > 0 &&
           event.phases.map((phase) => (
@@ -937,42 +943,45 @@ function UnloadedEventListItem({
   const [loading, setLoading] = useState(false);
   return (
     <Stack alignItems="start">
-      <ListItemButton
-        disableGutters
-        style={{
-          gap: '8px',
-          padding: '0 8px',
-        }}
-        onClick={async () => {
-          setLoading(true);
-          try {
-            await window.electron.loadEvent(event.id);
-          } catch (e: any) {
-            const message = e instanceof Error ? e.message : e;
-            showError(message);
-          } finally {
-            setLoading(false);
-          }
-        }}
-      >
-        {loading ? (
-          <CircularProgress size="24px" />
-        ) : (
-          <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
-        )}
-        <ListItemText>
-          {event.name} <Typography variant="caption">({event.id})</Typography>
-        </ListItemText>
-        {event.isOnline ? (
-          <Tooltip title="Online" placement="right">
-            <Router />
-          </Tooltip>
-        ) : (
-          <Tooltip title="Offline" placement="right">
-            <Group />
-          </Tooltip>
-        )}
-      </ListItemButton>
+      <ListItem disablePadding style={{ height: LIST_ITEM_HEIGHT }}>
+        <ListItemButton
+          disableGutters
+          style={{
+            flexGrow: 0,
+            gap: '8px',
+            padding: '0 8px',
+          }}
+          onClick={async () => {
+            setLoading(true);
+            try {
+              await window.electron.loadEvent(event.id);
+            } catch (e: any) {
+              const message = e instanceof Error ? e.message : e;
+              showError(message);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          {loading ? (
+            <CircularProgress size="24px" />
+          ) : (
+            <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
+          )}
+          <ListItemText>
+            {event.name} <Typography variant="caption">({event.id})</Typography>
+          </ListItemText>
+          {event.isOnline ? (
+            <Tooltip title="Online" placement="right">
+              <Router />
+            </Tooltip>
+          ) : (
+            <Tooltip title="Offline" placement="right">
+              <Group />
+            </Tooltip>
+          )}
+        </ListItemButton>
+      </ListItem>
     </Stack>
   );
 }
