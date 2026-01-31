@@ -1,5 +1,6 @@
 import {
   Button,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -41,6 +42,7 @@ export default function UpgradeDialog({
   siblings: PoolSiblings;
 }) {
   const [upgradeMethod, setUpgradeMethod] = useState(UpgradeMethod.POOL);
+  const [upgrading, setUpgrading] = useState(false);
 
   return (
     <Dialog
@@ -91,17 +93,24 @@ export default function UpgradeDialog({
         <Button
           variant="contained"
           disabled={
-            upgradeMethod === UpgradeMethod.WAVE && pool.waveId === null
+            upgrading ||
+            (upgradeMethod === UpgradeMethod.WAVE && pool.waveId === null)
           }
+          endIcon={upgrading ? <CircularProgress size="24px" /> : undefined}
           onClick={async () => {
-            if (upgradeMethod === UpgradeMethod.POOL) {
-              await window.electron.upgradePoolSets(pool.id);
-            } else if (upgradeMethod === UpgradeMethod.WAVE) {
-              await window.electron.upgradeWaveSets(pool.waveId!);
-            } else if (upgradeMethod === UpgradeMethod.PHASE) {
-              await window.electron.upgradePhaseSets(pool.phaseId);
+            try {
+              setUpgrading(true);
+              if (upgradeMethod === UpgradeMethod.POOL) {
+                await window.electron.upgradePoolSets(pool.id);
+              } else if (upgradeMethod === UpgradeMethod.WAVE) {
+                await window.electron.upgradeWaveSets(pool.waveId!);
+              } else if (upgradeMethod === UpgradeMethod.PHASE) {
+                await window.electron.upgradePhaseSets(pool.phaseId);
+              }
+              setOpen(false);
+            } finally {
+              setUpgrading(false);
             }
-            setOpen(false);
           }}
         >
           {upgradeMethod === UpgradeMethod.POOL && 'Lock Pool'}

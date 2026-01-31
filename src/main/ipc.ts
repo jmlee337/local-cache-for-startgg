@@ -11,7 +11,7 @@ import {
   startggInit,
   maybeTryNow,
   upgradePreviewSets,
-  queueRefresh,
+  waitAndTry,
 } from './startgg';
 import {
   dbInit,
@@ -180,7 +180,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
 
   ipcMain.removeHandler('refreshTournament');
   ipcMain.handle('refreshTournament', () => {
-    queueRefresh(getTournamentId());
+    waitAndTry(getTournamentId());
     updateClients();
   });
 
@@ -193,7 +193,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   ipcMain.handle('loadEvent', async (event, eventId: number) => {
     const tournamentId = getTournamentId();
     await loadEvent(eventId, tournamentId);
-    queueRefresh(tournamentId);
+    await waitAndTry(tournamentId);
     updateClients();
   });
 
@@ -211,7 +211,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       throw new Error('Pool is already upgraded.');
     }
 
+    const tournamentId = getTournamentId();
     await upgradePreviewSets([previewSetId]);
+    await waitAndTry(tournamentId);
     updateClients();
   });
 
@@ -222,7 +224,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       throw new Error('Every pool in wave is already upgraded.');
     }
 
+    const tournamentId = getTournamentId();
     await upgradePreviewSets(previewSetIds);
+    await waitAndTry(tournamentId);
     updateClients();
   });
 
@@ -233,7 +237,9 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       throw new Error('Every pool in phase is already upgraded.');
     }
 
+    const tournamentId = getTournamentId();
     await upgradePreviewSets(previewSetIds);
+    await waitAndTry(tournamentId);
     updateClients();
   });
 

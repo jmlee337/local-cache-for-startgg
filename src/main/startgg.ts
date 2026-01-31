@@ -1042,8 +1042,8 @@ export function onTransaction(callback: () => void) {
 }
 
 let timeout: NodeJS.Timeout | null = null;
-async function tryNextTransaction(id: number, slug: string) {
-  lock.acquire(KEY, async (release) => {
+function tryNextTransaction(id: number, slug: string) {
+  return lock.acquire(KEY, async (release) => {
     if (timeout) {
       clearTimeout(timeout);
       timeout = null;
@@ -1380,19 +1380,22 @@ async function tryNextTransaction(id: number, slug: string) {
   });
 }
 
-export function queueRefresh(id: number) {
+export function waitAndTry(id: number) {
   const slug = idToSlug.get(id);
   if (!slug) {
     throw new Error(`tournamentId not found ${id}`);
   }
 
-  lock.acquire(KEY, (release) => {
-    if (timeout) {
-      clearTimeout(timeout);
-      timeout = null;
-    }
-    release();
-    tryNextTransaction(id, slug);
+  return new Promise<void>((resolve) => {
+    lock.acquire(KEY, async (release) => {
+      if (timeout) {
+        clearTimeout(timeout);
+        timeout = null;
+      }
+      release();
+      await tryNextTransaction(id, slug);
+      resolve();
+    });
   });
 }
 
