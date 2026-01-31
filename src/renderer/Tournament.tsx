@@ -878,7 +878,8 @@ function LoadedEventListItem({
       <ListItemButton
         disableGutters
         style={{
-          padding: '0 8px 0 4px',
+          gap: '8px',
+          padding: '0 8px',
         }}
         onClick={() => {
           setOpen((oldOpen) => !oldOpen);
@@ -893,20 +894,18 @@ function LoadedEventListItem({
             <KeyboardArrowRight />
           </Tooltip>
         )}
-        <Stack direction="row" alignItems="center">
-          <ListItemText style={{ marginRight: '8px' }}>
-            {event.name} <Typography variant="caption">({event.id})</Typography>
-          </ListItemText>
-          {event.isOnline ? (
-            <Tooltip title="Online" placement="right">
-              <Router />
-            </Tooltip>
-          ) : (
-            <Tooltip title="Offline" placement="right">
-              <Group />
-            </Tooltip>
-          )}
-        </Stack>
+        <ListItemText>
+          {event.name} <Typography variant="caption">({event.id})</Typography>
+        </ListItemText>
+        {event.isOnline ? (
+          <Tooltip title="Online" placement="right">
+            <Router />
+          </Tooltip>
+        ) : (
+          <Tooltip title="Offline" placement="right">
+            <Group />
+          </Tooltip>
+        )}
       </ListItemButton>
       <Collapse in={open}>
         {event.phases.length > 0 &&
@@ -937,26 +936,31 @@ function UnloadedEventListItem({
 }) {
   const [loading, setLoading] = useState(false);
   return (
-    <ListItemButton
-      disableGutters
-      style={{
-        justifyContent: 'space-between',
-        padding: '0 8px 0 0',
-      }}
-      onClick={async () => {
-        setLoading(true);
-        try {
-          await window.electron.loadEvent(event.id);
-        } catch (e: any) {
-          const message = e instanceof Error ? e.message : e;
-          showError(message);
-        } finally {
-          setLoading(false);
-        }
-      }}
-    >
-      <Stack direction="row" alignItems="center">
-        <ListItemText style={{ marginRight: '8px' }}>
+    <Stack alignItems="start">
+      <ListItemButton
+        disableGutters
+        style={{
+          gap: '8px',
+          padding: '0 8px',
+        }}
+        onClick={async () => {
+          setLoading(true);
+          try {
+            await window.electron.loadEvent(event.id);
+          } catch (e: any) {
+            const message = e instanceof Error ? e.message : e;
+            showError(message);
+          } finally {
+            setLoading(false);
+          }
+        }}
+      >
+        {loading ? (
+          <CircularProgress size="24px" />
+        ) : (
+          <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
+        )}
+        <ListItemText>
           {event.name} <Typography variant="caption">({event.id})</Typography>
         </ListItemText>
         {event.isOnline ? (
@@ -968,13 +972,8 @@ function UnloadedEventListItem({
             <Group />
           </Tooltip>
         )}
-      </Stack>
-      {loading ? (
-        <CircularProgress size="24px" />
-      ) : (
-        <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
-      )}
-    </ListItemButton>
+      </ListItemButton>
+    </Stack>
   );
 }
 
@@ -1603,7 +1602,7 @@ export default function Tournament() {
       <Stack marginTop="88px">
         {tournament && tournament.unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen} unmountOnExit>
-            <List disablePadding>
+            <List disablePadding style={{ margin: '0 -8px' }}>
               {tournament.unloadedEvents.map((event) => (
                 <UnloadedEventListItem
                   key={event.id}
