@@ -108,6 +108,7 @@ export type RendererStanding = {
     participants: RendererParticipant[];
   };
   setWins: number;
+  setLosses: number;
   gamesWon: number;
   gamesLost: number;
   gameRatio: number;

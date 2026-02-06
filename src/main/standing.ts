@@ -2,6 +2,7 @@ import { DbPool, DbSeed, DbSet, TiebreakMethod } from '../common/types';
 
 type StandingData = {
   setsWon: number;
+  setsLost: number;
   gamesPlayed: number;
   gamesWon: number;
   gameWinRatio: number;
@@ -11,6 +12,7 @@ type StandingData = {
 function newStandingData(): StandingData {
   const standingData: StandingData = {
     setsWon: 0,
+    setsLost: 0,
     gamesPlayed: 0,
     gamesWon: 0,
     gameWinRatio: 0,
@@ -232,6 +234,8 @@ export default function getPlacementToSortableEntrant(
     if (dbSet.winnerId === dbSet.entrant1Id) {
       entrant1StandingData.setsWon += 1;
       entrant1StandingData.beatenEntrantIds.add(dbSet.entrant2Id);
+    } else {
+      entrant1StandingData.setsLost += 1;
     }
     entrant1StandingData.gameWinRatio =
       entrant1StandingData.gamesPlayed > 0
@@ -248,6 +252,8 @@ export default function getPlacementToSortableEntrant(
     if (dbSet.winnerId === dbSet.entrant2Id) {
       entrant2StandingData.setsWon += 1;
       entrant2StandingData.beatenEntrantIds.add(dbSet.entrant1Id);
+    } else {
+      entrant2StandingData.setsLost += 1;
     }
     entrant2StandingData.gameWinRatio =
       entrant2StandingData.gamesPlayed > 0

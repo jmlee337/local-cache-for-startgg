@@ -4230,6 +4230,7 @@ export function getTournament(): RendererTournament | undefined {
                               participants: rendererEntrant.participants,
                             },
                             setWins: sortableEntrant.standingData.setsWon,
+                            setLosses: sortableEntrant.standingData.setsLost,
                             gamesWon: sortableEntrant.standingData.gamesWon,
                             gamesLost:
                               sortableEntrant.standingData.gamesPlayed -

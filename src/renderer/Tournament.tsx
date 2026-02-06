@@ -385,7 +385,11 @@ function TiebreakMethodBody({
   standing: RendererStanding;
 }) {
   if (tiebreakMethod === TiebreakMethod.WINS) {
-    return <TableCell>{standing.setWins}</TableCell>;
+    return (
+      <TableCell>
+        {standing.setWins} - {standing.setLosses}
+      </TableCell>
+    );
   }
   if (tiebreakMethod === TiebreakMethod.GAME_RATIO) {
     return (
