@@ -451,7 +451,7 @@ function Seeds({ phase }: { phase: RendererPhase }) {
         onClose={() => {
           setOpen(false);
         }}
-        style={{ maxWidth: 'initial' }}
+        slotProps={{ paper: { style: { maxWidth: 'unset' } } }}
       >
         <DialogTitle>{phase.name} Seeding</DialogTitle>
         <DialogContent>
