@@ -1612,7 +1612,7 @@ export default function Tournament() {
           </Stack>
         </Toolbar>
       </AppBar>
-      <Stack marginTop="88px">
+      <Stack marginTop="88px" marginBottom="8px">
         {tournament && tournament.unloadedEvents.length > 0 && (
           <Collapse in={unloadedOpen} unmountOnExit>
             <List disablePadding style={{ margin: '0 -8px' }}>
