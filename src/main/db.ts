@@ -182,6 +182,7 @@ export function dbInit(window: BrowserWindow) {
       tournamentId INTEGER NOT NULL,
       identifier TEXT NOT NULL,
       transactionNum INTEGER NOT NULL,
+      isFinalized INTEGER,
       isReleased INTEGER,
       statePresent INTEGER,
       state INTEGER,
@@ -233,7 +234,8 @@ export function dbInit(window: BrowserWindow) {
       state INTEGER,
       updatedAt INTEGER NOT NULL,
       winnerId INTEGER,
-      transactionNum INTEGER NOT NULL
+      transactionNum INTEGER NOT NULL,
+      isFinalized INTEGER
     )`,
   ).run();
   db.prepare(
@@ -261,7 +263,8 @@ export function dbInit(window: BrowserWindow) {
       entrantIdPresent INTEGER,
       entrantId INTEGER,
       updatedAt INTEGER NOT NULL,
-      transactionNum INTEGER NOT NULL
+      transactionNum INTEGER NOT NULL,
+      isFinalized INTEGER
     )`,
   ).run();
   db.prepare(
@@ -2401,6 +2404,7 @@ export function reportSet(
             updatedAt,
             winnerId: game.winnerId,
             transactionNum,
+            isFinalized: null,
           }),
         ),
       );
@@ -2639,7 +2643,6 @@ export function reportSet(
       });
     }
   })();
-  // TODO: seedMutations if report completes an RR pool
 
   insertTransaction(
     {
@@ -2900,6 +2903,21 @@ export function finalizeTransaction(transactionNum: number) {
     db!
       .prepare(
         'DELETE FROM transactionSelections WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'UPDATE setMutations SET isFinalized = 1 WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'UPDATE setMutationGames SET isFinalized = 1 WHERE transactionNum = @transactionNum',
+      )
+      .run({ transactionNum });
+    db!
+      .prepare(
+        'UPDATE seedMutations SET isFinalized = 1 WHERE transactionNum = @transactionNum',
       )
       .run({ transactionNum });
   })();
@@ -3504,7 +3522,9 @@ export function updateEvent(
   // check for deletable mutations
   (
     db
-      .prepare('SELECT * FROM setMutations WHERE eventId = @eventId')
+      .prepare(
+        'SELECT * FROM setMutations WHERE eventId = @eventId AND isFinalized = 1',
+      )
       .all({ eventId }) as DbSetMutation[]
   ).forEach((dbSetMutation) => {
     const afterSet = idToAfterSet.get(dbSetMutation.originSetId);
@@ -3514,7 +3534,9 @@ export function updateEvent(
   });
   (
     db
-      .prepare('SELECT * FROM setMutationGames WHERE eventId = @eventId')
+      .prepare(
+        'SELECT * FROM setMutationGames WHERE eventId = @eventId AND isFinalized = 1',
+      )
       .all({ eventId }) as DbSetMutationGame[]
   ).forEach((dbSetMutationGame) => {
     const afterSet = idToAfterSet.get(dbSetMutationGame.setId);
@@ -3526,9 +3548,12 @@ export function updateEvent(
   });
   (
     db
-      .prepare('SELECT * FROM seedMutations WHERE eventId = @eventId')
+      .prepare(
+        'SELECT * FROM seedMutations WHERE eventId = @eventId AND isFinalized = 1',
+      )
       .all({ eventId }) as DbSeedMutation[]
   ).forEach((dbSeedMutation) => {
+    // TODO: check seedMutation against after seed and maybe don't delete
     const afterSet = idToAfterSet.get(dbSeedMutation.originSetId);
     if (afterSet && afterSet.updatedAt >= dbSeedMutation.updatedAt) {
       db!

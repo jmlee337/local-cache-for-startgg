@@ -273,8 +273,8 @@ export type DbSetMutation = {
 
   // local only
   transactionNum: number;
+  isFinalized: null | 1;
   isReleased: null | 1;
-  requiresUpdateHack: null | 1;
 };
 
 export type DbSet = {
@@ -340,6 +340,7 @@ export type DbSetGame = {
 };
 export type DbSetMutationGame = DbSetGame & {
   transactionNum: number;
+  isFinalized: null | 1;
 };
 
 export type DbSeedMutation = {
@@ -354,6 +355,7 @@ export type DbSeedMutation = {
   updatedAt: number;
 
   transactionNum: number;
+  isFinalized: null | 1;
 };
 
 export type DbSeed = {
