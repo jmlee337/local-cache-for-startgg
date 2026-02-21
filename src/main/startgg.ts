@@ -25,8 +25,6 @@ import {
 import {
   upsertTournament,
   updateEvent,
-  upsertStations,
-  upsertStreams,
   getLoadedEventIds,
   getNextTransaction,
   finalizeTransaction,
@@ -35,6 +33,23 @@ import {
   updateSetIds,
   replaceParticipants,
 } from './db';
+
+function toStreamSource(streamSource: number) {
+  switch (streamSource) {
+    case 1:
+      return 'TWITCH';
+    case 2:
+      return 'HITBOX';
+    case 3:
+      return 'STREAMME';
+    case 4:
+      return 'MIXER';
+    case 5:
+      return 'YOUTUBE';
+    default:
+      return 'UNKNOWN';
+  }
+}
 
 const lock = new AsyncLock();
 const KEY = 'key';
@@ -254,26 +269,6 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
     }
   }
 `;
-const TOURNAMENT_STREAMS_AND_STATIONS_QUERY = `
-  query TournamentStreamsAndStationsQuery($slug: String) {
-    tournament(slug: $slug) {
-      stations(page: 1, perPage: 500) {
-        nodes {
-          id
-          number
-          stream {
-            id
-          }
-        }
-      }
-      streams {
-        id
-        streamSource
-        streamName
-      }
-    }
-  }
-`;
 export async function getApiTournament(inSlug: string) {
   if (!apiKey) {
     throw new Error('Please set API key.');
@@ -281,7 +276,7 @@ export async function getApiTournament(inSlug: string) {
 
   try {
     const json = await wrappedFetch(
-      `https://api.start.gg/tournament/${inSlug}?expand[]=event`,
+      `https://api.start.gg/tournament/${inSlug}?expand[]=event&expand[]=station&expand[]=stream`,
     );
     const { id, slug: apiSlug } = json.entities.tournament;
     const slug = apiSlug.slice(11);
@@ -300,7 +295,23 @@ export async function getApiTournament(inSlug: string) {
       isOnline: event.isOnline ? 1 : 0,
       videogameId: event.videogameId,
     }));
-    upsertTournament(tournament, events);
+    const stations: DbStation[] = (json.entities.station as any[]).map(
+      (station) => ({
+        id: station.id,
+        tournamentId: station.tournamentId,
+        number: station.number,
+        streamId: station.streamId,
+      }),
+    );
+    const streams: DbStream[] = (json.entities.stream as any[]).map(
+      (stream) => ({
+        id: stream.id,
+        tournamentId: stream.tournamentId,
+        streamName: stream.streamName,
+        streamSource: toStreamSource(stream.streamSource),
+      }),
+    );
+    upsertTournament(tournament, events, stations, streams);
 
     let page = 1;
     const eventIds = getLoadedEventIds(id);
@@ -345,34 +356,6 @@ export async function getApiTournament(inSlug: string) {
       if (page > nextData.tournament.participants.pageInfo.totalPages) {
         break;
       }
-    }
-
-    const streamsAndStationsData = await fetchGql(
-      apiKey,
-      TOURNAMENT_STREAMS_AND_STATIONS_QUERY,
-      { slug },
-    );
-    upsertStations(
-      streamsAndStationsData.tournament.stations.nodes.map(
-        (apiStation: any): DbStation => ({
-          id: apiStation.id,
-          tournamentId: id,
-          number: apiStation.number,
-          streamId: apiStation.stream?.id ?? null,
-        }),
-      ),
-    );
-    if (Array.isArray(streamsAndStationsData.tournament.streams)) {
-      upsertStreams(
-        streamsAndStationsData.tournament.streams.map(
-          (apiStream: any): DbStream => ({
-            id: apiStream.id,
-            tournamentId: id,
-            streamName: apiStream.streamName,
-            streamSource: apiStream.streamSource,
-          }),
-        ),
-      );
     }
 
     updateSyncResultWithSuccess();

@@ -419,14 +419,23 @@ export function setTournamentId(newTournamentId: number) {
   currentTournamentId = newTournamentId;
 }
 
-const TOURNAMENT_UPSERT_SQL =
-  'REPLACE INTO tournaments (id, name, slug, startAt, location) VALUES (@id, @name, @slug, @startAt, @location)';
-export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
+export function upsertTournament(
+  tournament: DbTournament,
+  events: DbEvent[],
+  stations: DbStation[],
+  streams: DbStream[],
+) {
   if (!db) {
     throw new Error('not init');
   }
 
-  db.prepare(TOURNAMENT_UPSERT_SQL).run(tournament);
+  db.prepare(
+    `REPLACE INTO tournaments (
+      id, name, slug, startAt, location
+    ) VALUES (
+      @id, @name, @slug, @startAt, @location
+    )`,
+  ).run(tournament);
   events.forEach((event) => {
     db!
       .prepare(
@@ -437,6 +446,28 @@ export function upsertTournament(tournament: DbTournament, events: DbEvent[]) {
         )`,
       )
       .run(event);
+  });
+  stations.forEach((station) => {
+    db!
+      .prepare(
+        `REPLACE INTO stations (
+          id, tournamentId, number, streamId
+        ) VALUES (
+          @id, @tournamentId, @number, @streamId
+        )`,
+      )
+      .run(station);
+  });
+  streams.forEach((stream) => {
+    db!
+      .prepare(
+        `REPLACE INTO streams (
+          id, tournamentId, streamName, streamSource
+        ) VALUES (
+          @id, @tournamentId, @streamName, @streamSource
+        )`,
+      )
+      .run(stream);
   });
 }
 
@@ -481,36 +512,6 @@ export function replaceParticipants(participants: DbParticipant[]) {
         )`,
       )
       .run(participant);
-  });
-}
-
-const STATION_UPSERT_SQL = `REPLACE INTO
-  stations
-    (id, tournamentId, number, streamId)
-  VALUES
-    (@id, @tournamentId, @number, @streamId)`;
-export function upsertStations(stations: DbStation[]) {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  stations.forEach((station) => {
-    db!.prepare(STATION_UPSERT_SQL).run(station);
-  });
-}
-
-const STREAM_UPSERT_SQL = `REPLACE INTO
-    streams
-      (id, tournamentId, streamName, streamSource)
-    VALUES
-      (@id, @tournamentId, @streamName, @streamSource)`;
-export function upsertStreams(streams: DbStream[]) {
-  if (!db) {
-    throw new Error('not init');
-  }
-
-  streams.forEach((stream) => {
-    db!.prepare(STREAM_UPSERT_SQL).run(stream);
   });
 }
 
