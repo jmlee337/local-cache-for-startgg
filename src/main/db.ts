@@ -3162,7 +3162,6 @@ export function updateEvent(
   pools: DbPool[],
   entrants: DbEntrant[],
   entrantIdToParticipantIds: Map<number, number[]>,
-  participants: DbParticipant[],
   seeds: DbSeed[],
   sets: DbSet[],
   games: DbSetGame[],
@@ -3276,34 +3275,6 @@ export function updateEvent(
         .run({ entrantId });
     },
   );
-
-  participants.forEach((participant) => {
-    db!
-      .prepare(
-        `INSERT OR IGNORE INTO participants (
-          id,
-          tournamentId,
-          connectCode,
-          discordId,
-          discordUsername,
-          gamerTag,
-          prefix,
-          pronouns,
-          userSlug
-        ) VALUES (
-          @id,
-          @tournamentId,
-          @connectCode,
-          @discordId,
-          @discordUsername,
-          @gamerTag,
-          @prefix,
-          @pronouns,
-          @userSlug
-        )`,
-      )
-      .run(participant);
-  });
 
   seeds.forEach((seed) => {
     db!

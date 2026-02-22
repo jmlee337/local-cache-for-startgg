@@ -19,7 +19,6 @@ import {
   SyncState,
   ConflictReason,
   DbSeed,
-  DbParticipant,
   DbSetGame,
 } from '../common/types';
 import {
@@ -755,9 +754,11 @@ async function getSeeds(
 async function refreshEvent(tournamentId: number, eventId: number) {
   const phases: DbPhase[] = [];
   const pools: DbPool[] = [];
+  const entrants: DbEntrant[] = [];
+  const entrantIdToParticipantIds = new Map<number, number[]>();
   try {
     const json = await wrappedFetch(
-      `https://api.start.gg/event/${eventId}?expand[]=phase&expand[]=groups`,
+      `https://api.start.gg/event/${eventId}?expand[]=phase&expand[]=groups&expand[]=entrants`,
     );
     json.entities.phase.forEach((phase: any) => {
       phases.push({
@@ -787,6 +788,17 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         tiebreakMethod3: tiebreakOrder[2] ? tiebreakOrder[2].type : null,
       });
     });
+    if (Array.isArray(json.entities.entrants)) {
+      json.entities.entrants.forEach((entrant: any) => {
+        entrants.push({
+          id: entrant.id,
+          tournamentId,
+          eventId: entrant.eventId,
+          name: entrant.name,
+        });
+        entrantIdToParticipantIds.set(entrant.id, entrant.participantIds);
+      });
+    }
     updateSyncResultWithSuccess();
   } catch (e: any) {
     if (isRetryableApiError(e)) {
@@ -799,9 +811,6 @@ async function refreshEvent(tournamentId: number, eventId: number) {
 
   const seedsPromise = getSeeds(eventId, tournamentId);
 
-  const idToEntrant = new Map<number, DbEntrant>();
-  const entrantIdToParticipantIds = new Map<number, number[]>();
-  const participants: DbParticipant[] = [];
   const sets: DbSet[] = [];
   const games: DbSetGame[] = [];
   try {
@@ -810,40 +819,8 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         .map((pool) => pool.id)
         .map(async (id) => {
           const json = await wrappedFetch(
-            `https://api.start.gg/phase_group/${id}?expand[]=sets&expand[]=entrants&expand[]=seeds`,
+            `https://api.start.gg/phase_group/${id}?expand[]=sets`,
           );
-          const jsonEntrants = json.entities.entrants;
-          if (Array.isArray(jsonEntrants)) {
-            jsonEntrants.forEach((entrant) => {
-              idToEntrant.set(entrant.id, {
-                id: entrant.id,
-                tournamentId,
-                eventId: entrant.eventId,
-                name: entrant.name,
-              });
-              entrantIdToParticipantIds.set(
-                entrant.id,
-                (Object.values(entrant.mutations.participants) as any[]).map(
-                  (participant) => participant.id,
-                ),
-              );
-              participants.push(
-                ...(Object.values(entrant.mutations.participants) as any[]).map(
-                  (participant) => ({
-                    id: participant.id,
-                    tournamentId,
-                    connectCode: '',
-                    discordId: '',
-                    discordUsername: '',
-                    gamerTag: participant.gamerTag,
-                    prefix: participant.prefix ?? '',
-                    pronouns: '',
-                    userSlug: '',
-                  }),
-                ),
-              );
-            });
-          }
           if (json.entities.sets instanceof Array) {
             const setsAndGames = dbSetsFromApiSets(
               json.entities.sets,
@@ -862,9 +839,8 @@ async function refreshEvent(tournamentId: number, eventId: number) {
       eventId,
       phases,
       pools,
-      Array.from(idToEntrant.values()),
+      entrants,
       entrantIdToParticipantIds,
-      participants,
       seeds,
       sets,
       games,
