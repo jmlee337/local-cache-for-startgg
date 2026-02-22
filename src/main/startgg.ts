@@ -94,7 +94,30 @@ async function wrappedFetch(
   return json;
 }
 
-async function fetchGql(key: string, query: string, variables: any) {
+async function unauthenticatedFetchGql(query: string, variables: any) {
+  const json = await wrappedFetch('https://www.start.gg/api/-/gql', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'client-version': '20',
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (json.errors) {
+    throw new ApiError({
+      message: json.errors.map((error: any) => error.message).join(', '),
+      gqlErrors: json.errors,
+    });
+  }
+
+  return json.data;
+}
+
+async function authenticatedFetchGql(
+  key: string,
+  query: string,
+  variables: any,
+) {
   const json = await limiter.schedule(() =>
     wrappedFetch('https://api.start.gg/gql/alpha', {
       method: 'POST',
@@ -224,7 +247,11 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
   }
 
   try {
-    const data = await fetchGql(apiKey, GET_ADMINED_TOURNAMENTS_QUERY, {});
+    const data = await authenticatedFetchGql(
+      apiKey,
+      GET_ADMINED_TOURNAMENTS_QUERY,
+      {},
+    );
     updateSyncResultWithSuccess();
     return (data.currentUser.tournaments.nodes as any[]).map((tournament) => ({
       id: tournament.id,
@@ -318,11 +345,15 @@ export async function getApiTournament(inSlug: string) {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // eslint-disable-next-line no-await-in-loop
-      const nextData = await fetchGql(apiKey, TOURNAMENT_PARTICIPANTS_QUERY, {
-        page,
-        slug,
-        eventIds,
-      });
+      const nextData = await authenticatedFetchGql(
+        apiKey,
+        TOURNAMENT_PARTICIPANTS_QUERY,
+        {
+          page,
+          slug,
+          eventIds,
+        },
+      );
       const { nodes } = nextData.tournament.participants;
       if (Array.isArray(nodes)) {
         replaceParticipants(
@@ -649,15 +680,18 @@ function dbSetsFromApiSets(
   return { sets, games };
 }
 
-const PHASE_SEEDS_QUERY = `
-  query phaseSeeds($phaseId: ID, $page: Int) {
-    phase(id: $phaseId) {
-      seeds(query: {page: $page, perPage: 332}) {
+const EVENT_SEEDS_QUERY = `
+  query eventSeeds($eventId: ID, $page: Int) {
+    event(id: $eventId) {
+      seeds(query: {page: $page, perPage: 512}) {
         pageInfo {
           totalPages
         }
         nodes {
           id
+          phase {
+            id
+          }
           phaseGroup {
             id
           }
@@ -679,49 +713,41 @@ const PHASE_SEEDS_QUERY = `
   }
 `;
 async function getSeeds(
-  phaseIds: number[],
   eventId: number,
   tournamentId: number,
 ): Promise<DbSeed[]> {
-  if (phaseIds.length === 0) {
-    return [];
-  }
-
   const seeds: DbSeed[] = [];
-  for (let i = 0; i < phaseIds.length; i += 1) {
-    const phaseId = phaseIds[i];
-    let page = 1;
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      // eslint-disable-next-line no-await-in-loop
-      const nextData = await fetchGql(apiKey, PHASE_SEEDS_QUERY, {
-        page,
-        phaseId,
-      });
-      const { nodes } = nextData.phase.seeds;
-      if (Array.isArray(nodes)) {
-        seeds.push(
-          ...nodes.map(
-            (node): DbSeed => ({
-              id: node.id,
-              poolId: node.phaseGroup.id,
-              phaseId,
-              eventId,
-              tournamentId,
-              seedNum: node.seedNum,
-              groupSeedNum: node.groupSeedNum,
-              placeholderName: node.placeholderName,
-              originPlacement: node.progressionSource?.originPlacement ?? null,
-              originPoolId: node.progressionSource?.originPhaseGroup.id ?? null,
-              entrantId: node.entrant?.id ?? null,
-            }),
-          ),
-        );
-      }
-      page += 1;
-      if (page > nextData.phase.seeds.pageInfo.totalPages) {
-        break;
-      }
+  let page = 1;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const nextData = await unauthenticatedFetchGql(EVENT_SEEDS_QUERY, {
+      eventId,
+      page,
+    });
+    const { nodes } = nextData.event.seeds;
+    if (Array.isArray(nodes)) {
+      seeds.push(
+        ...nodes.map(
+          (node): DbSeed => ({
+            id: node.id,
+            poolId: node.phaseGroup.id,
+            phaseId: node.phase.id,
+            eventId,
+            tournamentId,
+            seedNum: node.seedNum,
+            groupSeedNum: node.groupSeedNum,
+            placeholderName: node.placeholderName,
+            originPlacement: node.progressionSource?.originPlacement ?? null,
+            originPoolId: node.progressionSource?.originPhaseGroup.id ?? null,
+            entrantId: node.entrant?.id ?? null,
+          }),
+        ),
+      );
+    }
+    page += 1;
+    if (page > nextData.event.seeds.pageInfo.totalPages) {
+      break;
     }
   }
   return seeds;
@@ -772,11 +798,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
     throw e;
   }
 
-  const seedsPromise = getSeeds(
-    phases.map((phase) => phase.id),
-    eventId,
-    tournamentId,
-  );
+  const seedsPromise = getSeeds(eventId, tournamentId);
 
   const idToEntrant = new Map<number, DbEntrant>();
   const entrantIdToParticipantIds = new Map<number, number[]>();
@@ -876,7 +898,7 @@ async function resetSet(setId: number | string, recursive: boolean) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(
+  const data = await authenticatedFetchGql(
     apiKey,
     recursive ? RESET_SET_RECURSIVE_MUTATION : RESET_SET_MUTATION,
     { setId },
@@ -896,10 +918,14 @@ async function assignSetStation(setId: number | string, stationId: number) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, ASSIGN_SET_STATION_MUTATION, {
-    setId,
-    stationId,
-  });
+  const data = await authenticatedFetchGql(
+    apiKey,
+    ASSIGN_SET_STATION_MUTATION,
+    {
+      setId,
+      stationId,
+    },
+  );
   if (!data.assignStation) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
@@ -915,7 +941,7 @@ async function assignSetStream(setId: number | string, streamId: number) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, ASSIGN_SET_STREAM_MUTATION, {
+  const data = await authenticatedFetchGql(apiKey, ASSIGN_SET_STREAM_MUTATION, {
     setId,
     streamId,
   });
@@ -934,7 +960,9 @@ async function callSet(setId: number | string) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, CALL_SET_MUTATION, { setId });
+  const data = await authenticatedFetchGql(apiKey, CALL_SET_MUTATION, {
+    setId,
+  });
   if (!data.markSetCalled) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
@@ -950,7 +978,9 @@ async function startSet(setId: number | string) {
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, START_SET_MUTATION, { setId });
+  const data = await authenticatedFetchGql(apiKey, START_SET_MUTATION, {
+    setId,
+  });
   if (!data.markSetInProgress) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
@@ -976,7 +1006,7 @@ async function reportSet(
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, REPORT_SET_MUTATION, {
+  const data = await authenticatedFetchGql(apiKey, REPORT_SET_MUTATION, {
     setId,
     winnerId,
     isDQ,
@@ -1007,7 +1037,7 @@ async function updateSet(
     throw new Error('Please set API key.');
   }
 
-  const data = await fetchGql(apiKey, UPDATE_SET_MUTATION, {
+  const data = await authenticatedFetchGql(apiKey, UPDATE_SET_MUTATION, {
     setId,
     winnerId,
     isDQ,
@@ -1421,7 +1451,7 @@ export async function upgradePreviewSets(previewSetIds: string[]) {
       setId${setId}: reportBracketSet(setId: "${setId}") { id }`,
     );
     const mutation = `mutation UpgradeMutation {${inner}}`;
-    await fetchGql(apiKey, mutation, {});
+    await authenticatedFetchGql(apiKey, mutation, {});
     previewSetIds.splice(0, 500);
   }
 }
