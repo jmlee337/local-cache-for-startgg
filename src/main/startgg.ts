@@ -273,7 +273,7 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
 const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
-      participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
+      participants(query: {page: $page, perPage: 512, filter: {eventIds: $eventIds}}) {
         pageInfo {
           totalPages
         }
@@ -345,8 +345,7 @@ export async function getApiTournament(inSlug: string) {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // eslint-disable-next-line no-await-in-loop
-      const nextData = await authenticatedFetchGql(
-        apiKey,
+      const nextData = await unauthenticatedFetchGql(
         TOURNAMENT_PARTICIPANTS_QUERY,
         {
           page,
