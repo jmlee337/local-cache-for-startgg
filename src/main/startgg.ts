@@ -819,7 +819,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
         .map((pool) => pool.id)
         .map(async (id) => {
           const json = await wrappedFetch(
-            `https://api.start.gg/phase_group/${id}?expand[]=sets`,
+            `https://api.start.gg/phase_group/${id}?expand[]=sets&bustCache=true`,
           );
           if (json.entities.sets instanceof Array) {
             const setsAndGames = dbSetsFromApiSets(
