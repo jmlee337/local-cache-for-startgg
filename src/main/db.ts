@@ -2885,9 +2885,12 @@ export function getNextTransaction() {
   return null;
 }
 
-export function finalizeTransaction(transactionNum: number) {
+export function finalizeTransaction(transactionNum: number, updatedAt: number) {
   if (!db) {
     throw new Error('not init');
+  }
+  if (updatedAt === 0) {
+    throw new Error('unreachable');
   }
 
   db.transaction(() => {
@@ -2908,19 +2911,25 @@ export function finalizeTransaction(transactionNum: number) {
       .run({ transactionNum });
     db!
       .prepare(
-        'UPDATE setMutations SET isFinalized = 1 WHERE transactionNum = @transactionNum',
+        `UPDATE setMutations
+          SET isFinalized = 1, updatedAt = @updatedAt
+          WHERE transactionNum = @transactionNum`,
       )
-      .run({ transactionNum });
+      .run({ transactionNum, updatedAt });
     db!
       .prepare(
-        'UPDATE setMutationGames SET isFinalized = 1 WHERE transactionNum = @transactionNum',
+        `UPDATE setMutationGames
+          SET isFinalized = 1, updatedAt = @updatedAt
+          WHERE transactionNum = @transactionNum`,
       )
-      .run({ transactionNum });
+      .run({ transactionNum, updatedAt });
     db!
       .prepare(
-        'UPDATE seedMutations SET isFinalized = 1 WHERE transactionNum = @transactionNum',
+        `UPDATE seedMutations
+          SET isFinalized = 1, updatedAt = @updatedAt
+          WHERE transactionNum = @transactionNum`,
       )
-      .run({ transactionNum });
+      .run({ transactionNum, updatedAt });
   })();
 }
 

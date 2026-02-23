@@ -856,7 +856,7 @@ async function refreshEvent(tournamentId: number, eventId: number) {
 }
 
 const UPDATE_SET_INNER = `
-  id
+  updatedAt
 `;
 const RESET_SET_MUTATION = `
   mutation resetSet($setId: ID!) {
@@ -868,7 +868,10 @@ const RESET_SET_RECURSIVE_MUTATION = `
     resetSet(setId: $setId, resetDependentSets: true) {${UPDATE_SET_INNER}}
   }
 `;
-async function resetSet(setId: number | string, recursive: boolean) {
+async function resetSet(
+  setId: number | string,
+  recursive: boolean,
+): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -881,6 +884,7 @@ async function resetSet(setId: number | string, recursive: boolean) {
   if (!data.resetSet) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.resetSet.updatedAt;
 }
 
 const ASSIGN_SET_STATION_MUTATION = `
@@ -888,7 +892,10 @@ const ASSIGN_SET_STATION_MUTATION = `
     assignStation(setId: $setId, stationId: $stationId) {${UPDATE_SET_INNER}}
   }
 `;
-async function assignSetStation(setId: number | string, stationId: number) {
+async function assignSetStation(
+  setId: number | string,
+  stationId: number,
+): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -904,6 +911,7 @@ async function assignSetStation(setId: number | string, stationId: number) {
   if (!data.assignStation) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.assignStation.updatedAt;
 }
 
 const ASSIGN_SET_STREAM_MUTATION = `
@@ -911,7 +919,10 @@ const ASSIGN_SET_STREAM_MUTATION = `
     assignStream(setId: $setId, streamId: $streamId) {${UPDATE_SET_INNER}}
   }
 `;
-async function assignSetStream(setId: number | string, streamId: number) {
+async function assignSetStream(
+  setId: number | string,
+  streamId: number,
+): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -923,6 +934,7 @@ async function assignSetStream(setId: number | string, streamId: number) {
   if (!data.assignStream) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.assignStream.updatedAt;
 }
 
 const CALL_SET_MUTATION = `
@@ -930,7 +942,7 @@ const CALL_SET_MUTATION = `
     markSetCalled(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function callSet(setId: number | string) {
+async function callSet(setId: number | string): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -941,6 +953,7 @@ async function callSet(setId: number | string) {
   if (!data.markSetCalled) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.markSetCalled.updatedAt;
 }
 
 const START_SET_MUTATION = `
@@ -948,7 +961,7 @@ const START_SET_MUTATION = `
     markSetInProgress(setId: $setId) {${UPDATE_SET_INNER}}
   }
 `;
-async function startSet(setId: number | string) {
+async function startSet(setId: number | string): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -959,6 +972,7 @@ async function startSet(setId: number | string) {
   if (!data.markSetInProgress) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.markSetInProgress.updatedAt;
 }
 
 const REPORT_SET_MUTATION = `
@@ -976,7 +990,7 @@ async function reportSet(
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
-) {
+): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -987,9 +1001,10 @@ async function reportSet(
     isDQ,
     gameData,
   });
-  if (!data.reportBracketSet) {
+  if (!data.reportBracketSet || !Array.isArray(data.reportBracketSet)) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return Math.min(...data.reportBracketSet.map((obj: any) => obj.updatedAt));
 }
 
 const UPDATE_SET_MUTATION = `
@@ -1007,7 +1022,7 @@ async function updateSet(
   winnerId: number,
   isDQ: boolean,
   gameData: ApiGameData[],
-) {
+): Promise<number> {
   if (!apiKey) {
     throw new Error('Please set API key.');
   }
@@ -1021,6 +1036,7 @@ async function updateSet(
   if (!data.updateBracketSet) {
     throw new Error(NO_RETURN_ERROR_MESSAGE);
   }
+  return data.updateBracketSet.updatedAt;
 }
 
 const emitter = new EventEmitter();
@@ -1048,9 +1064,13 @@ function tryNextTransaction(id: number, slug: string) {
       if (transaction) {
         // eslint-disable-next-line no-constant-condition
         while (true) {
+          let updatedAt = 0;
           if (transaction.type === TransactionType.RESET) {
             try {
-              await resetSet(transaction.setId, transaction.isRecursive);
+              updatedAt = await resetSet(
+                transaction.setId,
+                transaction.isRecursive,
+              );
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1086,7 +1106,10 @@ function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.ASSIGN_STATION) {
             try {
-              await assignSetStation(transaction.setId, transaction.stationId);
+              updatedAt = await assignSetStation(
+                transaction.setId,
+                transaction.stationId,
+              );
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1106,7 +1129,10 @@ function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.ASSIGN_STREAM) {
             try {
-              await assignSetStream(transaction.setId, transaction.streamId);
+              updatedAt = await assignSetStream(
+                transaction.setId,
+                transaction.streamId,
+              );
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1126,7 +1152,7 @@ function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.CALL) {
             try {
-              await callSet(transaction.setId);
+              updatedAt = await callSet(transaction.setId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1167,7 +1193,7 @@ function tryNextTransaction(id: number, slug: string) {
             }
           } else if (transaction.type === TransactionType.START) {
             try {
-              await startSet(transaction.setId);
+              updatedAt = await startSet(transaction.setId);
             } catch (e: any) {
               if (
                 e instanceof ApiError &&
@@ -1207,7 +1233,7 @@ function tryNextTransaction(id: number, slug: string) {
           } else if (transaction.type === TransactionType.REPORT) {
             if (transaction.isUpdate) {
               try {
-                await updateSet(
+                updatedAt = await updateSet(
                   transaction.setId,
                   transaction.winnerId,
                   transaction.isDQ,
@@ -1233,7 +1259,7 @@ function tryNextTransaction(id: number, slug: string) {
                   )
                 ) {
                   try {
-                    await reportSet(
+                    updatedAt = await reportSet(
                       transaction.setId,
                       transaction.winnerId,
                       transaction.isDQ,
@@ -1278,7 +1304,7 @@ function tryNextTransaction(id: number, slug: string) {
               }
             } else {
               try {
-                await reportSet(
+                updatedAt = await reportSet(
                   transaction.setId,
                   transaction.winnerId,
                   transaction.isDQ,
@@ -1329,7 +1355,7 @@ function tryNextTransaction(id: number, slug: string) {
           } else {
             throw new Error('unreachable');
           }
-          finalizeTransaction(transaction.transactionNum);
+          finalizeTransaction(transaction.transactionNum, updatedAt);
           if (
             transaction.type === TransactionType.RESET &&
             transaction.isRecursive
