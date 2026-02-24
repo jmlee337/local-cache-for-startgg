@@ -678,18 +678,15 @@ function dbSetsFromApiSets(
   return { sets, games };
 }
 
-const EVENT_SEEDS_QUERY = `
-  query eventSeeds($eventId: ID, $page: Int) {
-    event(id: $eventId) {
+const PHASE_SEEDS_QUERY = `
+  query phaseSeeds($phaseId: ID, $page: Int) {
+    phase(id: $phaseId) {
       seeds(query: {page: $page, perPage: 512}) {
         pageInfo {
           totalPages
         }
         nodes {
           id
-          phase {
-            id
-          }
           phaseGroup {
             id
           }
@@ -711,41 +708,44 @@ const EVENT_SEEDS_QUERY = `
   }
 `;
 async function getSeeds(
+  phaseIds: number[],
   eventId: number,
   tournamentId: number,
 ): Promise<DbSeed[]> {
   const seeds: DbSeed[] = [];
-  let page = 1;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    // eslint-disable-next-line no-await-in-loop
-    const nextData = await unauthenticatedFetchGql(EVENT_SEEDS_QUERY, {
-      eventId,
-      page,
-    });
-    const { nodes } = nextData.event.seeds;
-    if (Array.isArray(nodes)) {
-      seeds.push(
-        ...nodes.map(
-          (node): DbSeed => ({
-            id: node.id,
-            poolId: node.phaseGroup.id,
-            phaseId: node.phase.id,
-            eventId,
-            tournamentId,
-            seedNum: node.seedNum,
-            groupSeedNum: node.groupSeedNum,
-            placeholderName: node.placeholderName,
-            originPlacement: node.progressionSource?.originPlacement ?? null,
-            originPoolId: node.progressionSource?.originPhaseGroup.id ?? null,
-            entrantId: node.entrant?.id ?? null,
-          }),
-        ),
-      );
-    }
-    page += 1;
-    if (page > nextData.event.seeds.pageInfo.totalPages) {
-      break;
+  for (const phaseId of phaseIds) {
+    let page = 1;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const nextData = await unauthenticatedFetchGql(PHASE_SEEDS_QUERY, {
+        phaseId,
+        page,
+      });
+      const { nodes } = nextData.phase.seeds;
+      if (Array.isArray(nodes)) {
+        seeds.push(
+          ...nodes.map(
+            (node): DbSeed => ({
+              id: node.id,
+              poolId: node.phaseGroup.id,
+              phaseId,
+              eventId,
+              tournamentId,
+              seedNum: node.seedNum,
+              groupSeedNum: node.groupSeedNum,
+              placeholderName: node.placeholderName,
+              originPlacement: node.progressionSource?.originPlacement ?? null,
+              originPoolId: node.progressionSource?.originPhaseGroup.id ?? null,
+              entrantId: node.entrant?.id ?? null,
+            }),
+          ),
+        );
+      }
+      page += 1;
+      if (page > nextData.phase.seeds.pageInfo.totalPages) {
+        break;
+      }
     }
   }
   return seeds;
@@ -809,7 +809,11 @@ async function refreshEvent(tournamentId: number, eventId: number) {
     throw e;
   }
 
-  const seedsPromise = getSeeds(eventId, tournamentId);
+  const seedsPromise = getSeeds(
+    phases.map((phase) => phase.id),
+    eventId,
+    tournamentId,
+  );
 
   const sets: DbSet[] = [];
   const games: DbSetGame[] = [];
