@@ -74,6 +74,7 @@ type AuthIdentify = {
 };
 
 const ADMIN_PROTOCOL = 'admin-protocol';
+const BRACKET_PROTOCOL = 'bracket-protocol';
 const UNAUTH_CODE = 4009;
 const DEFAULT_PORT = 50000;
 
@@ -380,6 +381,24 @@ export async function startWebsocketServer() {
           };
           newConnection.on('message', identifyCb);
           newConnection.sendUTF(JSON.stringify(authHello));
+          return;
+        }
+        if (request.requestedProtocols[0] === BRACKET_PROTOCOL) {
+          const newConnection = request.accept(
+            BRACKET_PROTOCOL,
+            request.origin,
+          );
+          connections.add(newConnection);
+          newConnection.on('close', () => {
+            newConnection.removeAllListeners();
+            connections.delete(newConnection);
+            sendStatus();
+          });
+          sendStatus();
+          sendTournamentUpdateEvent(
+            newConnection,
+            getLastSubscriberTournament(),
+          );
           return;
         }
       }
