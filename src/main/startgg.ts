@@ -321,22 +321,24 @@ export async function getApiTournament(inSlug: string) {
       isOnline: event.isOnline ? 1 : 0,
       videogameId: event.videogameId,
     }));
-    const stations: DbStation[] = (json.entities.station as any[]).map(
-      (station) => ({
+    let stations: DbStation[] = [];
+    if (Array.isArray(json.entities.station)) {
+      stations = (json.entities.station as any[]).map((station) => ({
         id: station.id,
         tournamentId: station.tournamentId,
         number: station.number,
         streamId: station.streamId,
-      }),
-    );
-    const streams: DbStream[] = (json.entities.stream as any[]).map(
-      (stream) => ({
+      }));
+    }
+    let streams: DbStream[] = [];
+    if (Array.isArray(json.entities.stream)) {
+      streams = (json.entities.stream as any[]).map((stream) => ({
         id: stream.id,
         tournamentId: stream.tournamentId,
         streamName: stream.streamName,
         streamSource: toStreamSource(stream.streamSource),
-      }),
-    );
+      }));
+    }
     upsertTournament(tournament, events, stations, streams);
 
     let page = 1;
