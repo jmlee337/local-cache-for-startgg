@@ -68,7 +68,7 @@ type AuthHello = {
   salt: string;
 };
 
-type AuthIdenfity = {
+type AuthIdentify = {
   op: 'auth-identify';
   authentication: string;
 };
@@ -365,7 +365,7 @@ export async function startWebsocketServer() {
             }
 
             try {
-              const json = JSON.parse(data.utf8Data) as AuthIdenfity;
+              const json = JSON.parse(data.utf8Data) as AuthIdentify;
               if (json.op === 'auth-identify') {
                 if (json.authentication === authentication) {
                   newConnection.removeListener('message', identifyCb);
