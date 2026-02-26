@@ -1,7 +1,8 @@
 import http from 'http';
-import type { connection } from 'websocket';
+import type { connection, Message } from 'websocket';
 import websocket from 'websocket';
 import { BrowserWindow } from 'electron';
+import { createHash, randomBytes } from 'crypto';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -61,7 +62,19 @@ type Event = {
   tournament?: SubscriberTournament;
 };
 
-const BRACKET_PROTOCOL = 'bracket-protocol';
+type AuthHello = {
+  op: 'auth-hello';
+  challenge: string;
+  salt: string;
+};
+
+type AuthIdenfity = {
+  op: 'auth-identify';
+  authentication: string;
+};
+
+const ADMIN_PROTOCOL = 'admin-protocol';
+const UNAUTH_CODE = 4009;
 const DEFAULT_PORT = 50000;
 
 let httpServer: http.Server | null = null;
@@ -134,6 +147,174 @@ async function startHttpServer(httpPort: number) {
   }
 }
 
+async function acceptAdminAuthentication(newConnection: connection) {
+  connections.add(newConnection);
+  sendStatus();
+  sendTournamentUpdateEvent(newConnection, getLastSubscriberTournament());
+  newConnection.on('message', async (data) => {
+    if (data.type === 'binary') {
+      return;
+    }
+
+    let json: Request | undefined;
+    try {
+      json = JSON.parse(data.utf8Data) as Request;
+    } catch {
+      return;
+    }
+
+    if (json.op === 'reset-set-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'reset-set-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = resetSetTransaction(json.id);
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    } else if (json.op === 'call-set-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'call-set-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = callSetTransaction(json.id);
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    } else if (json.op === 'start-set-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'start-set-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = startSetTransaction(json.id);
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    } else if (json.op === 'assign-set-station-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'assign-set-station-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      if (json.stationId === undefined || !Number.isInteger(json.stationId)) {
+        response.err = 'stationId must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = assignSetStationTransaction(json.id, json.stationId);
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    } else if (json.op === 'assign-set-stream-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'assign-set-stream-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      if (json.streamId === undefined || !Number.isInteger(json.streamId)) {
+        response.err = 'streamId must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = assignSetStreamTransaction(json.id, json.streamId);
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    } else if (json.op === 'report-set-request') {
+      const response: Response = {
+        num: json.num,
+        op: 'report-set-response',
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      if (json.winnerId === undefined || !Number.isInteger(json.winnerId)) {
+        response.err = 'winnerId must be integer';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      if (typeof json.isDQ !== 'boolean') {
+        response.err = 'isDQ must be boolean';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      if (!Array.isArray(json.gameData)) {
+        response.err = 'gameData must be array';
+        newConnection.sendUTF(JSON.stringify(response));
+        return;
+      }
+      try {
+        response.data = reportSetTransaction(
+          json.id,
+          json.winnerId,
+          json.isDQ,
+          json.gameData,
+        );
+        newConnection.sendUTF(JSON.stringify(response));
+      } catch (e: any) {
+        response.err = e instanceof Error ? e.message : e.toString();
+        newConnection.sendUTF(JSON.stringify(response));
+      }
+    }
+  });
+  newConnection.on('close', () => {
+    newConnection.removeAllListeners();
+    connections.delete(newConnection);
+    sendStatus();
+  });
+}
+
+let websocketPassword = '';
+export function setWebsocketPassword(newWebsocketPassword: string) {
+  if (websocketServer) {
+    throw new Error(
+      'cannot change websocket password while websocket server is running',
+    );
+  }
+
+  websocketPassword = newWebsocketPassword;
+}
+
 export async function startWebsocketServer() {
   if (!httpServer) {
     port = DEFAULT_PORT;
@@ -158,177 +339,47 @@ export async function startWebsocketServer() {
     websocketServer = new websocket.server({ httpServer });
     websocketServer.on('request', async (request) => {
       if (request.requestedProtocols.length === 1) {
-        if (request.requestedProtocols[0] === BRACKET_PROTOCOL) {
-          const newConnection = request.accept(
-            BRACKET_PROTOCOL,
-            request.origin,
-          );
-          connections.add(newConnection);
-          sendStatus();
-          sendTournamentUpdateEvent(
-            newConnection,
-            getLastSubscriberTournament(),
-          );
-          newConnection.on('message', async (data) => {
+        if (request.requestedProtocols[0] === ADMIN_PROTOCOL) {
+          const newConnection = request.accept(ADMIN_PROTOCOL, request.origin);
+          const salt = Buffer.from(randomBytes(32)).toString('base64url');
+          const secret = createHash('sha256')
+            .update(websocketPassword)
+            .update(salt)
+            .digest()
+            .toString('base64url');
+          const challenge = Buffer.from(randomBytes(32)).toString('base64url');
+          const authentication = createHash('sha256')
+            .update(secret)
+            .update(challenge)
+            .digest()
+            .toString('base64url');
+          const authHello: AuthHello = {
+            op: 'auth-hello',
+            salt,
+            challenge,
+          };
+          const identifyCb = (data: Message) => {
             if (data.type === 'binary') {
+              newConnection.close(UNAUTH_CODE);
               return;
             }
 
-            const json = JSON.parse(data.utf8Data) as Request;
-            if (json.op === 'reset-set-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'reset-set-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
+            try {
+              const json = JSON.parse(data.utf8Data) as AuthIdenfity;
+              if (json.op === 'auth-identify') {
+                if (json.authentication === authentication) {
+                  newConnection.removeListener('message', identifyCb);
+                  acceptAdminAuthentication(newConnection);
+                  return;
+                }
               }
-              try {
-                response.data = resetSetTransaction(json.id);
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
-            } else if (json.op === 'call-set-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'call-set-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              try {
-                response.data = callSetTransaction(json.id);
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
-            } else if (json.op === 'start-set-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'start-set-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              try {
-                response.data = startSetTransaction(json.id);
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
-            } else if (json.op === 'assign-set-station-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'assign-set-station-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              if (
-                json.stationId === undefined ||
-                !Number.isInteger(json.stationId)
-              ) {
-                response.err = 'stationId must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              try {
-                response.data = assignSetStationTransaction(
-                  json.id,
-                  json.stationId,
-                );
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
-            } else if (json.op === 'assign-set-stream-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'assign-set-stream-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              if (
-                json.streamId === undefined ||
-                !Number.isInteger(json.streamId)
-              ) {
-                response.err = 'streamId must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              try {
-                response.data = assignSetStreamTransaction(
-                  json.id,
-                  json.streamId,
-                );
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
-            } else if (json.op === 'report-set-request') {
-              const response: Response = {
-                num: json.num,
-                op: 'report-set-response',
-              };
-              if (json.id === undefined || !Number.isInteger(json.id)) {
-                response.err = 'id must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              if (
-                json.winnerId === undefined ||
-                !Number.isInteger(json.winnerId)
-              ) {
-                response.err = 'winnerId must be integer';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              if (typeof json.isDQ !== 'boolean') {
-                response.err = 'isDQ must be boolean';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              if (!Array.isArray(json.gameData)) {
-                response.err = 'gameData must be array';
-                newConnection.sendUTF(JSON.stringify(response));
-                return;
-              }
-              try {
-                response.data = reportSetTransaction(
-                  json.id,
-                  json.winnerId,
-                  json.isDQ,
-                  json.gameData,
-                );
-                newConnection.sendUTF(JSON.stringify(response));
-              } catch (e: any) {
-                response.err = e instanceof Error ? e.message : e.toString();
-                newConnection.sendUTF(JSON.stringify(response));
-              }
+            } catch {
+              // just catch
             }
-          });
-          newConnection.on('close', () => {
-            newConnection.removeAllListeners();
-            connections.delete(newConnection);
-            sendStatus();
-          });
+            newConnection.close(UNAUTH_CODE);
+          };
+          newConnection.on('message', identifyCb);
+          newConnection.sendUTF(JSON.stringify(authHello));
           return;
         }
       }
