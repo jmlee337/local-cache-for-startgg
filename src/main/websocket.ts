@@ -21,24 +21,32 @@ import {
 
 type Request = {
   num: number;
-  id?: number;
 } & (
   | {
       op?: 'reset-set-request' | 'call-set-request' | 'start-set-request';
+      id?: number;
     }
   | {
       op?: 'assign-set-station-request';
+      id?: number;
       stationId?: number;
     }
   | {
       op?: 'assign-set-stream-request';
+      id?: number;
       streamId?: number;
     }
   | {
       op?: 'report-set-request';
+      id?: number;
       winnerId?: number;
       isDQ?: boolean;
       gameData?: ApiGameData[];
+    }
+  | {
+      op?: 'client-id-request';
+      computerName?: string;
+      clientName?: string;
     }
 );
 
@@ -50,17 +58,22 @@ type Response = {
     | 'start-set-response'
     | 'assign-set-station-response'
     | 'assign-set-stream-response'
-    | 'report-set-response';
+    | 'report-set-response'
+    | 'client-id-response';
   err?: string;
   data?: {
     set: RendererSet;
   };
 };
 
-type Event = {
-  op: 'tournament-update-event';
-  tournament?: SubscriberTournament;
-};
+type Event =
+  | {
+      op: 'auth-success-event';
+    }
+  | {
+      op: 'tournament-update-event';
+      tournament?: SubscriberTournament;
+    };
 
 type AuthHello = {
   op: 'auth-hello';
@@ -83,21 +96,33 @@ let websocketServer: websocket.server | null = null;
 
 let err = '';
 let port = 0;
-const connections = new Set<connection>();
+const connections = new Map<
+  connection,
+  {
+    computerName: string;
+    clientName: string;
+  }
+>();
 let mainWindow: BrowserWindow | null = null;
 export function getWebsocketStatus(): WebsocketStatus {
   return {
     err,
     port,
-    connections: Array.from(connections.values())
+    connections: Array.from(connections.entries())
       .filter(
-        (connection) =>
+        ([connection]) =>
           connection.socket.remoteAddress && connection.socket.remotePort,
       )
-      .map(
-        (connection) =>
-          `${connection.socket.remoteAddress}:${connection.socket.remotePort}`,
-      ),
+      .map(([connection, clientId]) => {
+        let ret = `${connection.socket.remoteAddress}:${connection.socket.remotePort}`;
+        if (clientId.computerName) {
+          ret += ` - ${clientId.computerName}`;
+        }
+        if (clientId.clientName) {
+          ret += ` - ${clientId.clientName}`;
+        }
+        return ret;
+      }),
   };
 }
 function sendStatus() {
@@ -148,9 +173,40 @@ async function startHttpServer(httpPort: number) {
   }
 }
 
-async function acceptAdminAuthentication(newConnection: connection) {
-  connections.add(newConnection);
+function handleClientIdRequest(json: Request, newConnection: connection) {
+  if (json.op !== 'client-id-request') {
+    throw new Error('unreachable');
+  }
+
+  const response: Response = {
+    num: json.num,
+    op: 'client-id-response',
+  };
+  if (typeof json.computerName !== 'string') {
+    response.err = 'computerName must be string';
+    newConnection.sendUTF(JSON.stringify(response));
+    return;
+  }
+  if (typeof json.clientName !== 'string') {
+    response.err = 'clientName must be string';
+    newConnection.sendUTF(JSON.stringify(response));
+    return;
+  }
+  connections.set(newConnection, {
+    computerName: json.computerName,
+    clientName: json.clientName,
+  });
   sendStatus();
+  newConnection.sendUTF(JSON.stringify(response));
+}
+
+async function acceptAdminAuthentication(newConnection: connection) {
+  connections.set(newConnection, { computerName: '', clientName: '' });
+  sendStatus();
+  const authSuccessEvent: Event = {
+    op: 'auth-success-event',
+  };
+  newConnection.sendUTF(JSON.stringify(authSuccessEvent));
   sendTournamentUpdateEvent(newConnection, getLastSubscriberTournament());
   newConnection.on('message', async (data) => {
     if (data.type === 'binary') {
@@ -164,7 +220,9 @@ async function acceptAdminAuthentication(newConnection: connection) {
       return;
     }
 
-    if (json.op === 'reset-set-request') {
+    if (json.op === 'client-id-request') {
+      handleClientIdRequest(json, newConnection);
+    } else if (json.op === 'reset-set-request') {
       const response: Response = {
         num: json.num,
         op: 'reset-set-response',
@@ -388,7 +446,23 @@ export async function startWebsocketServer() {
             BRACKET_PROTOCOL,
             request.origin,
           );
-          connections.add(newConnection);
+          connections.set(newConnection, { computerName: '', clientName: '' });
+          newConnection.on('message', (data) => {
+            if (data.type === 'binary') {
+              return;
+            }
+
+            let json: Request | undefined;
+            try {
+              json = JSON.parse(data.utf8Data) as Request;
+            } catch {
+              return;
+            }
+
+            if (json.op === 'client-id-request') {
+              handleClientIdRequest(json, newConnection);
+            }
+          });
           newConnection.on('close', () => {
             newConnection.removeAllListeners();
             connections.delete(newConnection);
