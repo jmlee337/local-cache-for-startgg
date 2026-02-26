@@ -38,6 +38,7 @@ import {
 import {
   getWebsocketStatus,
   initWebsocket,
+  setWebsocketPassword,
   startWebsocketServer,
   stopWebsocketServer,
   updateSubscribers,
@@ -52,6 +53,16 @@ import {
   startSetTransaction,
 } from './transaction';
 import { ApiGameData } from '../common/types';
+
+function generatePassword() {
+  const allowedChars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let ret = '';
+  for (let i = 0; i < 16; i += 1) {
+    ret += allowedChars.charAt(Math.floor(Math.random() * allowedChars.length));
+  }
+  return ret;
+}
 
 export default function setupIPCs(mainWindow: BrowserWindow) {
   const updateClients = () => {
@@ -70,7 +81,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     updateClients();
   });
 
-  const store = new Store();
+  const store = new Store<{ websocketPassword: string }>();
   let apiKey = store.has('apiKey') ? (store.get('apiKey') as string) : '';
   setApiKey(apiKey);
   ipcMain.removeHandler('getApiKey');
@@ -110,6 +121,26 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   initWebsocket(mainWindow);
+
+  let websocketPassword = store.get('websocketPassword', '');
+  if (!websocketPassword) {
+    websocketPassword = generatePassword();
+    store.set('websocketPassword', websocketPassword);
+  }
+  setWebsocketPassword(websocketPassword);
+
+  ipcMain.removeHandler('getWebsocketPassword');
+  ipcMain.handle('getWebsocketPassword', () => websocketPassword);
+
+  ipcMain.removeHandler('resetWebsocketPassword');
+  ipcMain.handle('resetWebsocketPassword', () => {
+    const newWebsocketPassword = generatePassword();
+    setWebsocketPassword(newWebsocketPassword);
+    store.set('websocketPassword', newWebsocketPassword);
+    websocketPassword = newWebsocketPassword;
+    return websocketPassword;
+  });
+
   ipcMain.removeHandler('getWebsocketStatus');
   ipcMain.handle('getWebsocketStatus', getWebsocketStatus);
 

@@ -16,6 +16,10 @@ const electronHandler = {
   getAutoSync: (): Promise<boolean> => ipcRenderer.invoke('getAutoSync'),
   setAutoSync: (autoSync: boolean) =>
     ipcRenderer.invoke('setAutoSync', autoSync),
+  getWebsocketPassword: (): Promise<string> =>
+    ipcRenderer.invoke('getWebsocketPassword'),
+  resetWebsocketPassword: (): Promise<string> =>
+    ipcRenderer.invoke('resetWebsocketPassword'),
   getWebsocketStatus: (): Promise<WebsocketStatus> =>
     ipcRenderer.invoke('getWebsocketStatus'),
   getWebsocket: (): Promise<boolean> => ipcRenderer.invoke('getWebsocket'),

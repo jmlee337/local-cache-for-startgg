@@ -30,7 +30,6 @@ export default function Settings({
 }) {
   const [apiKey, setApiKey] = useState('');
   const [autoSync, setAutoSync] = useState(true);
-  const [websocket, setWebsocket] = useState(true);
   const [appVersion, setAppVersion] = useState('');
   const [versionLatest, setVersionLatest] = useState('');
   const [open, setOpen] = useState(false);
@@ -39,14 +38,12 @@ export default function Settings({
     const inner = async () => {
       const apiKeyPromise = window.electron.getApiKey();
       const autoSyncPromise = window.electron.getAutoSync();
-      const websocketPromise = window.electron.getWebsocket();
       const appVersionPromise = window.electron.getAppVersion();
       const versionLatestPromise = window.electron.getVersionLatest();
 
       const initApiKey = await apiKeyPromise;
       setApiKey(initApiKey);
       setAutoSync(await autoSyncPromise);
-      setWebsocket(await websocketPromise);
 
       const initAppVersion = await appVersionPromise;
       const initVersionLatest = await versionLatestPromise;
@@ -96,7 +93,7 @@ export default function Settings({
             Offline Mode for start.gg v{appVersion}
           </Typography>
         </Stack>
-        <DialogContent>
+        <DialogContent style={{ paddingTop: '8px' }}>
           <DialogContentText>
             Get your start.gg API key by clicking “Create new token” in the
             <br />
@@ -149,23 +146,6 @@ export default function Settings({
                   const newAutoSync = event.target.checked;
                   await window.electron.setAutoSync(newAutoSync);
                   setAutoSync(newAutoSync);
-                }}
-              />
-            }
-          />
-          <FormControlLabel
-            label={
-              websocket
-                ? 'Websocket server (enabled)'
-                : 'Websocket server (disabled)'
-            }
-            control={
-              <Switch
-                checked={websocket}
-                onChange={async (event) => {
-                  const newWebsocket = event.target.checked;
-                  await window.electron.setWebsocket(newWebsocket);
-                  setWebsocket(newWebsocket);
                 }}
               />
             }
