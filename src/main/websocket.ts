@@ -459,7 +459,6 @@ export async function startWebsocketServer() {
               udp4BroadcastSocket.send(
                 JSON.stringify({
                   computerName: getComputerName(),
-                  family: 'IPv4',
                   port,
                 }),
                 BROADCAST_PORT,
@@ -518,7 +517,6 @@ export async function startWebsocketServer() {
               udp6BroadcastSocket.send(
                 JSON.stringify({
                   computerName: getComputerName(),
-                  family: 'IPv6',
                   port,
                 }),
                 BROADCAST_PORT,
