@@ -159,24 +159,24 @@ export default function Websocket() {
           </Stack>
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
-              disabled={!websocketStatus.port}
+              disabled={!websocketStatus.v6Address}
               fullWidth
-              label="Websocket Port"
+              label="Websocket Address (IPv6)"
               size="small"
-              value={websocketStatus.port ? websocketStatus.port : ''}
+              value={websocketStatus.v6Address}
               variant="standard"
             />
             <Button
-              disabled={portCopied || !websocketStatus.port}
-              endIcon={portCopied ? undefined : <ContentCopy />}
+              disabled={v6Copied || !websocketStatus.v6Address}
+              endIcon={v6Copied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(`${websocketStatus.port}`);
-                setPortCopied(true);
-                setTimeout(() => setPortCopied(false), 5000);
+                await window.electron.copy(websocketStatus.v6Address);
+                setV6Copied(true);
+                setTimeout(() => setV6Copied(false), 5000);
               }}
               variant="contained"
             >
-              {portCopied ? 'Copied!' : 'Copy'}
+              {v6Copied ? 'Copied!' : 'Copy'}
             </Button>
           </Stack>
           <Stack alignItems="center" direction="row" gap="8px">
@@ -203,24 +203,24 @@ export default function Websocket() {
           </Stack>
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
-              disabled={!websocketStatus.v6Address}
+              disabled={!websocketStatus.port}
               fullWidth
-              label="Websocket Address (IPv6)"
+              label="Websocket Port"
               size="small"
-              value={websocketStatus.v6Address}
+              value={websocketStatus.port ? websocketStatus.port : ''}
               variant="standard"
             />
             <Button
-              disabled={v6Copied || !websocketStatus.v6Address}
-              endIcon={v6Copied ? undefined : <ContentCopy />}
+              disabled={portCopied || !websocketStatus.port}
+              endIcon={portCopied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(websocketStatus.v6Address);
-                setV6Copied(true);
-                setTimeout(() => setV6Copied(false), 5000);
+                await window.electron.copy(`${websocketStatus.port}`);
+                setPortCopied(true);
+                setTimeout(() => setPortCopied(false), 5000);
               }}
               variant="contained"
             >
-              {v6Copied ? 'Copied!' : 'Copy'}
+              {portCopied ? 'Copied!' : 'Copy'}
             </Button>
           </Stack>
           {websocketEnabled &&

@@ -90,6 +90,7 @@ type AuthIdentify = {
   authentication: string;
 };
 
+const DEFAULT_WEBSOCKET_PORT = 50000;
 const BROADCAST_PORT = 52456;
 const ADMIN_PROTOCOL = 'admin-protocol';
 const BRACKET_PROTOCOL = 'bracket-protocol';
@@ -353,12 +354,12 @@ export async function startWebsocketServer() {
     httpServer = http.createServer();
     try {
       await new Promise<void>((resolve, reject) => {
-        httpServer!.once('error', (e) => {
+        httpServer!.once('error', (error) => {
           httpServer!.removeAllListeners();
-          err = e.message;
-          reject();
+          err = error.message;
+          reject(error);
         });
-        httpServer!.listen(() => {
+        httpServer!.listen({ port: DEFAULT_WEBSOCKET_PORT }, () => {
           httpServer!.removeAllListeners('error');
           httpServer!.on('error', (error) => {
             err = error.message;
@@ -367,10 +368,35 @@ export async function startWebsocketServer() {
           resolve();
         });
       });
-    } catch {
-      httpServer = null;
-      sendStatus();
-      return;
+    } catch (e: any) {
+      if (e.code !== 'EADDRINUSE') {
+        httpServer = null;
+        sendStatus();
+        return;
+      }
+
+      err = '';
+      try {
+        await new Promise<void>((resolve, reject) => {
+          httpServer!.once('error', (error) => {
+            httpServer!.removeAllListeners();
+            err = error.message;
+            reject();
+          });
+          httpServer!.listen(() => {
+            httpServer!.removeAllListeners('error');
+            httpServer!.on('error', (error) => {
+              err = error.message;
+              sendStatus();
+            });
+            resolve();
+          });
+        });
+      } catch {
+        httpServer = null;
+        sendStatus();
+        return;
+      }
     }
     ({ port } = httpServer.address() as AddressInfo);
     const udp4Socket = createSocket('udp4');
