@@ -3,6 +3,9 @@ import type { connection, Message } from 'websocket';
 import websocket from 'websocket';
 import { BrowserWindow } from 'electron';
 import { createHash, randomBytes } from 'crypto';
+import { AddressInfo } from 'net';
+import { createSocket, Socket } from 'dgram';
+import { networkInterfaces } from 'os';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -18,6 +21,7 @@ import {
   SubscriberTournament,
   WebsocketStatus,
 } from '../common/types';
+import { getComputerName } from './util';
 
 type Request = {
   num: number;
@@ -86,15 +90,21 @@ type AuthIdentify = {
   authentication: string;
 };
 
+const BROADCAST_PORT = 52456;
 const ADMIN_PROTOCOL = 'admin-protocol';
 const BRACKET_PROTOCOL = 'bracket-protocol';
 const UNAUTH_CODE = 4009;
-const DEFAULT_PORT = 50000;
 
 let httpServer: http.Server | null = null;
+let udp4BroadcastSocket: Socket | null = null;
+let udp4BroadcastTimeout: NodeJS.Timeout | undefined;
+let udp6BroadcastSocket: Socket | null = null;
+let udp6BroadcastTimeout: NodeJS.Timeout | undefined;
 let websocketServer: websocket.server | null = null;
 
 let err = '';
+let v4Address = '';
+let v6Address = '';
 let port = 0;
 const connections = new Map<
   connection,
@@ -107,22 +117,19 @@ let mainWindow: BrowserWindow | null = null;
 export function getWebsocketStatus(): WebsocketStatus {
   return {
     err,
+    v4Address,
+    v6Address,
     port,
     connections: Array.from(connections.entries())
       .filter(
         ([connection]) =>
           connection.socket.remoteAddress && connection.socket.remotePort,
       )
-      .map(([connection, clientId]) => {
-        let ret = `${connection.socket.remoteAddress}:${connection.socket.remotePort}`;
-        if (clientId.computerName) {
-          ret += ` - ${clientId.computerName}`;
-        }
-        if (clientId.clientName) {
-          ret += ` - ${clientId.clientName}`;
-        }
-        return ret;
-      }),
+      .map(([connection, clientId]) => ({
+        addressPort: `${connection.socket.remoteAddress}:${connection.socket.remotePort}`,
+        computerName: clientId.computerName,
+        clientName: clientId.clientName,
+      })),
   };
 }
 function sendStatus() {
@@ -138,39 +145,6 @@ function sendTournamentUpdateEvent(
     tournament: subscriberTournament,
   };
   connection.sendUTF(JSON.stringify(event));
-}
-
-const PORT_IN_USE_ERR = 'Port in use';
-async function startHttpServer(httpPort: number) {
-  try {
-    await new Promise<void>((resolve, reject) => {
-      httpServer = http.createServer();
-      httpServer.once('error', (e) => {
-        httpServer?.removeAllListeners();
-        httpServer = null;
-        reject(e);
-      });
-      httpServer.listen(
-        httpPort,
-        '127.0.0.1', // allow only local conenctions
-        511, // default backlog queue length
-        () => {
-          httpServer!.removeAllListeners('error');
-          httpServer!.on('error', (error) => {
-            err = error.message;
-            sendStatus();
-          });
-          resolve();
-        },
-      );
-    });
-    return '';
-  } catch (e: any) {
-    if (e.code === 'EADDRINUSE') {
-      return PORT_IN_USE_ERR;
-    }
-    return e instanceof Error ? e.message : (e as string);
-  }
 }
 
 function handleClientIdRequest(json: Request, newConnection: connection) {
@@ -376,20 +350,164 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
 
 export async function startWebsocketServer() {
   if (!httpServer) {
-    port = DEFAULT_PORT;
-    err = await startHttpServer(port);
-    if (err === PORT_IN_USE_ERR) {
-      do {
-        port += 1;
-        err = await startHttpServer(port);
-      } while (err === PORT_IN_USE_ERR);
-    }
-    if (err) {
+    httpServer = http.createServer();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        httpServer!.once('error', (e) => {
+          httpServer!.removeAllListeners();
+          err = e.message;
+          reject();
+        });
+        httpServer!.listen(() => {
+          httpServer!.removeAllListeners('error');
+          httpServer!.on('error', (error) => {
+            err = error.message;
+            sendStatus();
+          });
+          resolve();
+        });
+      });
+    } catch {
+      httpServer = null;
       sendStatus();
       return;
     }
-    if (!httpServer) {
-      throw new Error('unreachable');
+    ({ port } = httpServer.address() as AddressInfo);
+    const udp4Socket = createSocket('udp4');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        udp4Socket.connect(53, '8.8.8.8', () => {
+          try {
+            v4Address = udp4Socket.address().address;
+            udp4Socket.close();
+            resolve();
+          } catch {
+            v4Address = '';
+            udp4Socket.close();
+            reject();
+          }
+        });
+      });
+    } catch {
+      // just catch
+    }
+
+    const udp6Socket = createSocket('udp6');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        udp6Socket.connect(53, '2001:4860:4860::8888', () => {
+          try {
+            v6Address = udp6Socket.address().address;
+            udp6Socket.close();
+            resolve();
+          } catch {
+            v6Address = '';
+            udp6Socket.close();
+            reject();
+          }
+        });
+      });
+    } catch {
+      // just catch
+    }
+  }
+
+  if (!udp4BroadcastSocket) {
+    udp4BroadcastSocket = createSocket('udp4');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        udp4BroadcastSocket!.once('error', (e) => {
+          udp4BroadcastSocket!.removeAllListeners();
+          err = e.message;
+          reject();
+        });
+        udp4BroadcastSocket!.bind(() => {
+          udp4BroadcastSocket!.removeAllListeners('error');
+          udp4BroadcastSocket!.on('error', (e) => {
+            err = e.message;
+            sendStatus();
+          });
+          udp4BroadcastSocket!.setBroadcast(true);
+          const broadcast = () => {
+            if (udp4BroadcastSocket) {
+              udp4BroadcastSocket.send(
+                JSON.stringify({
+                  computerName: getComputerName(),
+                  family: 'IPv4',
+                  port,
+                }),
+                BROADCAST_PORT,
+                '255.255.255.255',
+              );
+            }
+          };
+          udp4BroadcastTimeout = setInterval(broadcast, 2000);
+          resolve();
+        });
+      });
+    } catch {
+      udp4BroadcastSocket = null;
+      sendStatus();
+      return;
+    }
+  }
+
+  if (!udp6BroadcastSocket) {
+    udp6BroadcastSocket = createSocket('udp6');
+    try {
+      await new Promise<void>((resolve, reject) => {
+        udp6BroadcastSocket!.once('error', (e) => {
+          udp6BroadcastSocket!.removeAllListeners();
+          err = e.message;
+          reject();
+        });
+        udp6BroadcastSocket!.bind(() => {
+          udp6BroadcastSocket!.removeAllListeners('error');
+          udp6BroadcastSocket!.on('error', (e) => {
+            err = e.message;
+            sendStatus();
+          });
+          udp6BroadcastSocket!.setMulticastLoopback(true);
+          if (v6Address) {
+            let v6Interface = '';
+            for (const [iface, infos] of Object.entries(networkInterfaces())) {
+              if (infos) {
+                for (const info of infos) {
+                  if (info.address === v6Address) {
+                    v6Interface = iface;
+                    break;
+                  }
+                }
+                if (v6Interface) {
+                  break;
+                }
+              }
+            }
+            if (v6Interface) {
+              udp6BroadcastSocket!.setMulticastInterface(`::%${v6Interface}`);
+            }
+          }
+          const broadcast = () => {
+            if (udp6BroadcastSocket) {
+              udp6BroadcastSocket.send(
+                JSON.stringify({
+                  computerName: getComputerName(),
+                  family: 'IPv6',
+                  port,
+                }),
+                BROADCAST_PORT,
+                'ff02::1',
+              );
+            }
+          };
+          udp6BroadcastTimeout = setInterval(broadcast, 2000);
+          resolve();
+        });
+      });
+    } catch {
+      udp6BroadcastSocket = null;
+      sendStatus();
+      return;
     }
   }
 
@@ -492,6 +610,18 @@ export function stopWebsocketServer() {
     websocketServer.shutDown();
     websocketServer = null;
   }
+  clearInterval(udp4BroadcastTimeout);
+  if (udp4BroadcastSocket) {
+    udp4BroadcastSocket.removeAllListeners();
+    udp4BroadcastSocket.close();
+    udp4BroadcastSocket = null;
+  }
+  clearInterval(udp6BroadcastTimeout);
+  if (udp6BroadcastSocket) {
+    udp6BroadcastSocket.removeAllListeners();
+    udp6BroadcastSocket.close();
+    udp6BroadcastSocket = null;
+  }
   if (httpServer) {
     httpServer.removeAllListeners();
     httpServer.close();
@@ -499,6 +629,8 @@ export function stopWebsocketServer() {
   }
   connections.clear();
   err = '';
+  v4Address = '';
+  v6Address = '';
   port = 0;
   sendStatus();
 }

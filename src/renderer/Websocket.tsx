@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Button,
   Dialog,
   DialogContent,
@@ -23,11 +24,16 @@ export default function Websocket() {
   const [websocketPassword, setWebsocketPassword] = useState('');
   const [websocketStatus, setWebsocketStatus] = useState<WebsocketStatus>({
     err: '',
+    v4Address: '',
+    v6Address: '',
     port: 0,
     connections: [],
   });
-  const [copied, setCopied] = useState(false);
+  const [passwordCopied, setPasswordCopied] = useState(false);
   const [generated, setGenerated] = useState(false);
+  const [portCopied, setPortCopied] = useState(false);
+  const [v4Copied, setV4Copied] = useState(false);
+  const [v6Copied, setV6Copied] = useState(false);
   useEffect(() => {
     window.electron.onWebsocketStatus((event, newWebsocketStatus) => {
       setWebsocketStatus(newWebsocketStatus);
@@ -48,7 +54,7 @@ export default function Websocket() {
     if (websocketStatus.err) {
       title = 'Websocket error!';
     } else if (websocketStatus.port) {
-      title = `Websocket running on port ${websocketStatus.port}`;
+      title = 'Websocket running';
     }
     return title;
   }, [websocketStatus]);
@@ -130,7 +136,6 @@ export default function Websocket() {
         <DialogContent style={{ paddingTop: '8px' }}>
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
-              autoFocus
               fullWidth
               label="Websocket Password"
               size="small"
@@ -138,31 +143,108 @@ export default function Websocket() {
               value={websocketPassword}
               variant="standard"
             />
+            {generateButton}
             <Button
-              disabled={copied}
-              endIcon={copied ? undefined : <ContentCopy />}
+              disabled={passwordCopied}
+              endIcon={passwordCopied ? undefined : <ContentCopy />}
               onClick={async () => {
                 await window.electron.copy(websocketPassword);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 5000);
+                setPasswordCopied(true);
+                setTimeout(() => setPasswordCopied(false), 5000);
               }}
               variant="contained"
             >
-              {copied ? 'Copied!' : 'Copy'}
+              {passwordCopied ? 'Copied!' : 'Copy'}
             </Button>
-            {generateButton}
+          </Stack>
+          <Stack alignItems="center" direction="row" gap="8px">
+            <TextField
+              disabled={!websocketStatus.port}
+              fullWidth
+              label="Websocket Port"
+              size="small"
+              value={websocketStatus.port ? websocketStatus.port : ''}
+              variant="standard"
+            />
+            <Button
+              disabled={portCopied || !websocketStatus.port}
+              endIcon={portCopied ? undefined : <ContentCopy />}
+              onClick={async () => {
+                await window.electron.copy(`${websocketStatus.port}`);
+                setPortCopied(true);
+                setTimeout(() => setPortCopied(false), 5000);
+              }}
+              variant="contained"
+            >
+              {portCopied ? 'Copied!' : 'Copy'}
+            </Button>
+          </Stack>
+          <Stack alignItems="center" direction="row" gap="8px">
+            <TextField
+              disabled={!websocketStatus.v4Address}
+              fullWidth
+              label="Websocket Address (IPv4)"
+              size="small"
+              value={websocketStatus.v4Address}
+              variant="standard"
+            />
+            <Button
+              disabled={v4Copied || !websocketStatus.port}
+              endIcon={v4Copied ? undefined : <ContentCopy />}
+              onClick={async () => {
+                await window.electron.copy(websocketStatus.v4Address);
+                setV4Copied(true);
+                setTimeout(() => setV4Copied(false), 5000);
+              }}
+              variant="contained"
+            >
+              {v4Copied ? 'Copied!' : 'Copy'}
+            </Button>
+          </Stack>
+          <Stack alignItems="center" direction="row" gap="8px">
+            <TextField
+              disabled={!websocketStatus.v6Address}
+              fullWidth
+              label="Websocket Address (IPv6)"
+              size="small"
+              value={websocketStatus.v6Address}
+              variant="standard"
+            />
+            <Button
+              disabled={v6Copied || !websocketStatus.v6Address}
+              endIcon={v6Copied ? undefined : <ContentCopy />}
+              onClick={async () => {
+                await window.electron.copy(websocketStatus.v6Address);
+                setV6Copied(true);
+                setTimeout(() => setV6Copied(false), 5000);
+              }}
+              variant="contained"
+            >
+              {v6Copied ? 'Copied!' : 'Copy'}
+            </Button>
           </Stack>
           {websocketEnabled &&
             websocketStatus.port &&
             websocketStatus.connections.length > 0 && (
               <List disablePadding style={{ margin: '8px 0' }}>
                 {websocketStatus.connections.map((connection) => (
-                  <ListItem disablePadding>
-                    <ListItemText>{connection}</ListItemText>
+                  <ListItem disablePadding key={connection.addressPort}>
+                    <ListItemText>
+                      {connection.addressPort}
+                      {connection.computerName
+                        ? ` - ${connection.computerName}`
+                        : ''}
+                      {connection.clientName
+                        ? ` - ${connection.clientName}`
+                        : ''}
+                    </ListItemText>
                   </ListItem>
                 ))}
               </List>
             )}
+          {websocketStatus.err && (
+            <Alert severity="error">{websocketStatus.err}</Alert>
+          )}
         </DialogContent>
       </Dialog>
     </>

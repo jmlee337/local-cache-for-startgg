@@ -523,8 +523,14 @@ export type SyncResult = {
 
 export type WebsocketStatus = {
   err: string;
+  v4Address: string;
+  v6Address: string;
   port: number;
-  connections: string[];
+  connections: {
+    addressPort: string;
+    computerName: string;
+    clientName: string;
+  }[];
 };
 
 export type PoolSiblings = {
