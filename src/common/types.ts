@@ -523,6 +523,7 @@ export type SyncResult = {
 
 export type WebsocketStatus = {
   err: string;
+  host: string;
   v4Address: string;
   v6Address: string;
   port: number;
