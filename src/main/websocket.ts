@@ -605,9 +605,13 @@ export function stopWebsocketServer() {
     v4Address = '';
     v6Address = '';
     port = 0;
-    sendStatus();
     release();
   });
+}
+
+export async function stopWebsocketServerAndSendStatus() {
+  await stopWebsocketServer();
+  sendStatus();
 }
 
 export function initWebsocket(initMainWindow: BrowserWindow) {

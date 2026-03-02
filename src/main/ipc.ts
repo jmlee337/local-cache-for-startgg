@@ -42,6 +42,7 @@ import {
   setWebsocketPassword,
   startWebsocketServer,
   stopWebsocketServer,
+  stopWebsocketServerAndSendStatus,
   updateSubscribers,
 } from './websocket';
 import {
@@ -163,7 +164,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       if (websocket) {
         startWebsocketServer();
       } else {
-        stopWebsocketServer();
+        stopWebsocketServerAndSendStatus();
       }
     }
   });
