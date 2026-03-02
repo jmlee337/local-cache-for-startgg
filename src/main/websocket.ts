@@ -573,6 +573,10 @@ export function stopWebsocketServer() {
         return;
       }
 
+      Array.from(websocketServer.clients).forEach((webSocket) => {
+        webSocket.terminate();
+      });
+
       websocketServer.on('close', () => {
         websocketServer?.removeAllListeners();
         websocketServer = null;
