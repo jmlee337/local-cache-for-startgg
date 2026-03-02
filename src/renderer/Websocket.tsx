@@ -225,7 +225,7 @@ export default function Websocket() {
             </Button>
           </Stack>
           {websocketEnabled &&
-            websocketStatus.port &&
+            websocketStatus.port !== 0 &&
             websocketStatus.connections.length > 0 && (
               <List disablePadding style={{ margin: '8px 0' }}>
                 {websocketStatus.connections.map((connection) => (

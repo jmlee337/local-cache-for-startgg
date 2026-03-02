@@ -38,6 +38,7 @@ import {
 import {
   getWebsocketStatus,
   initWebsocket,
+  isBonjourRunning,
   setWebsocketPassword,
   startWebsocketServer,
   stopWebsocketServer,
@@ -455,6 +456,16 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
       'https://github.com/jmlee337/local-cache-for-startgg/releases/latest',
     );
     app.quit();
+  });
+
+  app.on('before-quit', (event) => {
+    if (isBonjourRunning()) {
+      event.preventDefault();
+      (async () => {
+        await stopWebsocketServer();
+        app.quit();
+      })();
+    }
   });
 
   (async () => {

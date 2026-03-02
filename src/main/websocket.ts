@@ -1,10 +1,9 @@
 import http from 'http';
-import type { connection, Message } from 'websocket';
-import websocket from 'websocket';
 import { BrowserWindow } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createSocket } from 'dgram';
-import bonjour from 'bonjour';
+import { Bonjour } from 'bonjour-service';
+import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -94,18 +93,20 @@ const BRACKET_PROTOCOL = 'bracket-protocol';
 const UNAUTH_CODE = 4009;
 
 let httpServer: http.Server | null = null;
-let websocketServer: websocket.server | null = null;
+let websocketServer: WebSocketServer | null = null;
 
 let err = '';
 let host = '';
 let v4Address = '';
 let v6Address = '';
 let port = 0;
-const connections = new Map<
-  connection,
+const webSockets = new Map<
+  WebSocket,
   {
     computerName: string;
     clientName: string;
+    remoteAddress?: string;
+    remotePort?: number;
   }
 >();
 let mainWindow: BrowserWindow | null = null;
@@ -116,15 +117,15 @@ export function getWebsocketStatus(): WebsocketStatus {
     v4Address,
     v6Address,
     port,
-    connections: Array.from(connections.entries())
+    connections: Array.from(webSockets.values())
       .filter(
-        ([connection]) =>
-          connection.socket.remoteAddress && connection.socket.remotePort,
+        (webSocketInfo) =>
+          webSocketInfo.remoteAddress && webSocketInfo.remotePort,
       )
-      .map(([connection, clientId]) => ({
-        addressPort: `${connection.socket.remoteAddress}:${connection.socket.remotePort}`,
-        computerName: clientId.computerName,
-        clientName: clientId.clientName,
+      .map((webSocketInfo) => ({
+        addressPort: `${webSocketInfo.remoteAddress}:${webSocketInfo.remotePort}`,
+        computerName: webSocketInfo.computerName,
+        clientName: webSocketInfo.clientName,
       })),
   };
 }
@@ -133,17 +134,17 @@ function sendStatus() {
 }
 
 function sendTournamentUpdateEvent(
-  connection: connection,
+  webSocket: WebSocket,
   subscriberTournament: SubscriberTournament | undefined,
 ) {
   const event: Event = {
     op: 'tournament-update-event',
     tournament: subscriberTournament,
   };
-  connection.sendUTF(JSON.stringify(event));
+  webSocket.send(JSON.stringify(event));
 }
 
-function handleClientIdRequest(json: Request, newConnection: connection) {
+function handleClientIdRequest(json: Request, newWebSocket: WebSocket) {
   if (json.op !== 'client-id-request') {
     throw new Error('unreachable');
   }
@@ -154,44 +155,44 @@ function handleClientIdRequest(json: Request, newConnection: connection) {
   };
   if (typeof json.computerName !== 'string') {
     response.err = 'computerName must be string';
-    newConnection.sendUTF(JSON.stringify(response));
+    newWebSocket.send(JSON.stringify(response));
     return;
   }
   if (typeof json.clientName !== 'string') {
     response.err = 'clientName must be string';
-    newConnection.sendUTF(JSON.stringify(response));
+    newWebSocket.send(JSON.stringify(response));
     return;
   }
-  connections.set(newConnection, {
-    computerName: json.computerName,
-    clientName: json.clientName,
-  });
+
+  const webSocketInfo = webSockets.get(newWebSocket);
+  if (webSocketInfo) {
+    webSocketInfo.computerName = json.computerName;
+    webSocketInfo.clientName = json.clientName;
+  }
   sendStatus();
-  newConnection.sendUTF(JSON.stringify(response));
+  newWebSocket.send(JSON.stringify(response));
 }
 
-async function acceptAdminAuthentication(newConnection: connection) {
-  connections.set(newConnection, { computerName: '', clientName: '' });
-  sendStatus();
+async function afterAdminAuthentication(newWebSocket: WebSocket) {
   const authSuccessEvent: Event = {
     op: 'auth-success-event',
   };
-  newConnection.sendUTF(JSON.stringify(authSuccessEvent));
-  sendTournamentUpdateEvent(newConnection, getLastSubscriberTournament());
-  newConnection.on('message', async (data) => {
-    if (data.type === 'binary') {
+  newWebSocket.send(JSON.stringify(authSuccessEvent));
+  sendTournamentUpdateEvent(newWebSocket, getLastSubscriberTournament());
+  newWebSocket.on('message', (data, isBinary) => {
+    if (isBinary) {
       return;
     }
 
     let json: Request | undefined;
     try {
-      json = JSON.parse(data.utf8Data) as Request;
+      json = JSON.parse(data.toString()) as Request;
     } catch {
       return;
     }
 
     if (json.op === 'client-id-request') {
-      handleClientIdRequest(json, newConnection);
+      handleClientIdRequest(json, newWebSocket);
     } else if (json.op === 'reset-set-request') {
       const response: Response = {
         num: json.num,
@@ -199,15 +200,15 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
         response.data = resetSetTransaction(json.id);
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     } else if (json.op === 'call-set-request') {
       const response: Response = {
@@ -216,15 +217,15 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
         response.data = callSetTransaction(json.id);
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     } else if (json.op === 'start-set-request') {
       const response: Response = {
@@ -233,15 +234,15 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
         response.data = startSetTransaction(json.id);
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     } else if (json.op === 'assign-set-station-request') {
       const response: Response = {
@@ -250,20 +251,20 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       if (json.stationId === undefined || !Number.isInteger(json.stationId)) {
         response.err = 'stationId must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
         response.data = assignSetStationTransaction(json.id, json.stationId);
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     } else if (json.op === 'assign-set-stream-request') {
       const response: Response = {
@@ -272,20 +273,20 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       if (json.streamId === undefined || !Number.isInteger(json.streamId)) {
         response.err = 'streamId must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
         response.data = assignSetStreamTransaction(json.id, json.streamId);
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     } else if (json.op === 'report-set-request') {
       const response: Response = {
@@ -294,22 +295,22 @@ async function acceptAdminAuthentication(newConnection: connection) {
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       if (json.winnerId === undefined || !Number.isInteger(json.winnerId)) {
         response.err = 'winnerId must be integer';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       if (typeof json.isDQ !== 'boolean') {
         response.err = 'isDQ must be boolean';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       if (!Array.isArray(json.gameData)) {
         response.err = 'gameData must be array';
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
         return;
       }
       try {
@@ -319,16 +320,16 @@ async function acceptAdminAuthentication(newConnection: connection) {
           json.isDQ,
           json.gameData,
         );
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       } catch (e: any) {
         response.err = e instanceof Error ? e.message : e.toString();
-        newConnection.sendUTF(JSON.stringify(response));
+        newWebSocket.send(JSON.stringify(response));
       }
     }
   });
-  newConnection.on('close', () => {
-    newConnection.removeAllListeners();
-    connections.delete(newConnection);
+  newWebSocket.on('close', () => {
+    newWebSocket.removeAllListeners();
+    webSockets.delete(newWebSocket);
     sendStatus();
   });
 }
@@ -344,7 +345,7 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
   websocketPassword = newWebsocketPassword;
 }
 
-let bonjourInstance: bonjour.Bonjour | null = null;
+let bonjour: Bonjour | null;
 export async function startWebsocketServer() {
   if (!httpServer) {
     httpServer = http.createServer();
@@ -410,8 +411,9 @@ export async function startWebsocketServer() {
     }
   }
 
-  if (bonjourInstance) {
-    const service = bonjourInstance.publish({
+  if (!bonjour) {
+    bonjour = new Bonjour();
+    const service = bonjour.publish({
       name: 'Offline Mode',
       port: 80,
       type: 'http',
@@ -419,117 +421,149 @@ export async function startWebsocketServer() {
     service.on('up', () => {
       ({ host } = service);
       sendStatus();
+      service.removeAllListeners();
     });
   }
 
   if (!websocketServer) {
-    // eslint-disable-next-line new-cap
-    websocketServer = new websocket.server({ httpServer });
-    websocketServer.on('request', async (request) => {
-      if (request.requestedProtocols.length === 1) {
-        if (request.requestedProtocols[0] === ADMIN_PROTOCOL) {
-          const newConnection = request.accept(ADMIN_PROTOCOL, request.origin);
-          const salt = Buffer.from(randomBytes(32)).toString('base64url');
-          const secret = createHash('sha256')
-            .update(websocketPassword)
-            .update(salt)
-            .digest()
-            .toString('base64url');
-          const challenge = Buffer.from(randomBytes(32)).toString('base64url');
-          const authentication = createHash('sha256')
-            .update(secret)
-            .update(challenge)
-            .digest()
-            .toString('base64url');
-          const authHello: AuthHello = {
-            op: 'auth-hello',
-            salt,
-            challenge,
-          };
-          const identifyCb = (data: Message) => {
-            if (data.type === 'binary') {
-              newConnection.close(UNAUTH_CODE);
-              return;
-            }
+    websocketServer = new WebSocketServer({
+      server: httpServer,
+      handleProtocols: (protocols) => {
+        if (protocols.has(ADMIN_PROTOCOL)) {
+          return ADMIN_PROTOCOL;
+        }
+        return BRACKET_PROTOCOL;
+      },
+    });
+    websocketServer.on('connection', (newWebSocket, request) => {
+      if (newWebSocket.protocol === ADMIN_PROTOCOL) {
+        const salt = Buffer.from(randomBytes(32)).toString('base64url');
+        const secret = createHash('sha256')
+          .update(websocketPassword)
+          .update(salt)
+          .digest()
+          .toString('base64url');
+        const challenge = Buffer.from(randomBytes(32)).toString('base64url');
+        const authentication = createHash('sha256')
+          .update(secret)
+          .update(challenge)
+          .digest()
+          .toString('base64url');
+        const authHello: AuthHello = {
+          op: 'auth-hello',
+          salt,
+          challenge,
+        };
+        const identifyCb = (data: RawData, isBinary: boolean) => {
+          if (isBinary) {
+            newWebSocket.close(UNAUTH_CODE);
+            return;
+          }
 
-            try {
-              const json = JSON.parse(data.utf8Data) as AuthIdentify;
-              if (json.op === 'auth-identify') {
-                if (json.authentication === authentication) {
-                  newConnection.removeListener('message', identifyCb);
-                  acceptAdminAuthentication(newConnection);
-                  return;
-                }
+          try {
+            const json = JSON.parse(data.toString()) as AuthIdentify;
+            if (json.op === 'auth-identify') {
+              if (json.authentication === authentication) {
+                newWebSocket.removeListener('message', identifyCb);
+                webSockets.set(newWebSocket, {
+                  computerName: '',
+                  clientName: '',
+                  remoteAddress: request.socket.remoteAddress,
+                  remotePort: request.socket.remotePort,
+                });
+                sendStatus();
+                afterAdminAuthentication(newWebSocket);
+                return;
               }
-            } catch {
-              // just catch
             }
-            newConnection.close(UNAUTH_CODE);
-          };
-          newConnection.on('message', identifyCb);
-          newConnection.sendUTF(JSON.stringify(authHello));
-          return;
-        }
-        if (request.requestedProtocols[0] === BRACKET_PROTOCOL) {
-          const newConnection = request.accept(
-            BRACKET_PROTOCOL,
-            request.origin,
-          );
-          connections.set(newConnection, { computerName: '', clientName: '' });
-          newConnection.on('message', (data) => {
-            if (data.type === 'binary') {
-              return;
-            }
-
-            let json: Request | undefined;
-            try {
-              json = JSON.parse(data.utf8Data) as Request;
-            } catch {
-              return;
-            }
-
-            if (json.op === 'client-id-request') {
-              handleClientIdRequest(json, newConnection);
-            }
-          });
-          newConnection.on('close', () => {
-            newConnection.removeAllListeners();
-            connections.delete(newConnection);
-            sendStatus();
-          });
-          sendStatus();
-          sendTournamentUpdateEvent(
-            newConnection,
-            getLastSubscriberTournament(),
-          );
-          return;
-        }
+          } catch {
+            // just catch
+          }
+          newWebSocket.close(UNAUTH_CODE);
+        };
+        newWebSocket.on('message', identifyCb);
+        newWebSocket.send(JSON.stringify(authHello));
+        return;
       }
-      request.reject(
-        400,
-        `invalid requested protocol(s): ${request.requestedProtocols}`,
-      );
+
+      webSockets.set(newWebSocket, {
+        computerName: '',
+        clientName: '',
+        remoteAddress: request.socket.remoteAddress,
+        remotePort: request.socket.remotePort,
+      });
+      newWebSocket.on('message', (data, isBinary) => {
+        if (isBinary) {
+          return;
+        }
+
+        let json: Request | undefined;
+        try {
+          json = JSON.parse(data.toString()) as Request;
+        } catch {
+          return;
+        }
+
+        if (json.op === 'client-id-request') {
+          handleClientIdRequest(json, newWebSocket);
+        }
+      });
+      newWebSocket.on('close', () => {
+        newWebSocket.removeAllListeners();
+        webSockets.delete(newWebSocket);
+        sendStatus();
+      });
+      sendStatus();
+      sendTournamentUpdateEvent(newWebSocket, getLastSubscriberTournament());
     });
   }
 
   sendStatus();
 }
 
-export function stopWebsocketServer() {
-  if (websocketServer) {
-    websocketServer.removeAllListeners();
-    websocketServer.shutDown();
-    websocketServer = null;
-  }
-  if (bonjourInstance) {
-    bonjourInstance.unpublishAll();
-  }
-  if (httpServer) {
-    httpServer.removeAllListeners();
+export async function stopWebsocketServer() {
+  const bonjourPromise = new Promise<void>((resolve) => {
+    if (!bonjour) {
+      resolve();
+      return;
+    }
+
+    bonjour.unpublishAll(() => {
+      bonjour?.destroy(() => {
+        bonjour = null;
+        resolve();
+      });
+    });
+  });
+  await new Promise<void>((resolve) => {
+    if (!websocketServer) {
+      resolve();
+      return;
+    }
+
+    websocketServer.on('close', () => {
+      websocketServer?.removeAllListeners();
+      websocketServer = null;
+      resolve();
+    });
+    websocketServer.close();
+  });
+  await new Promise<void>((resolve) => {
+    if (!httpServer) {
+      resolve();
+      return;
+    }
+
+    httpServer.on('close', () => {
+      httpServer?.removeAllListeners();
+      httpServer = null;
+      resolve();
+    });
     httpServer.close();
-    httpServer = null;
-  }
-  connections.clear();
+  });
+  await bonjourPromise;
+
+  webSockets.clear();
   err = '';
   host = '';
   v4Address = '';
@@ -539,15 +573,17 @@ export function stopWebsocketServer() {
 }
 
 export function initWebsocket(initMainWindow: BrowserWindow) {
-  bonjourInstance = bonjour();
-  stopWebsocketServer();
   mainWindow = initMainWindow;
 }
 
 export function updateSubscribers(
   subscriberTournament: SubscriberTournament | undefined,
 ) {
-  Array.from(connections.keys()).forEach((connection) => {
+  Array.from(webSockets.keys()).forEach((connection) => {
     sendTournamentUpdateEvent(connection, subscriberTournament);
   });
+}
+
+export function isBonjourRunning() {
+  return !!bonjour;
 }
