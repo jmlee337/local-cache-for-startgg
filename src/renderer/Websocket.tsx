@@ -244,7 +244,9 @@ export default function Websocket() {
               </List>
             )}
           {websocketStatus.err && (
-            <Alert severity="error">{websocketStatus.err}</Alert>
+            <Alert severity="error" style={{ marginTop: '8px' }}>
+              {websocketStatus.err}
+            </Alert>
           )}
         </DialogContent>
       </Dialog>

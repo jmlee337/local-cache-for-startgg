@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'crypto';
 import { createSocket } from 'dgram';
 import { Bonjour } from 'bonjour-service';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
+import AsyncLock from 'async-lock';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -345,231 +346,264 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
   websocketPassword = newWebsocketPassword;
 }
 
-let bonjour: Bonjour | null;
-export async function startWebsocketServer() {
-  if (!httpServer) {
-    httpServer = http.createServer();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        httpServer!.once('error', (error) => {
-          httpServer!.removeAllListeners();
-          err = error.message;
-          reject(error);
-        });
-        httpServer!.listen({ port: HTTP_PORT }, () => {
-          httpServer!.removeAllListeners('error');
-          httpServer!.on('error', (error) => {
-            err = error.message;
-            sendStatus();
-          });
-          resolve();
-        });
-      });
-      port = HTTP_PORT;
-    } catch (e: any) {
-      httpServer = null;
-      sendStatus();
-      return;
-    }
-
-    const udp4Socket = createSocket('udp4');
-    try {
-      await new Promise<void>((resolve, reject) => {
-        udp4Socket.connect(53, '8.8.8.8', () => {
-          try {
-            v4Address = udp4Socket.address().address;
-            udp4Socket.close();
-            resolve();
-          } catch {
-            v4Address = '';
-            udp4Socket.close();
-            reject();
-          }
-        });
-      });
-    } catch {
-      // just catch
-    }
-
-    const udp6Socket = createSocket('udp6');
-    try {
-      await new Promise<void>((resolve, reject) => {
-        udp6Socket.connect(53, '2001:4860:4860::8888', () => {
-          try {
-            v6Address = udp6Socket.address().address;
-            udp6Socket.close();
-            resolve();
-          } catch {
-            v6Address = '';
-            udp6Socket.close();
-            reject();
-          }
-        });
-      });
-    } catch {
-      // just catch
-    }
-  }
-
-  if (!bonjour) {
-    bonjour = new Bonjour();
-    const service = bonjour.publish({
-      name: 'Offline Mode',
+function tryPublish(presentBonjour: Bonjour, suffixNum: number) {
+  return new Promise<string>((resolve, reject) => {
+    const name = suffixNum === 0 ? 'offlinemode' : `offlinemode-${suffixNum}`;
+    const newHost = `${name}.local`;
+    const service = presentBonjour.publish({
+      host: newHost,
+      name,
       port: 80,
       type: 'http',
     });
+    const timeout = setTimeout(() => {
+      if (service.stop) {
+        service.stop();
+      }
+      reject();
+    }, 2000);
     service.on('up', () => {
-      ({ host } = service);
-      sendStatus();
+      clearTimeout(timeout);
       service.removeAllListeners();
+      resolve(newHost);
     });
-  }
+  });
+}
 
-  if (!websocketServer) {
-    websocketServer = new WebSocketServer({
-      server: httpServer,
-      handleProtocols: (protocols) => {
-        if (protocols.has(ADMIN_PROTOCOL)) {
-          return ADMIN_PROTOCOL;
-        }
-        return BRACKET_PROTOCOL;
-      },
-    });
-    websocketServer.on('connection', (newWebSocket, request) => {
-      if (newWebSocket.protocol === ADMIN_PROTOCOL) {
-        const salt = Buffer.from(randomBytes(32)).toString('base64url');
-        const secret = createHash('sha256')
-          .update(websocketPassword)
-          .update(salt)
-          .digest()
-          .toString('base64url');
-        const challenge = Buffer.from(randomBytes(32)).toString('base64url');
-        const authentication = createHash('sha256')
-          .update(secret)
-          .update(challenge)
-          .digest()
-          .toString('base64url');
-        const authHello: AuthHello = {
-          op: 'auth-hello',
-          salt,
-          challenge,
-        };
-        const identifyCb = (data: RawData, isBinary: boolean) => {
-          if (isBinary) {
-            newWebSocket.close(UNAUTH_CODE);
-            return;
-          }
-
-          try {
-            const json = JSON.parse(data.toString()) as AuthIdentify;
-            if (json.op === 'auth-identify') {
-              if (json.authentication === authentication) {
-                newWebSocket.removeListener('message', identifyCb);
-                webSockets.set(newWebSocket, {
-                  computerName: '',
-                  clientName: '',
-                  remoteAddress: request.socket.remoteAddress,
-                  remotePort: request.socket.remotePort,
-                });
-                sendStatus();
-                afterAdminAuthentication(newWebSocket);
-                return;
-              }
-            }
-          } catch {
-            // just catch
-          }
-          newWebSocket.close(UNAUTH_CODE);
-        };
-        newWebSocket.on('message', identifyCb);
-        newWebSocket.send(JSON.stringify(authHello));
+const lock = new AsyncLock();
+const KEY = 'STARTSTOPKEY';
+let bonjour: Bonjour | null;
+export function startWebsocketServer() {
+  return lock.acquire(KEY, async (release) => {
+    if (!httpServer) {
+      httpServer = http.createServer();
+      try {
+        await new Promise<void>((resolve, reject) => {
+          httpServer!.once('error', (error) => {
+            httpServer!.removeAllListeners();
+            err = error.message;
+            reject(error);
+          });
+          httpServer!.listen({ port: HTTP_PORT }, () => {
+            httpServer!.removeAllListeners('error');
+            httpServer!.on('error', (error) => {
+              err = error.message;
+              sendStatus();
+            });
+            resolve();
+          });
+        });
+        port = HTTP_PORT;
+      } catch (e: any) {
+        httpServer = null;
+        sendStatus();
+        release();
         return;
       }
 
-      webSockets.set(newWebSocket, {
-        computerName: '',
-        clientName: '',
-        remoteAddress: request.socket.remoteAddress,
-        remotePort: request.socket.remotePort,
+      const udp4Socket = createSocket('udp4');
+      try {
+        await new Promise<void>((resolve, reject) => {
+          udp4Socket.connect(53, '8.8.8.8', () => {
+            try {
+              v4Address = udp4Socket.address().address;
+              udp4Socket.close();
+              resolve();
+            } catch {
+              v4Address = '';
+              udp4Socket.close();
+              reject();
+            }
+          });
+        });
+      } catch {
+        // just catch
+      }
+
+      const udp6Socket = createSocket('udp6');
+      try {
+        await new Promise<void>((resolve, reject) => {
+          udp6Socket.connect(53, '2001:4860:4860::8888', () => {
+            try {
+              v6Address = udp6Socket.address().address;
+              udp6Socket.close();
+              resolve();
+            } catch {
+              v6Address = '';
+              udp6Socket.close();
+              reject();
+            }
+          });
+        });
+      } catch {
+        // just catch
+      }
+    }
+
+    if (!websocketServer) {
+      websocketServer = new WebSocketServer({
+        server: httpServer,
+        handleProtocols: (protocols) => {
+          if (protocols.has(ADMIN_PROTOCOL)) {
+            return ADMIN_PROTOCOL;
+          }
+          return BRACKET_PROTOCOL;
+        },
       });
-      newWebSocket.on('message', (data, isBinary) => {
-        if (isBinary) {
+      websocketServer.on('connection', (newWebSocket, request) => {
+        if (newWebSocket.protocol === ADMIN_PROTOCOL) {
+          const salt = Buffer.from(randomBytes(32)).toString('base64url');
+          const secret = createHash('sha256')
+            .update(websocketPassword)
+            .update(salt)
+            .digest()
+            .toString('base64url');
+          const challenge = Buffer.from(randomBytes(32)).toString('base64url');
+          const authentication = createHash('sha256')
+            .update(secret)
+            .update(challenge)
+            .digest()
+            .toString('base64url');
+          const authHello: AuthHello = {
+            op: 'auth-hello',
+            salt,
+            challenge,
+          };
+          const identifyCb = (data: RawData, isBinary: boolean) => {
+            if (isBinary) {
+              newWebSocket.close(UNAUTH_CODE);
+              return;
+            }
+
+            try {
+              const json = JSON.parse(data.toString()) as AuthIdentify;
+              if (json.op === 'auth-identify') {
+                if (json.authentication === authentication) {
+                  newWebSocket.removeListener('message', identifyCb);
+                  webSockets.set(newWebSocket, {
+                    computerName: '',
+                    clientName: '',
+                    remoteAddress: request.socket.remoteAddress,
+                    remotePort: request.socket.remotePort,
+                  });
+                  sendStatus();
+                  afterAdminAuthentication(newWebSocket);
+                  return;
+                }
+              }
+            } catch {
+              // just catch
+            }
+            newWebSocket.close(UNAUTH_CODE);
+          };
+          newWebSocket.on('message', identifyCb);
+          newWebSocket.send(JSON.stringify(authHello));
           return;
         }
 
-        let json: Request | undefined;
-        try {
-          json = JSON.parse(data.toString()) as Request;
-        } catch {
-          return;
-        }
+        webSockets.set(newWebSocket, {
+          computerName: '',
+          clientName: '',
+          remoteAddress: request.socket.remoteAddress,
+          remotePort: request.socket.remotePort,
+        });
+        newWebSocket.on('message', (data, isBinary) => {
+          if (isBinary) {
+            return;
+          }
 
-        if (json.op === 'client-id-request') {
-          handleClientIdRequest(json, newWebSocket);
-        }
-      });
-      newWebSocket.on('close', () => {
-        newWebSocket.removeAllListeners();
-        webSockets.delete(newWebSocket);
+          let json: Request | undefined;
+          try {
+            json = JSON.parse(data.toString()) as Request;
+          } catch {
+            return;
+          }
+
+          if (json.op === 'client-id-request') {
+            handleClientIdRequest(json, newWebSocket);
+          }
+        });
+        newWebSocket.on('close', () => {
+          newWebSocket.removeAllListeners();
+          webSockets.delete(newWebSocket);
+          sendStatus();
+        });
         sendStatus();
+        sendTournamentUpdateEvent(newWebSocket, getLastSubscriberTournament());
       });
-      sendStatus();
-      sendTournamentUpdateEvent(newWebSocket, getLastSubscriberTournament());
-    });
-  }
+    }
 
-  sendStatus();
+    if (!bonjour) {
+      bonjour = new Bonjour();
+      let suffixNum = 0;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        try {
+          host = await tryPublish(bonjour, suffixNum);
+          break;
+        } catch {
+          suffixNum += 1;
+        }
+      }
+    }
+
+    sendStatus();
+    release();
+  });
 }
 
-export async function stopWebsocketServer() {
-  const bonjourPromise = new Promise<void>((resolve) => {
-    if (!bonjour) {
-      resolve();
-      return;
-    }
-
-    bonjour.unpublishAll(() => {
-      bonjour?.destroy(() => {
-        bonjour = null;
+export function stopWebsocketServer() {
+  return lock.acquire(KEY, async (release) => {
+    const bonjourPromise = new Promise<void>((resolve) => {
+      if (!bonjour) {
         resolve();
+        return;
+      }
+
+      bonjour.unpublishAll(() => {
+        bonjour?.destroy(() => {
+          bonjour = null;
+          resolve();
+        });
       });
     });
-  });
-  await new Promise<void>((resolve) => {
-    if (!websocketServer) {
-      resolve();
-      return;
-    }
+    await new Promise<void>((resolve) => {
+      if (!websocketServer) {
+        resolve();
+        return;
+      }
 
-    websocketServer.on('close', () => {
-      websocketServer?.removeAllListeners();
-      websocketServer = null;
-      resolve();
+      websocketServer.on('close', () => {
+        websocketServer?.removeAllListeners();
+        websocketServer = null;
+        resolve();
+      });
+      websocketServer.close();
     });
-    websocketServer.close();
-  });
-  await new Promise<void>((resolve) => {
-    if (!httpServer) {
-      resolve();
-      return;
-    }
+    await new Promise<void>((resolve) => {
+      if (!httpServer) {
+        resolve();
+        return;
+      }
 
-    httpServer.on('close', () => {
-      httpServer?.removeAllListeners();
-      httpServer = null;
-      resolve();
+      httpServer.on('close', () => {
+        httpServer?.removeAllListeners();
+        httpServer = null;
+        resolve();
+      });
+      httpServer.close();
     });
-    httpServer.close();
-  });
-  await bonjourPromise;
+    await bonjourPromise;
 
-  webSockets.clear();
-  err = '';
-  host = '';
-  v4Address = '';
-  v6Address = '';
-  port = 0;
-  sendStatus();
+    webSockets.clear();
+    err = '';
+    host = '';
+    v4Address = '';
+    v6Address = '';
+    port = 0;
+    sendStatus();
+    release();
+  });
 }
 
 export function initWebsocket(initMainWindow: BrowserWindow) {
