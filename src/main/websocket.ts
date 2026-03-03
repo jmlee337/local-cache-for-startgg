@@ -2,7 +2,7 @@ import http from 'http';
 import { BrowserWindow } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createSocket } from 'dgram';
-import { Advertisement, tcp } from 'dnssd';
+import { CiaoService, getResponder, Responder } from '@homebridge/ciao';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import AsyncLock from 'async-lock';
 import { getLastSubscriberTournament } from './db';
@@ -348,7 +348,8 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
 
 const lock = new AsyncLock();
 const KEY = 'STARTSTOPKEY';
-let advertisement: Advertisement | null;
+let responder: Responder | null = null;
+let ciaoService: CiaoService | null = null;
 export function startWebsocketServer() {
   return lock.acquire(KEY, async (release) => {
     if (!httpServer) {
@@ -509,22 +510,22 @@ export function startWebsocketServer() {
       });
     }
 
-    if (!advertisement) {
-      advertisement = new Advertisement(tcp('http'), 80, {
+    if (!responder) {
+      responder = getResponder();
+    }
+    if (!ciaoService) {
+      ciaoService = responder.createService({
         name: 'offlinemode',
-        host: 'offlinemode',
+        type: 'http',
+        port: 80,
         subtypes: ['offlinemode'],
+        txt: { offlinemode: 1 },
       });
-      advertisement.on('hostRenamed', (newHost) => {
-        host = newHost;
-      });
-      advertisement.on('active', () => {
-        if (!host) {
-          host = 'offlinemode.local';
-        }
+      (async () => {
+        await ciaoService.advertise();
+        host = ciaoService.getHostname().slice(0, -1);
         sendStatus();
-      });
-      advertisement.start();
+      })();
     }
 
     sendStatus();
@@ -532,27 +533,30 @@ export function startWebsocketServer() {
   });
 }
 
+async function stopCiao() {
+  if (ciaoService) {
+    await ciaoService.end();
+    await ciaoService.destroy();
+    ciaoService = null;
+  }
+  if (responder) {
+    await responder.shutdown();
+    responder = null;
+  }
+}
+
 export function stopWebsocketServer() {
   return lock.acquire(KEY, async (release) => {
-    const advertisementPromise = new Promise<void>((resolve) => {
-      if (!advertisement) {
-        resolve();
-        return;
-      }
-
-      advertisement.stop(false, () => {
-        advertisement?.removeAllListeners();
-        advertisement = null;
-        resolve();
-      });
-    });
+    const ciaoPromise = stopCiao();
     await new Promise<void>((resolve) => {
       if (!websocketServer) {
         resolve();
         return;
       }
 
+      websocketServer.removeAllListeners();
       Array.from(websocketServer.clients).forEach((webSocket) => {
+        webSocket.removeAllListeners();
         webSocket.terminate();
       });
 
@@ -576,7 +580,7 @@ export function stopWebsocketServer() {
       });
       httpServer.close();
     });
-    await advertisementPromise;
+    await ciaoPromise;
 
     webSockets.clear();
     err = '';
@@ -605,6 +609,6 @@ export function updateSubscribers(
   });
 }
 
-export function isBonjourRunning() {
-  return !!advertisement;
+export function isCiaoRunning() {
+  return !!responder;
 }

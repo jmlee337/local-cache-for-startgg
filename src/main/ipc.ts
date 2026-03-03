@@ -38,7 +38,7 @@ import {
 import {
   getWebsocketStatus,
   initWebsocket,
-  isBonjourRunning,
+  isCiaoRunning,
   setWebsocketPassword,
   startWebsocketServer,
   stopWebsocketServer,
@@ -460,7 +460,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
   });
 
   app.on('before-quit', (event) => {
-    if (isBonjourRunning()) {
+    if (isCiaoRunning()) {
       event.preventDefault();
       (async () => {
         await stopWebsocketServer();
