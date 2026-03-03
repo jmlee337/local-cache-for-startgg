@@ -2,7 +2,7 @@ import http from 'http';
 import { BrowserWindow } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createSocket } from 'dgram';
-import { Bonjour } from 'bonjour-service';
+import { Advertisement, tcp } from 'dnssd';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import AsyncLock from 'async-lock';
 import { getLastSubscriberTournament } from './db';
@@ -346,36 +346,9 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
   websocketPassword = newWebsocketPassword;
 }
 
-function tryPublish(presentBonjour: Bonjour, suffixNum: number) {
-  return new Promise<string>((resolve, reject) => {
-    const name = suffixNum === 0 ? 'offlinemode' : `offlinemode-${suffixNum}`;
-    const newHost = `${name}.local`;
-    const service = presentBonjour.publish({
-      host: newHost,
-      name,
-      port: 80,
-      type: 'http',
-      txt: {
-        offlinemode: 1,
-      },
-    });
-    const timeout = setTimeout(() => {
-      if (service.stop) {
-        service.stop();
-      }
-      reject();
-    }, 2000);
-    service.on('up', () => {
-      clearTimeout(timeout);
-      service.removeAllListeners();
-      resolve(newHost);
-    });
-  });
-}
-
 const lock = new AsyncLock();
 const KEY = 'STARTSTOPKEY';
-let bonjour: Bonjour | null;
+let advertisement: Advertisement | null;
 export function startWebsocketServer() {
   return lock.acquire(KEY, async (release) => {
     if (!httpServer) {
@@ -536,18 +509,22 @@ export function startWebsocketServer() {
       });
     }
 
-    if (!bonjour) {
-      bonjour = new Bonjour();
-      let suffixNum = 0;
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        try {
-          host = await tryPublish(bonjour, suffixNum);
-          break;
-        } catch {
-          suffixNum += 1;
+    if (!advertisement) {
+      advertisement = new Advertisement(tcp('http'), 80, {
+        name: 'offlinemode',
+        host: 'offlinemode',
+        subtypes: ['offlinemode'],
+      });
+      advertisement.on('hostRenamed', (newHost) => {
+        host = newHost;
+      });
+      advertisement.on('active', () => {
+        if (!host) {
+          host = 'offlinemode.local';
         }
-      }
+        sendStatus();
+      });
+      advertisement.start();
     }
 
     sendStatus();
@@ -557,17 +534,16 @@ export function startWebsocketServer() {
 
 export function stopWebsocketServer() {
   return lock.acquire(KEY, async (release) => {
-    const bonjourPromise = new Promise<void>((resolve) => {
-      if (!bonjour) {
+    const advertisementPromise = new Promise<void>((resolve) => {
+      if (!advertisement) {
         resolve();
         return;
       }
 
-      bonjour.unpublishAll(() => {
-        bonjour?.destroy(() => {
-          bonjour = null;
-          resolve();
-        });
+      advertisement.stop(false, () => {
+        advertisement?.removeAllListeners();
+        advertisement = null;
+        resolve();
       });
     });
     await new Promise<void>((resolve) => {
@@ -600,7 +576,7 @@ export function stopWebsocketServer() {
       });
       httpServer.close();
     });
-    await bonjourPromise;
+    await advertisementPromise;
 
     webSockets.clear();
     err = '';
@@ -630,5 +606,5 @@ export function updateSubscribers(
 }
 
 export function isBonjourRunning() {
-  return !!bonjour;
+  return !!advertisement;
 }
