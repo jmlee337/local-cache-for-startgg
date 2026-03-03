@@ -355,6 +355,9 @@ function tryPublish(presentBonjour: Bonjour, suffixNum: number) {
       name,
       port: 80,
       type: 'http',
+      txt: {
+        offlinemode: 1,
+      },
     });
     const timeout = setTimeout(() => {
       if (service.stop) {
