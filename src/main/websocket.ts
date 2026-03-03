@@ -101,7 +101,8 @@ let host = '';
 let v4Address = '';
 let v6Address = '';
 let port = 0;
-const webSockets = new Map<
+const allWebsockets = new Set<WebSocket>();
+const fullyConnectedWebSockets = new Map<
   WebSocket,
   {
     computerName: string;
@@ -118,7 +119,7 @@ export function getWebsocketStatus(): WebsocketStatus {
     v4Address,
     v6Address,
     port,
-    connections: Array.from(webSockets.values())
+    connections: Array.from(fullyConnectedWebSockets.values())
       .filter(
         (webSocketInfo) =>
           webSocketInfo.remoteAddress && webSocketInfo.remotePort,
@@ -165,7 +166,7 @@ function handleClientIdRequest(json: Request, newWebSocket: WebSocket) {
     return;
   }
 
-  const webSocketInfo = webSockets.get(newWebSocket);
+  const webSocketInfo = fullyConnectedWebSockets.get(newWebSocket);
   if (webSocketInfo) {
     webSocketInfo.computerName = json.computerName;
     webSocketInfo.clientName = json.clientName;
@@ -330,7 +331,8 @@ async function afterAdminAuthentication(newWebSocket: WebSocket) {
   });
   newWebSocket.on('close', () => {
     newWebSocket.removeAllListeners();
-    webSockets.delete(newWebSocket);
+    fullyConnectedWebSockets.delete(newWebSocket);
+    allWebsockets.delete(newWebSocket);
     sendStatus();
   });
 }
@@ -420,6 +422,7 @@ export function startWebsocketServer() {
     if (!websocketServer) {
       websocketServer = new WebSocketServer({
         server: httpServer,
+        clientTracking: false,
         handleProtocols: (protocols) => {
           if (protocols.has(ADMIN_PROTOCOL)) {
             return ADMIN_PROTOCOL;
@@ -428,6 +431,7 @@ export function startWebsocketServer() {
         },
       });
       websocketServer.on('connection', (newWebSocket, request) => {
+        allWebsockets.add(newWebSocket);
         if (newWebSocket.protocol === ADMIN_PROTOCOL) {
           const salt = Buffer.from(randomBytes(32)).toString('base64url');
           const secret = createHash('sha256')
@@ -457,7 +461,7 @@ export function startWebsocketServer() {
               if (json.op === 'auth-identify') {
                 if (json.authentication === authentication) {
                   newWebSocket.removeListener('message', identifyCb);
-                  webSockets.set(newWebSocket, {
+                  fullyConnectedWebSockets.set(newWebSocket, {
                     computerName: '',
                     clientName: '',
                     remoteAddress: request.socket.remoteAddress,
@@ -478,7 +482,7 @@ export function startWebsocketServer() {
           return;
         }
 
-        webSockets.set(newWebSocket, {
+        fullyConnectedWebSockets.set(newWebSocket, {
           computerName: '',
           clientName: '',
           remoteAddress: request.socket.remoteAddress,
@@ -502,7 +506,8 @@ export function startWebsocketServer() {
         });
         newWebSocket.on('close', () => {
           newWebSocket.removeAllListeners();
-          webSockets.delete(newWebSocket);
+          fullyConnectedWebSockets.delete(newWebSocket);
+          allWebsockets.delete(newWebSocket);
           sendStatus();
         });
         sendStatus();
@@ -555,17 +560,16 @@ export function stopWebsocketServer() {
       }
 
       websocketServer.removeAllListeners();
-      Array.from(websocketServer.clients).forEach((webSocket) => {
+      Array.from(allWebsockets).forEach((webSocket) => {
         webSocket.removeAllListeners();
         webSocket.terminate();
       });
 
-      websocketServer.on('close', () => {
+      websocketServer.close(() => {
         websocketServer?.removeAllListeners();
         websocketServer = null;
         resolve();
       });
-      websocketServer.close();
     });
     await new Promise<void>((resolve) => {
       if (!httpServer) {
@@ -582,7 +586,8 @@ export function stopWebsocketServer() {
     });
     await ciaoPromise;
 
-    webSockets.clear();
+    fullyConnectedWebSockets.clear();
+    allWebsockets.clear();
     err = '';
     host = '';
     v4Address = '';
@@ -604,7 +609,7 @@ export function initWebsocket(initMainWindow: BrowserWindow) {
 export function updateSubscribers(
   subscriberTournament: SubscriberTournament | undefined,
 ) {
-  Array.from(webSockets.keys()).forEach((connection) => {
+  Array.from(fullyConnectedWebSockets.keys()).forEach((connection) => {
     sendTournamentUpdateEvent(connection, subscriberTournament);
   });
 }
