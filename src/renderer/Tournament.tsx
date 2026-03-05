@@ -3,8 +3,9 @@ import {
   Close,
   CloudDone,
   CloudOff,
-  Download,
   Edit,
+  FileDownload,
+  FileDownloadOff,
   FolderZip,
   FolderZipOutlined,
   FormatListNumbered,
@@ -623,6 +624,8 @@ function PoolListItem({
   phaseId,
   ancestorsOpen,
   initiallyOpen,
+  completedOpen,
+  setCompletedOpen,
   openUpgradeDialog,
   reportSet,
 }: {
@@ -631,11 +634,12 @@ function PoolListItem({
   phaseId: number;
   ancestorsOpen: boolean;
   initiallyOpen: boolean;
+  completedOpen: boolean;
+  setCompletedOpen: (completedOpen: boolean) => void;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (poolId: number, set: RendererSet) => void;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
-  const [completedOpen, setCompletedOpen] = useState(true);
 
   const winnersSets = pool.sets.filter((set) => set.round > 0);
   const losersSets = pool.sets.filter((set) => set.round < 0);
@@ -798,6 +802,8 @@ function PhaseListItem({
   conflict,
   ancestorsOpen,
   initiallyOpen,
+  completedOpen,
+  setCompletedOpen,
   openUpgradeDialog,
   reportSet,
 }: {
@@ -805,6 +811,8 @@ function PhaseListItem({
   conflict: RendererConflict | null;
   ancestorsOpen: boolean;
   initiallyOpen: boolean;
+  completedOpen: boolean;
+  setCompletedOpen: (completedOpen: boolean) => void;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (phaseId: number, poolId: number, set: RendererSet) => void;
 }) {
@@ -839,7 +847,7 @@ function PhaseListItem({
         </ListItemButton>
         {phase.seeds.length > 0 && <Seeds phase={phase} />}
       </ListItem>
-      <Collapse in={open}>
+      <Collapse in={open} unmountOnExit>
         {phase.pools.length > 0 &&
           phase.pools.map((pool) => (
             <PoolListItem
@@ -849,6 +857,8 @@ function PhaseListItem({
               phaseId={phase.id}
               ancestorsOpen={open && ancestorsOpen}
               initiallyOpen={phase.pools.length === 1}
+              completedOpen={completedOpen}
+              setCompletedOpen={setCompletedOpen}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(poolId: number, set: RendererSet) =>
                 reportSet(phase.id, poolId, set)
@@ -864,12 +874,16 @@ function LoadedEventListItem({
   event,
   conflict,
   initiallyOpen,
+  completedOpen,
+  setCompletedOpen,
   openUpgradeDialog,
   reportSet,
 }: {
   event: RendererEvent;
   conflict: RendererConflict | null;
   initiallyOpen: boolean;
+  completedOpen: boolean;
+  setCompletedOpen: (completedOpen: boolean) => void;
   openUpgradeDialog: (pool: RendererPool, phaseId: number) => void;
   reportSet: (
     eventId: number,
@@ -917,7 +931,7 @@ function LoadedEventListItem({
           )}
         </ListItemButton>
       </ListItem>
-      <Collapse in={open}>
+      <Collapse in={open} unmountOnExit>
         {event.phases.length > 0 &&
           event.phases.map((phase) => (
             <PhaseListItem
@@ -926,6 +940,8 @@ function LoadedEventListItem({
               conflict={conflict}
               ancestorsOpen={open}
               initiallyOpen={event.phases.length === 1}
+              completedOpen={completedOpen}
+              setCompletedOpen={setCompletedOpen}
               openUpgradeDialog={openUpgradeDialog}
               reportSet={(phaseId: number, poolId: number, set: RendererSet) =>
                 reportSet(event.id, phaseId, poolId, set)
@@ -970,7 +986,9 @@ function UnloadedEventListItem({
           {loading ? (
             <CircularProgress size="24px" />
           ) : (
-            <Download sx={{ color: (theme) => theme.palette.text.secondary }} />
+            <FileDownload
+              sx={{ color: (theme) => theme.palette.text.secondary }}
+            />
           )}
           <ListItemText>
             {event.name} <Typography variant="caption">({event.id})</Typography>
@@ -1286,6 +1304,8 @@ export default function Tournament() {
     setReportState,
   ]);
 
+  const [completedOpen, setCompletedOpen] = useState(true);
+
   let reportGameData:
     | [
         { entrantId: number; score: number },
@@ -1577,7 +1597,7 @@ export default function Tournament() {
                         setUnloadedOpen(false);
                       }}
                     >
-                      <Visibility />
+                      <FileDownload />
                     </IconButton>
                   </Tooltip>
                 ) : (
@@ -1587,7 +1607,7 @@ export default function Tournament() {
                         setUnloadedOpen(true);
                       }}
                     >
-                      <VisibilityOff />
+                      <FileDownloadOff />
                     </IconButton>
                   </Tooltip>
                 )}
@@ -1635,6 +1655,8 @@ export default function Tournament() {
                 event={event}
                 conflict={conflict}
                 initiallyOpen={tournament.events.length === 1}
+                completedOpen={completedOpen}
+                setCompletedOpen={setCompletedOpen}
                 openUpgradeDialog={async (
                   pool: RendererPool,
                   phaseId: number,
