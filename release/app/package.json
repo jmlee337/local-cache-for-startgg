@@ -16,5 +16,8 @@
   "dependencies": {
     "better-sqlite3": "^11.1.2",
     "ws": "^8.19.0"
+  },
+  "optionalDependencies": {
+    "bufferutil": "^4.1.0"
   }
 }
