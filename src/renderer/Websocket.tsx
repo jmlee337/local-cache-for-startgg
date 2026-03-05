@@ -212,7 +212,7 @@ export default function Websocket() {
               variant="standard"
             />
             <Button
-              disabled={v4Copied || !websocketStatus.port}
+              disabled={v4Copied || !websocketStatus.v4Address}
               endIcon={v4Copied ? undefined : <ContentCopy />}
               onClick={async () => {
                 await window.electron.copy(websocketStatus.v4Address);
