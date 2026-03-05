@@ -643,6 +643,6 @@ export function updateSubscribers(
   });
 }
 
-export function isCiaoRunning() {
-  return !!responder;
+export function isBroadcasting() {
+  return Boolean(advertisement || ciaoService || responder);
 }
