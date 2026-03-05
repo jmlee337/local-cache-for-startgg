@@ -2,9 +2,11 @@ import http from 'http';
 import { BrowserWindow } from 'electron';
 import { createHash, randomBytes } from 'crypto';
 import { createSocket } from 'dgram';
+import DnsSd, { DnsSdAdvertisement } from '@fugood/dns-sd';
 import { CiaoService, getResponder, Responder } from '@homebridge/ciao';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import AsyncLock from 'async-lock';
+import { hostname } from 'os';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -350,6 +352,7 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
 
 const lock = new AsyncLock();
 const KEY = 'STARTSTOPKEY';
+let advertisement: DnsSdAdvertisement | null = null;
 let responder: Responder | null = null;
 let ciaoService: CiaoService | null = null;
 export function startWebsocketServer() {
@@ -515,22 +518,44 @@ export function startWebsocketServer() {
       });
     }
 
-    if (!responder) {
-      responder = getResponder();
-    }
-    if (!ciaoService) {
-      ciaoService = responder.createService({
+    if (DnsSd.getBackendInfo() === 'mdns-sd') {
+      if (!responder) {
+        responder = getResponder();
+      }
+      if (!ciaoService) {
+        ciaoService = responder.createService({
+          name: 'offlinemode',
+          type: 'http',
+          port: 80,
+          subtypes: ['offlinemode'],
+          txt: { offlinemode: 1 },
+        });
+        (async () => {
+          try {
+            await ciaoService.advertise();
+            host = ciaoService.getHostname().slice(0, -1);
+            sendStatus();
+          } catch {
+            ciaoService.end();
+            ciaoService = null;
+          }
+        })();
+      }
+    } else {
+      advertisement = DnsSd.advertise({
         name: 'offlinemode',
-        type: 'http',
+        type: '_http._tcp',
         port: 80,
-        subtypes: ['offlinemode'],
-        txt: { offlinemode: 1 },
-      });
-      (async () => {
-        await ciaoService.advertise();
-        host = ciaoService.getHostname().slice(0, -1);
-        sendStatus();
-      })();
+        txt: { offlinemode: '1' },
+      })
+        .on('error', () => {
+          advertisement?.stop();
+          advertisement = null;
+        })
+        .on('registered', () => {
+          host = hostname();
+          sendStatus();
+        });
     }
 
     sendStatus();
@@ -539,6 +564,10 @@ export function startWebsocketServer() {
 }
 
 async function stopCiao() {
+  if (advertisement) {
+    advertisement.stop();
+    advertisement = null;
+  }
   if (ciaoService) {
     await ciaoService.end();
     await ciaoService.destroy();
