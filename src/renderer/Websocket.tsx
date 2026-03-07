@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from '@mui/material';
 import { ContentCopy, LeakAdd, LeakRemove } from '@mui/icons-material';
+import { Cuer } from 'cuer';
 import { WebsocketStatus } from '../common/types';
 
 export default function Websocket() {
@@ -223,6 +224,20 @@ export default function Websocket() {
             >
               {v4Copied ? 'Copied!' : 'Copy'}
             </Button>
+          </Stack>
+          <Stack alignItems="center" marginTop="8px">
+            {websocketStatus.v6Address && (
+              <Cuer
+                value={`http://[${websocketStatus.v6Address}]`}
+                size="250px"
+              />
+            )}
+            {!websocketStatus.v6Address && websocketStatus.v4Address && (
+              <Cuer
+                value={`http://${websocketStatus.v4Address}`}
+                size="250px"
+              />
+            )}
           </Stack>
           {websocketEnabled &&
             websocketStatus.port !== 0 &&

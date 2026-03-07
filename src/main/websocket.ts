@@ -7,6 +7,8 @@ import { CiaoService, getResponder, Responder } from '@homebridge/ciao';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import AsyncLock from 'async-lock';
 import { hostname } from 'os';
+import express from 'express';
+import path from 'path';
 import { getLastSubscriberTournament } from './db';
 import {
   assignSetStationTransaction,
@@ -94,9 +96,6 @@ const HTTP_PORT = 80;
 const ADMIN_PROTOCOL = 'admin-protocol';
 const BRACKET_PROTOCOL = 'bracket-protocol';
 const UNAUTH_CODE = 4009;
-
-let httpServer: http.Server | null = null;
-let websocketServer: WebSocketServer | null = null;
 
 let err = '';
 let host = '';
@@ -340,6 +339,7 @@ async function afterAdminAuthentication(newWebSocket: WebSocket) {
 }
 
 let websocketPassword = '';
+let websocketServer: WebSocketServer | null = null;
 export function setWebsocketPassword(newWebsocketPassword: string) {
   if (websocketServer) {
     throw new Error(
@@ -350,15 +350,20 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
   websocketPassword = newWebsocketPassword;
 }
 
+let resourcesPath = '';
+
 const lock = new AsyncLock();
 const KEY = 'STARTSTOPKEY';
+let httpServer: http.Server | null = null;
 let advertisement: DnsSdAdvertisement | null = null;
 let responder: Responder | null = null;
 let ciaoService: CiaoService | null = null;
 export function startWebsocketServer() {
   return lock.acquire(KEY, async (release) => {
     if (!httpServer) {
-      httpServer = http.createServer();
+      httpServer = http.createServer(
+        express().use(express.static(path.join(resourcesPath, 'public'))),
+      );
       try {
         await new Promise<void>((resolve, reject) => {
           httpServer!.once('error', (error) => {
@@ -631,8 +636,12 @@ export async function stopWebsocketServerAndSendStatus() {
   sendStatus();
 }
 
-export function initWebsocket(initMainWindow: BrowserWindow) {
+export function initWebsocket(
+  initMainWindow: BrowserWindow,
+  initResourcesPath: string,
+) {
   mainWindow = initMainWindow;
+  resourcesPath = initResourcesPath;
 }
 
 export function updateSubscribers(

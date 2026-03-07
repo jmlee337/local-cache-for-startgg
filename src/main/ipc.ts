@@ -66,7 +66,10 @@ function generatePassword() {
   return ret;
 }
 
-export default function setupIPCs(mainWindow: BrowserWindow) {
+export default function setupIPCs(
+  mainWindow: BrowserWindow,
+  resourcesPath: string,
+) {
   const updateClients = () => {
     // defer
     setImmediate(() => {
@@ -122,7 +125,7 @@ export default function setupIPCs(mainWindow: BrowserWindow) {
     }
   });
 
-  initWebsocket(mainWindow);
+  initWebsocket(mainWindow, resourcesPath);
 
   let websocketPassword = store.get('websocketPassword', '');
   if (!websocketPassword) {
