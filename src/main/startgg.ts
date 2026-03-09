@@ -811,34 +811,34 @@ async function refreshEvent(tournamentId: number, eventId: number) {
     throw e;
   }
 
-  const seedsPromise = getSeeds(
-    phases.map((phase) => phase.id),
-    eventId,
-    tournamentId,
-  );
-
-  const sets: DbSet[] = [];
-  const games: DbSetGame[] = [];
   try {
-    await Promise.all(
-      pools
-        .map((pool) => pool.id)
-        .map(async (id) => {
-          const json = await wrappedFetch(
-            `https://api.start.gg/phase_group/${id}?expand[]=sets&bustCache=true`,
-          );
-          if (json.entities.sets instanceof Array) {
-            const setsAndGames = dbSetsFromApiSets(
-              json.entities.sets,
-              tournamentId,
-              json.entities.groups.groupTypeId,
+    const sets: DbSet[] = [];
+    const games: DbSetGame[] = [];
+    const seeds = (
+      await Promise.all([
+        getSeeds(
+          phases.map((phase) => phase.id),
+          eventId,
+          tournamentId,
+        ),
+        ...pools
+          .map((pool) => pool.id)
+          .map(async (id) => {
+            const json = await wrappedFetch(
+              `https://api.start.gg/phase_group/${id}?expand[]=sets&bustCache=true`,
             );
-            sets.push(...setsAndGames.sets);
-            games.push(...setsAndGames.games);
-          }
-        }),
-    );
-    const seeds = await seedsPromise;
+            if (json.entities.sets instanceof Array) {
+              const setsAndGames = dbSetsFromApiSets(
+                json.entities.sets,
+                tournamentId,
+                json.entities.groups.groupTypeId,
+              );
+              sets.push(...setsAndGames.sets);
+              games.push(...setsAndGames.games);
+            }
+          }),
+      ])
+    )[0];
     updateSyncResultWithSuccess();
     updateEvent(
       tournamentId,
