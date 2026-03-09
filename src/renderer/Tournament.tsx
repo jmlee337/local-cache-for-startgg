@@ -49,11 +49,14 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Toolbar,
   Tooltip,
   Typography,
 } from '@mui/material';
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import styled from '@emotion/styled';
 import {
   AdminedTournament,
   ApiError,
@@ -1109,6 +1112,10 @@ function getDescription(type: TransactionType) {
   }
 }
 
+const StyledToggleButton = styled(ToggleButton)({
+  width: '48.5px',
+});
+
 export default function Tournament() {
   const [gettingTournaments, setGettingTournaments] = useState(false);
   const [adminedTournaments, setAdminedTournaments] = useState<
@@ -1728,341 +1735,316 @@ export default function Tournament() {
             </Stack>
           </Stack>
           <DialogContent style={{ paddingTop: 0 }}>
-            <Stack
-              alignItems="center"
-              sx={{ typography: (theme) => theme.typography.body2 }}
-            >
+            <Stack alignItems="center" gap="8px">
               <Stack direction="row" alignItems="center">
                 <Box
                   overflow="hidden"
                   textOverflow="ellipsis"
+                  typography="body2"
                   whiteSpace="nowrap"
-                  width="176px"
+                  width="172px"
                 >
                   {reportSet && getEntrantName(reportSet.entrant1Participants)}
                 </Box>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    reportSet?.state === 3
-                  }
-                  variant={
-                    reportIsDq && reportWinnerId === reportSet?.entrant2Id
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                    setReportIsDq(true);
-                    setReportEntrant1Score(0);
-                    setReportEntrant2Score(0);
-                  }}
-                >
-                  DQ
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq &&
-                    !(
-                      reportEntrant2Score === 0 &&
-                      (reportWinnerId === reportSet?.entrant1Id ||
-                        reportWinnerId === reportSet?.entrant2Id)
-                    ) &&
-                    reportEntrant1Score === 0
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(
-                      reportEntrant2Score > 0 ? reportSet!.entrant2Id! : 0,
-                    );
-                    setReportIsDq(false);
-                    setReportEntrant1Score(0);
-                  }}
-                >
-                  0
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                        reportEntrant2Score >= 1) ||
-                        (reportSet?.winnerId === reportSet?.entrant2Id &&
-                          reportEntrant2Score <= 1) ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant1Score === 1
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant2Score > 1) {
-                      setReportWinnerId(reportSet!.entrant2Id!);
-                    } else if (reportEntrant2Score < 1) {
-                      setReportWinnerId(reportSet!.entrant1Id!);
-                    } else {
-                      setReportWinnerId(0);
+                <ToggleButtonGroup>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      reportSet?.state === 3
                     }
-                    setReportIsDq(false);
-                    setReportEntrant1Score(1);
-                  }}
-                >
-                  1
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      ((reportSet?.winnerId === reportSet?.entrant1Id &&
-                        reportEntrant2Score >= 2) ||
-                        (reportSet?.winnerId === reportSet?.entrant2Id &&
-                          reportEntrant2Score <= 2) ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant1Score === 2
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant2Score > 2) {
-                      setReportWinnerId(reportSet!.entrant2Id!);
-                    } else if (reportEntrant2Score < 2) {
-                      setReportWinnerId(reportSet!.entrant1Id!);
-                    } else {
-                      setReportWinnerId(0);
+                    selected={
+                      reportIsDq && reportWinnerId === reportSet?.entrant2Id
                     }
-                    setReportIsDq(false);
-                    setReportEntrant1Score(2);
-                  }}
-                >
-                  2
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant1Score === 3
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant2Score > 3) {
+                    onClick={() => {
                       setReportWinnerId(reportSet!.entrant2Id!);
-                    } else if (reportEntrant2Score < 3) {
-                      setReportWinnerId(reportSet!.entrant1Id!);
-                    } else {
-                      setReportWinnerId(0);
+                      setReportIsDq(true);
+                      setReportEntrant1Score(0);
+                      setReportEntrant2Score(0);
+                    }}
+                    value="DQ"
+                  >
+                    DQ
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        (reportSet?.winnerId === reportSet?.entrant1Id ||
+                          hasStagesAndScores(reportSet)))
                     }
-                    setReportIsDq(false);
-                    setReportEntrant1Score(3);
-                  }}
-                >
-                  3
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    reportSet?.state === 3
-                  }
-                  variant={
-                    reportWinnerId === reportSet?.entrant1Id
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                    setReportIsDq(false);
-                    setReportEntrant1Score(0);
-                    setReportEntrant2Score(0);
-                  }}
-                >
-                  W
-                </Button>
+                    selected={
+                      !reportIsDq &&
+                      !(
+                        reportEntrant2Score === 0 &&
+                        (reportWinnerId === reportSet?.entrant1Id ||
+                          reportWinnerId === reportSet?.entrant2Id)
+                      ) &&
+                      reportEntrant1Score === 0
+                    }
+                    onClick={() => {
+                      setReportWinnerId(
+                        reportEntrant2Score > 0 ? reportSet!.entrant2Id! : 0,
+                      );
+                      setReportIsDq(false);
+                      setReportEntrant1Score(0);
+                    }}
+                    value={0}
+                  >
+                    0
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                          reportEntrant2Score >= 1) ||
+                          (reportSet?.winnerId === reportSet?.entrant2Id &&
+                            reportEntrant2Score <= 1) ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant1Score === 1}
+                    onClick={() => {
+                      if (reportEntrant2Score > 1) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else if (reportEntrant2Score < 1) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant1Score(1);
+                    }}
+                    value={1}
+                  >
+                    1
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        ((reportSet?.winnerId === reportSet?.entrant1Id &&
+                          reportEntrant2Score >= 2) ||
+                          (reportSet?.winnerId === reportSet?.entrant2Id &&
+                            reportEntrant2Score <= 2) ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant1Score === 2}
+                    onClick={() => {
+                      if (reportEntrant2Score > 2) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else if (reportEntrant2Score < 2) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant1Score(2);
+                    }}
+                    value={2}
+                  >
+                    2
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        (reportSet?.winnerId === reportSet?.entrant2Id ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant1Score === 3}
+                    onClick={() => {
+                      if (reportEntrant2Score > 3) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else if (reportEntrant2Score < 3) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant1Score(3);
+                    }}
+                    value={3}
+                  >
+                    3
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      reportSet?.state === 3
+                    }
+                    selected={reportWinnerId === reportSet?.entrant1Id}
+                    onClick={() => {
+                      setReportWinnerId(reportSet!.entrant1Id!);
+                      setReportIsDq(false);
+                      setReportEntrant1Score(0);
+                      setReportEntrant2Score(0);
+                    }}
+                    value="W"
+                  >
+                    W
+                  </StyledToggleButton>
+                </ToggleButtonGroup>
               </Stack>
               <Stack direction="row" alignItems="center">
                 <Box
                   overflow="hidden"
                   textOverflow="ellipsis"
+                  typography="body2"
                   whiteSpace="nowrap"
-                  width="176px"
+                  width="172px"
                 >
                   {reportSet && getEntrantName(reportSet.entrant2Participants)}
                 </Box>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    reportSet?.state === 3
-                  }
-                  variant={
-                    reportIsDq && reportWinnerId === reportSet?.entrant1Id
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(reportSet!.entrant1Id!);
-                    setReportIsDq(true);
-                    setReportEntrant1Score(0);
-                    setReportEntrant2Score(0);
-                  }}
-                >
-                  DQ
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant2Id ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq &&
-                    !(
-                      reportEntrant1Score === 0 &&
-                      (reportWinnerId === reportSet?.entrant1Id ||
-                        reportWinnerId === reportSet?.entrant2Id)
-                    ) &&
-                    reportEntrant2Score === 0
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(
-                      reportEntrant1Score > 0 ? reportSet!.entrant1Id! : 0,
-                    );
-                    setReportIsDq(false);
-                    setReportEntrant2Score(0);
-                  }}
-                >
-                  0
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                        reportEntrant1Score >= 1) ||
-                        (reportSet?.winnerId === reportSet?.entrant1Id &&
-                          reportEntrant1Score <= 1) ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant2Score === 1
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant1Score > 1) {
-                      setReportWinnerId(reportSet!.entrant1Id!);
-                    } else if (reportEntrant1Score < 1) {
-                      setReportWinnerId(reportSet!.entrant2Id!);
-                    } else {
-                      setReportWinnerId(0);
+                <ToggleButtonGroup>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      reportSet?.state === 3
                     }
-                    setReportIsDq(false);
-                    setReportEntrant2Score(1);
-                  }}
-                >
-                  1
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      ((reportSet?.winnerId === reportSet?.entrant2Id &&
-                        reportEntrant1Score >= 2) ||
-                        (reportSet?.winnerId === reportSet?.entrant1Id &&
-                          reportEntrant1Score <= 2) ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant2Score === 2
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant1Score > 2) {
-                      setReportWinnerId(reportSet!.entrant1Id!);
-                    } else if (reportEntrant1Score < 2) {
-                      setReportWinnerId(reportSet!.entrant2Id!);
-                    } else {
-                      setReportWinnerId(0);
+                    selected={
+                      reportIsDq && reportWinnerId === reportSet?.entrant1Id
                     }
-                    setReportIsDq(false);
-                    setReportEntrant2Score(2);
-                  }}
-                >
-                  2
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    (reportSet?.state === 3 &&
-                      (reportSet?.winnerId === reportSet?.entrant1Id ||
-                        hasStagesAndScores(reportSet)))
-                  }
-                  variant={
-                    !reportIsDq && reportEntrant2Score === 3
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    if (reportEntrant1Score > 3) {
+                    onClick={() => {
                       setReportWinnerId(reportSet!.entrant1Id!);
-                    } else if (reportEntrant1Score < 3) {
-                      setReportWinnerId(reportSet!.entrant2Id!);
-                    } else {
-                      setReportWinnerId(0);
+                      setReportIsDq(true);
+                      setReportEntrant1Score(0);
+                      setReportEntrant2Score(0);
+                    }}
+                    value="DQ"
+                  >
+                    DQ
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        (reportSet?.winnerId === reportSet?.entrant2Id ||
+                          hasStagesAndScores(reportSet)))
                     }
-                    setReportIsDq(false);
-                    setReportEntrant2Score(3);
-                  }}
-                >
-                  3
-                </Button>
-                <Button
-                  disabled={
-                    !reportSet?.entrant1Id ||
-                    !reportSet?.entrant2Id ||
-                    reportSet?.state === 3
-                  }
-                  variant={
-                    reportWinnerId === reportSet?.entrant2Id
-                      ? 'contained'
-                      : 'text'
-                  }
-                  onClick={() => {
-                    setReportWinnerId(reportSet!.entrant2Id!);
-                    setReportIsDq(false);
-                    setReportEntrant1Score(0);
-                    setReportEntrant2Score(0);
-                  }}
-                >
-                  W
-                </Button>
+                    selected={
+                      !reportIsDq &&
+                      !(
+                        reportEntrant1Score === 0 &&
+                        (reportWinnerId === reportSet?.entrant1Id ||
+                          reportWinnerId === reportSet?.entrant2Id)
+                      ) &&
+                      reportEntrant2Score === 0
+                    }
+                    onClick={() => {
+                      setReportWinnerId(
+                        reportEntrant1Score > 0 ? reportSet!.entrant1Id! : 0,
+                      );
+                      setReportIsDq(false);
+                      setReportEntrant2Score(0);
+                    }}
+                    value={0}
+                  >
+                    0
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                          reportEntrant1Score >= 1) ||
+                          (reportSet?.winnerId === reportSet?.entrant1Id &&
+                            reportEntrant1Score <= 1) ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant2Score === 1}
+                    onClick={() => {
+                      if (reportEntrant1Score > 1) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else if (reportEntrant1Score < 1) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant2Score(1);
+                    }}
+                    value={1}
+                  >
+                    1
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        ((reportSet?.winnerId === reportSet?.entrant2Id &&
+                          reportEntrant1Score >= 2) ||
+                          (reportSet?.winnerId === reportSet?.entrant1Id &&
+                            reportEntrant1Score <= 2) ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant2Score === 2}
+                    onClick={() => {
+                      if (reportEntrant1Score > 2) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else if (reportEntrant1Score < 2) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant2Score(2);
+                    }}
+                    value={2}
+                  >
+                    2
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      (reportSet?.state === 3 &&
+                        (reportSet?.winnerId === reportSet?.entrant1Id ||
+                          hasStagesAndScores(reportSet)))
+                    }
+                    selected={!reportIsDq && reportEntrant2Score === 3}
+                    onClick={() => {
+                      if (reportEntrant1Score > 3) {
+                        setReportWinnerId(reportSet!.entrant1Id!);
+                      } else if (reportEntrant1Score < 3) {
+                        setReportWinnerId(reportSet!.entrant2Id!);
+                      } else {
+                        setReportWinnerId(0);
+                      }
+                      setReportIsDq(false);
+                      setReportEntrant2Score(3);
+                    }}
+                    value={3}
+                  >
+                    3
+                  </StyledToggleButton>
+                  <StyledToggleButton
+                    disabled={
+                      !reportSet?.entrant1Id ||
+                      !reportSet?.entrant2Id ||
+                      reportSet?.state === 3
+                    }
+                    selected={reportWinnerId === reportSet?.entrant2Id}
+                    onClick={() => {
+                      setReportWinnerId(reportSet!.entrant2Id!);
+                      setReportIsDq(false);
+                      setReportEntrant1Score(0);
+                      setReportEntrant2Score(0);
+                    }}
+                    value="W"
+                  >
+                    W
+                  </StyledToggleButton>
+                </ToggleButtonGroup>
               </Stack>
             </Stack>
           </DialogContent>
