@@ -1256,6 +1256,7 @@ export default function Tournament() {
       const currentTournament = await window.electron.getCurrentTournament();
       if (currentTournament) {
         setTournament(currentTournament);
+        setUnloadedOpen(currentTournament.events.length === 0);
       }
     })();
   }, []);

@@ -16,7 +16,6 @@ import {
   Tooltip,
 } from '@mui/material';
 import { ContentCopy, LeakAdd, LeakRemove } from '@mui/icons-material';
-import { Cuer } from 'cuer';
 import { WebsocketStatus } from '../common/types';
 
 export default function Websocket() {
@@ -36,6 +35,22 @@ export default function Websocket() {
   const [hostCopied, setHostCopied] = useState(false);
   const [v4Copied, setV4Copied] = useState(false);
   const [v6Copied, setV6Copied] = useState(false);
+
+  const hostContent = useMemo(
+    () => (websocketStatus.host ? `http://${websocketStatus.host}` : ''),
+    [websocketStatus.host],
+  );
+  const v4AddressContent = useMemo(
+    () =>
+      websocketStatus.v4Address ? `http://${websocketStatus.v4Address}` : '',
+    [websocketStatus.v4Address],
+  );
+  const v6AddressContent = useMemo(
+    () =>
+      websocketStatus.v6Address ? `http://[${websocketStatus.v6Address}]` : '',
+    [websocketStatus.v6Address],
+  );
+
   useEffect(() => {
     window.electron.onWebsocketStatus((event, newWebsocketStatus) => {
       setWebsocketStatus(newWebsocketStatus);
@@ -138,9 +153,9 @@ export default function Websocket() {
         <DialogContent style={{ paddingTop: '8px' }}>
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
-              fullWidth
               label="Websocket Password"
               size="small"
+              style={{ flexGrow: 1 }}
               type="password"
               value={websocketPassword}
               variant="standard"
@@ -162,17 +177,17 @@ export default function Websocket() {
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
               disabled={!websocketStatus.host}
-              fullWidth
               label="Hostname"
               size="small"
+              style={{ flexGrow: 1 }}
               value={websocketStatus.host}
               variant="standard"
             />
             <Button
-              disabled={hostCopied || !websocketStatus.host}
+              disabled={hostCopied || !hostContent}
               endIcon={hostCopied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(websocketStatus.host);
+                await window.electron.copy(hostContent);
                 setHostCopied(true);
                 setTimeout(() => setHostCopied(false), 5000);
               }}
@@ -184,17 +199,17 @@ export default function Websocket() {
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
               disabled={!websocketStatus.v6Address}
-              fullWidth
               label="Websocket Address (IPv6)"
               size="small"
+              style={{ flexGrow: 1 }}
               value={websocketStatus.v6Address}
               variant="standard"
             />
             <Button
-              disabled={v6Copied || !websocketStatus.v6Address}
+              disabled={v6Copied || !v6AddressContent}
               endIcon={v6Copied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(websocketStatus.v6Address);
+                await window.electron.copy(v6AddressContent);
                 setV6Copied(true);
                 setTimeout(() => setV6Copied(false), 5000);
               }}
@@ -206,17 +221,17 @@ export default function Websocket() {
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
               disabled={!websocketStatus.v4Address}
-              fullWidth
               label="Websocket Address (IPv4)"
               size="small"
+              style={{ flexGrow: 1 }}
               value={websocketStatus.v4Address}
               variant="standard"
             />
             <Button
-              disabled={v4Copied || !websocketStatus.v4Address}
+              disabled={v4Copied || !v4AddressContent}
               endIcon={v4Copied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(websocketStatus.v4Address);
+                await window.electron.copy(v4AddressContent);
                 setV4Copied(true);
                 setTimeout(() => setV4Copied(false), 5000);
               }}
@@ -224,20 +239,6 @@ export default function Websocket() {
             >
               {v4Copied ? 'Copied!' : 'Copy'}
             </Button>
-          </Stack>
-          <Stack alignItems="center" marginTop="8px">
-            {websocketStatus.v6Address && (
-              <Cuer
-                value={`http://[${websocketStatus.v6Address}]`}
-                size="250px"
-              />
-            )}
-            {!websocketStatus.v6Address && websocketStatus.v4Address && (
-              <Cuer
-                value={`http://${websocketStatus.v4Address}`}
-                size="250px"
-              />
-            )}
           </Stack>
           {websocketEnabled &&
             websocketStatus.port !== 0 &&
