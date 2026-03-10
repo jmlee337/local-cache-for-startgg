@@ -75,6 +75,7 @@ import {
   RendererUnloadedEvent,
   TiebreakMethod,
   TransactionType,
+  WebsocketStatus,
 } from '../common/types';
 import ErrorDialog from './ErrorDialog';
 import Settings from './Settings';
@@ -84,6 +85,7 @@ import FatalError from './FatalError';
 import UpgradeDialog from './UpgradeDialog';
 import Discords from './Discords';
 import ConnectCodes from './ConnectCodes';
+import Reporters from './Reporters';
 
 const LIST_ITEM_HEIGHT = '34px';
 const SET_FIXED_WIDTH = '162px';
@@ -1182,12 +1184,23 @@ export default function Tournament() {
   }, [getAdminedTournaments]);
 
   const [refreshing, setRefreshing] = useState(false);
+  const [websocketStatus, setWebsocketStatus] = useState<WebsocketStatus>({
+    err: '',
+    host: '',
+    v4Address: '',
+    v6Address: '',
+    port: 0,
+    connections: [],
+  });
   useEffect(() => {
     window.electron.onAdminedTournaments((event, newAdminedTournaments) => {
       setAdminedTournaments(newAdminedTournaments);
     });
     window.electron.onRefreshing((event, newRefreshing) => {
       setRefreshing(newRefreshing);
+    });
+    window.electron.onWebsocketStatus((event, newWebsocketStatus) => {
+      setWebsocketStatus(newWebsocketStatus);
     });
   }, []);
 
@@ -1253,11 +1266,14 @@ export default function Tournament() {
   const [tournament, setTournament] = useState<RendererTournament>();
   useEffect(() => {
     (async () => {
-      const currentTournament = await window.electron.getCurrentTournament();
+      const currentTournamentPromise = window.electron.getCurrentTournament();
+      const websocketStatusPromise = window.electron.getWebsocketStatus();
+      const currentTournament = await currentTournamentPromise;
       if (currentTournament) {
         setTournament(currentTournament);
         setUnloadedOpen(currentTournament.events.length === 0);
       }
+      setWebsocketStatus(await websocketStatusPromise);
     })();
   }, []);
   useEffect(() => {
@@ -1601,11 +1617,18 @@ export default function Tournament() {
                   tournamentId={tournament?.id}
                   tournamentSlug={tournament?.slug}
                 />
-                <Websocket />
+                <Websocket websocketStatus={websocketStatus} />
               </Stack>
               <Stack direction="row" alignItems="center">
                 <ConnectCodes participants={tournament?.participants ?? []} />
                 <Discords participants={tournament?.participants ?? []} />
+                {tournament && (
+                  <Reporters
+                    events={tournament.events}
+                    reporters={tournament.reporters}
+                    websocketStatus={websocketStatus}
+                  />
+                )}
                 {unloadedOpen ? (
                   <Tooltip title="Hide unloaded events">
                     <IconButton

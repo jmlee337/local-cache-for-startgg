@@ -37,3 +37,13 @@ export function getComputerName() {
       return computerName;
   }
 }
+
+export function generatePassword() {
+  const allowedChars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let ret = '';
+  for (let i = 0; i < 16; i += 1) {
+    ret += allowedChars.charAt(Math.floor(Math.random() * allowedChars.length));
+  }
+  return ret;
+}

@@ -45,8 +45,12 @@ import {
   RendererSeed,
   DbSeedMutation,
   RendererStanding,
+  DbReporterPool,
+  DbReporter,
+  RendererReporter,
 } from '../common/types';
 import getPlacementToSortableEntrant from './standing';
+import { generatePassword } from './util';
 
 enum SyncStatus {
   BEHIND,
@@ -349,6 +353,21 @@ export function dbInit(window: BrowserWindow) {
       gameNum INTEGER NOT NULL,
       entrantId INTEGER NOT NULL,
       characterId INTEGER NOT NULL
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS reporters (
+      id TEXT PRIMARY KEY,
+      tournamentId INTEGER NOT NULL,
+      name TEXT
+    )`,
+  ).run();
+  db.prepare(
+    `CREATE TABLE IF NOT EXISTS reporterPools (
+      tournamentId INTEGER NOT NULL,
+      reporterId TEXT NOT NULL,
+      poolId INTEGER NOT NULL,
+      PRIMARY KEY (reporterId, poolId)
     )`,
   ).run();
 
@@ -4006,6 +4025,91 @@ export function getLoadedEventIds(tournamentId?: number) {
   ).map((loadedEvent) => loadedEvent.id);
 }
 
+export function createReporter(poolIds: number[], name: string | null) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const tournamentId = currentTournamentId;
+  db.transaction(() => {
+    let id = '';
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        id = generatePassword();
+        db!
+          .prepare(
+            `INSERT INTO reporters (
+              id, tournamentId, name
+            ) VALUES (
+              @id, @tournamentId, @name
+            )`,
+          )
+          .run({ id, tournamentId, name });
+        break;
+      } catch {
+        // just catch
+      }
+    }
+    poolIds.forEach((poolId) => {
+      db!
+        .prepare(
+          `INSERT INTO reporterPools (
+            tournamentId, reporterId, poolId
+          ) VALUES (
+            @tournamentId, @reporterId, @poolId
+          )`,
+        )
+        .run({ tournamentId, reporterId: id, poolId });
+    });
+  })();
+}
+
+export function deleteReporter(id: string) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db.transaction(() => {
+    db!.prepare('DELETE FROM reporterPools WHERE reporterId = @id').run({ id });
+    db!.prepare('DELETE FROM reporters WHERE id = @id').run({ id });
+  })();
+}
+
+export function setReporterName(id: string, name: string) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  db.prepare('UPDATE reporters SET name = @name WHERE id = @id').run({
+    id,
+    name,
+  });
+}
+
+export function reporterHasPermission(reporterId: string, setId: number) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  const dbSet = db
+    .prepare('SELECT * FROM sets WHERE id = @setId')
+    .get({ setId }) as DbSet | undefined;
+  if (!dbSet) {
+    throw new Error(`invalid set id: ${setId}`);
+  }
+
+  const dbReporterPool = db
+    .prepare(
+      'SELECT * FROM reporterPools WHERE reporterId = @reporterId AND poolId = @poolId',
+    )
+    .get({ reporterId, poolId: dbSet.phaseGroupId }) as
+    | DbReporterPool
+    | undefined;
+
+  return Boolean(dbReporterPool);
+}
+
 let lastTournament: RendererTournament | undefined;
 export function getLastTournament() {
   return lastTournament;
@@ -4075,6 +4179,10 @@ export function getTournament(): RendererTournament | undefined {
     }
     return a.name.length - b.name.length;
   });
+  const idToPool = new Map<number, DbPool>();
+  dbPools.forEach((dbPool) => {
+    idToPool.set(dbPool.id, dbPool);
+  });
   const dbParticipants = db
     .prepare(
       'SELECT * FROM participants WHERE tournamentId = @id ORDER BY gamerTag ASC',
@@ -4129,11 +4237,48 @@ export function getTournament(): RendererTournament | undefined {
         ORDER BY streamSource ASC, streamName ASC`,
     )
     .all({ id: currentTournamentId }) as DbStream[];
+  const reporterIdToPools = new Map<string, { id: number; name: string }[]>();
+  (
+    db
+      .prepare('SELECT * FROM reporterPools WHERE tournamentId = @id')
+      .all({ id: currentTournamentId }) as DbReporterPool[]
+  ).forEach((dbReporterPool) => {
+    const dbPool = idToPool.get(dbReporterPool.poolId);
+    if (dbPool) {
+      let pools = reporterIdToPools.get(dbReporterPool.reporterId);
+      if (pools === undefined) {
+        pools = [];
+        reporterIdToPools.set(dbReporterPool.reporterId, pools);
+      }
+      pools.push({ id: dbPool.id, name: dbPool.name });
+    }
+  });
+  Array.from(reporterIdToPools.values()).forEach((pools) => {
+    pools.sort((a, b) => a.id - b.id);
+  });
+  const rendererReporters: RendererReporter[] = [];
+  (
+    db
+      .prepare('SELECT * FROM reporters WHERE tournamentId = @id')
+      .all({ id: currentTournamentId }) as DbReporter[]
+  ).forEach((dbReporter) => {
+    const pools = reporterIdToPools.get(dbReporter.id);
+    if (pools) {
+      rendererReporters.push({
+        password: dbReporter.id,
+        name: dbReporter.name ?? '',
+        pools,
+      });
+    }
+  });
+  rendererReporters.sort((a, b) => a.pools[0].id - b.pools[0].id);
+
   lastTournament = {
     id: dbTournament.id,
     name: dbTournament.name,
     slug: dbTournament.slug,
     location: dbTournament.location,
+    reporters: rendererReporters,
     unloadedEvents: unloadedEvents.map(
       (dbEvent): RendererUnloadedEvent => ({
         id: dbEvent.id,
@@ -4343,6 +4488,10 @@ export function deleteTournament(id: number) {
     db!.prepare('DELETE FROM streams WHERE tournamentId = @id').run({ id });
     db!
       .prepare('DELETE FROM transactions WHERE tournamentId = @id')
+      .run({ id });
+    db!.prepare('DELETE FROM reporters WHERE tournamentId = @id').run({ id });
+    db!
+      .prepare('DELETE FROM reporterPools WHERE tournamentId = @id')
       .run({ id });
 
     eventIds.forEach((eventId) => {

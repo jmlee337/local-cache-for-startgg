@@ -101,6 +101,12 @@ const electronHandler = {
   getFatalErrorMessage: (): Promise<string> =>
     ipcRenderer.invoke('getFatalErrorMessage'),
   getSyncResult: (): Promise<SyncResult> => ipcRenderer.invoke('getSyncResult'),
+  createReporter: (poolIds: number[]): Promise<void> =>
+    ipcRenderer.invoke('createReporter', poolIds),
+  deleteReporter: (id: string): Promise<void> =>
+    ipcRenderer.invoke('deleteReporter', id),
+  setReporterName: (id: string, name: string): Promise<void> =>
+    ipcRenderer.invoke('setReporterName', id, name),
   onAdminedTournaments: (
     callback: (
       event: IpcRendererEvent,

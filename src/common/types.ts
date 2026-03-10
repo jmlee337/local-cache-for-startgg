@@ -165,7 +165,17 @@ export type SubscriberTournament = {
   streams: RendererStream[];
 };
 
+export type RendererReporter = {
+  password: string;
+  name: string;
+  pools: {
+    id: number;
+    name: string;
+  }[];
+};
+
 export type RendererTournament = SubscriberTournament & {
+  reporters: RendererReporter[];
   unloadedEvents: RendererUnloadedEvent[];
 };
 
@@ -544,4 +554,16 @@ export type WebsocketStatus = {
 export type PoolSiblings = {
   wave: string[];
   phase: string[];
+};
+
+export type DbReporter = {
+  id: string;
+  tournamentId: number;
+  name: string | null;
+};
+
+export type DbReporterPool = {
+  tournamentId: number;
+  reporterId: string;
+  poolId: number;
 };

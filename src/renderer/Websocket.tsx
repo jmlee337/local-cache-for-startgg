@@ -31,50 +31,26 @@ function protocolToDesc(protocol: Protocol) {
   }
 }
 
-export default function Websocket() {
+export default function Websocket({
+  websocketStatus,
+}: {
+  websocketStatus: WebsocketStatus;
+}) {
   const [open, setOpen] = useState(false);
   const [websocketEnabled, setWebsocketEnabled] = useState(false);
   const [websocketPassword, setWebsocketPassword] = useState('');
-  const [websocketStatus, setWebsocketStatus] = useState<WebsocketStatus>({
-    err: '',
-    host: '',
-    v4Address: '',
-    v6Address: '',
-    port: 0,
-    connections: [],
-  });
   const [passwordCopied, setPasswordCopied] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [hostCopied, setHostCopied] = useState(false);
   const [v4Copied, setV4Copied] = useState(false);
   const [v6Copied, setV6Copied] = useState(false);
 
-  const hostContent = useMemo(
-    () => (websocketStatus.host ? `http://${websocketStatus.host}` : ''),
-    [websocketStatus.host],
-  );
-  const v4AddressContent = useMemo(
-    () =>
-      websocketStatus.v4Address ? `http://${websocketStatus.v4Address}` : '',
-    [websocketStatus.v4Address],
-  );
-  const v6AddressContent = useMemo(
-    () =>
-      websocketStatus.v6Address ? `http://[${websocketStatus.v6Address}]` : '',
-    [websocketStatus.v6Address],
-  );
-
   useEffect(() => {
-    window.electron.onWebsocketStatus((event, newWebsocketStatus) => {
-      setWebsocketStatus(newWebsocketStatus);
-    });
     const inner = async () => {
       const websocketEnabledPromise = window.electron.getWebsocket();
       const websocketPasswordPromise = window.electron.getWebsocketPassword();
-      const websocketStatusPromise = window.electron.getWebsocketStatus();
       setWebsocketEnabled(await websocketEnabledPromise);
       setWebsocketPassword(await websocketPasswordPromise);
-      setWebsocketStatus(await websocketStatusPromise);
     };
     inner();
   }, []);
@@ -197,10 +173,10 @@ export default function Websocket() {
               variant="standard"
             />
             <Button
-              disabled={hostCopied || !hostContent}
+              disabled={hostCopied || !websocketStatus.host}
               endIcon={hostCopied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(hostContent);
+                await window.electron.copy(websocketStatus.host);
                 setHostCopied(true);
                 setTimeout(() => setHostCopied(false), 5000);
               }}
@@ -219,10 +195,10 @@ export default function Websocket() {
               variant="standard"
             />
             <Button
-              disabled={v6Copied || !v6AddressContent}
+              disabled={v6Copied || !websocketStatus.v6Address}
               endIcon={v6Copied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(v6AddressContent);
+                await window.electron.copy(websocketStatus.v6Address);
                 setV6Copied(true);
                 setTimeout(() => setV6Copied(false), 5000);
               }}
@@ -241,10 +217,10 @@ export default function Websocket() {
               variant="standard"
             />
             <Button
-              disabled={v4Copied || !v4AddressContent}
+              disabled={v4Copied || !websocketStatus.v4Address}
               endIcon={v4Copied ? undefined : <ContentCopy />}
               onClick={async () => {
-                await window.electron.copy(v4AddressContent);
+                await window.electron.copy(websocketStatus.v4Address);
                 setV4Copied(true);
                 setTimeout(() => setV4Copied(false), 5000);
               }}

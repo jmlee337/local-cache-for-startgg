@@ -15,7 +15,9 @@ import {
   stopRefreshingTournament,
 } from './startgg';
 import {
+  createReporter,
   dbInit,
+  deleteReporter,
   deleteTournament,
   deleteTransaction,
   getConflict,
@@ -34,6 +36,7 @@ import {
   reportSet,
   resetSet,
   setAutoSync,
+  setReporterName,
   setTournamentId,
 } from './db';
 import {
@@ -56,16 +59,7 @@ import {
   startSetTransaction,
 } from './transaction';
 import { ApiGameData } from '../common/types';
-
-function generatePassword() {
-  const allowedChars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let ret = '';
-  for (let i = 0; i < 16; i += 1) {
-    ret += allowedChars.charAt(Math.floor(Math.random() * allowedChars.length));
-  }
-  return ret;
-}
+import { generatePassword } from './util';
 
 export default function setupIPCs(
   mainWindow: BrowserWindow,
@@ -428,6 +422,24 @@ export default function setupIPCs(
 
   ipcMain.removeHandler('getSyncResult');
   ipcMain.handle('getSyncResult', getSyncResult);
+
+  ipcMain.removeHandler('createReporter');
+  ipcMain.handle('createReporter', (event, poolIds: number[]) => {
+    createReporter(poolIds, null);
+    updateClients();
+  });
+
+  ipcMain.removeHandler('deleteReporter');
+  ipcMain.handle('deleteReporter', (event, id: string) => {
+    deleteReporter(id);
+    updateClients();
+  });
+
+  ipcMain.removeHandler('setReporterName');
+  ipcMain.handle('setReporterName', (event, id: string, name: string) => {
+    setReporterName(id, name);
+    updateClients();
+  });
 
   ipcMain.removeHandler('getAppVersion');
   ipcMain.handle('getAppVersion', app.getVersion);

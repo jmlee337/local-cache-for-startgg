@@ -118,9 +118,9 @@ let mainWindow: BrowserWindow | null = null;
 export function getWebsocketStatus(): WebsocketStatus {
   return {
     err,
-    host,
-    v4Address,
-    v6Address,
+    host: `http://${host}`,
+    v4Address: `http://${v4Address}`,
+    v6Address: `http://[${v6Address}]`,
     port,
     connections: Array.from(fullyConnectedWebSockets.values())
       .filter(
