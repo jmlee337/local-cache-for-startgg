@@ -20,6 +20,7 @@ import {
 } from './transaction';
 import {
   ApiGameData,
+  Protocol,
   RendererSet,
   SubscriberTournament,
   WebsocketStatus,
@@ -106,6 +107,7 @@ const allWebsockets = new Set<WebSocket>();
 const fullyConnectedWebSockets = new Map<
   WebSocket,
   {
+    protocol: Protocol;
     computerName: string;
     clientName: string;
     remoteAddress?: string;
@@ -125,8 +127,10 @@ export function getWebsocketStatus(): WebsocketStatus {
         (webSocketInfo) =>
           webSocketInfo.remoteAddress && webSocketInfo.remotePort,
       )
+      .sort((a, b) => a.protocol - b.protocol)
       .map((webSocketInfo) => ({
         addressPort: `${webSocketInfo.remoteAddress}:${webSocketInfo.remotePort}`,
+        protocol: webSocketInfo.protocol,
         computerName: webSocketInfo.computerName,
         clientName: webSocketInfo.clientName,
       })),
@@ -470,6 +474,7 @@ export function startWebsocketServer() {
                 if (json.authentication === authentication) {
                   newWebSocket.removeListener('message', identifyCb);
                   fullyConnectedWebSockets.set(newWebSocket, {
+                    protocol: Protocol.ADMIN,
                     computerName: '',
                     clientName: '',
                     remoteAddress: request.socket.remoteAddress,
@@ -491,6 +496,7 @@ export function startWebsocketServer() {
         }
 
         fullyConnectedWebSockets.set(newWebSocket, {
+          protocol: Protocol.PUBLIC,
           computerName: '',
           clientName: '',
           remoteAddress: request.socket.remoteAddress,

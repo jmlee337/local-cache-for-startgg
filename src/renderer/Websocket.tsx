@@ -16,7 +16,20 @@ import {
   Tooltip,
 } from '@mui/material';
 import { ContentCopy, LeakAdd, LeakRemove } from '@mui/icons-material';
-import { WebsocketStatus } from '../common/types';
+import { Protocol, WebsocketStatus } from '../common/types';
+
+function protocolToDesc(protocol: Protocol) {
+  switch (protocol) {
+    case Protocol.ADMIN:
+      return 'Admin';
+    case Protocol.REPORTER:
+      return 'Reporter';
+    case Protocol.PUBLIC:
+      return 'Public';
+    default:
+      throw new Error('unreachable');
+  }
+}
 
 export default function Websocket() {
   const [open, setOpen] = useState(false);
@@ -247,13 +260,14 @@ export default function Websocket() {
                 {websocketStatus.connections.map((connection) => (
                   <ListItem disablePadding key={connection.addressPort}>
                     <ListItemText>
-                      {connection.addressPort}
+                      {protocolToDesc(connection.protocol)}
                       {connection.computerName
                         ? ` - ${connection.computerName}`
                         : ''}
                       {connection.clientName
                         ? ` - ${connection.clientName}`
-                        : ''}
+                        : ''}{' '}
+                      - {connection.addressPort}
                     </ListItemText>
                   </ListItem>
                 ))}

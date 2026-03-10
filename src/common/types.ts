@@ -521,6 +521,12 @@ export type SyncResult = {
   lastSuccessMs: number;
 };
 
+export enum Protocol {
+  ADMIN = 0,
+  REPORTER = 1,
+  PUBLIC = 2,
+}
+
 export type WebsocketStatus = {
   err: string;
   host: string;
@@ -529,6 +535,7 @@ export type WebsocketStatus = {
   port: number;
   connections: {
     addressPort: string;
+    protocol: Protocol;
     computerName: string;
     clientName: string;
   }[];
