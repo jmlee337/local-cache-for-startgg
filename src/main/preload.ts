@@ -135,7 +135,10 @@ const electronHandler = {
     ipcRenderer.on('syncResult', callback);
   },
   onTournament: (
-    callback: (event: IpcRendererEvent, tournament: RendererTournament) => void,
+    callback: (
+      event: IpcRendererEvent,
+      tournament: RendererTournament | undefined,
+    ) => void,
   ) => {
     ipcRenderer.removeAllListeners('tournament');
     ipcRenderer.on('tournament', callback);

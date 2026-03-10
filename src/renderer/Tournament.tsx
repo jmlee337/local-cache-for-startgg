@@ -1250,7 +1250,7 @@ export default function Tournament() {
   );
 
   const [unloadedOpen, setUnloadedOpen] = useState(true);
-  const [tournament, setTournament] = useState<RendererTournament | null>(null);
+  const [tournament, setTournament] = useState<RendererTournament>();
   useEffect(() => {
     (async () => {
       const currentTournament = await window.electron.getCurrentTournament();
@@ -1262,6 +1262,11 @@ export default function Tournament() {
   }, []);
   useEffect(() => {
     window.electron.onTournament((e, newTournament) => {
+      if (!newTournament) {
+        setTournament(undefined);
+        return;
+      }
+
       if (
         reportDialogOpen &&
         reportEventId &&
@@ -1297,7 +1302,10 @@ export default function Tournament() {
         }
       }
       setTournament((oldTournament) => {
-        if (oldTournament === null || oldTournament.id !== newTournament.id) {
+        if (
+          oldTournament === undefined ||
+          oldTournament.id !== newTournament.id
+        ) {
           setUnloadedOpen(newTournament.events.length === 0);
         }
         return newTournament;
