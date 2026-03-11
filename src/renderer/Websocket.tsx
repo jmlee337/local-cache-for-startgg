@@ -163,72 +163,75 @@ export default function Websocket({
               {passwordCopied ? 'Copied!' : 'Copy'}
             </Button>
           </Stack>
-          <Stack alignItems="center" direction="row" gap="8px">
-            <TextField
-              disabled={!websocketStatus.host}
-              label="Hostname"
-              size="small"
-              style={{ flexGrow: 1 }}
-              value={websocketStatus.host}
-              variant="standard"
-            />
-            <Button
-              disabled={hostCopied || !websocketStatus.host}
-              endIcon={hostCopied ? undefined : <ContentCopy />}
-              onClick={async () => {
-                await window.electron.copy(websocketStatus.host);
-                setHostCopied(true);
-                setTimeout(() => setHostCopied(false), 5000);
-              }}
-              variant="contained"
-            >
-              {hostCopied ? 'Copied!' : 'Copy'}
-            </Button>
-          </Stack>
-          <Stack alignItems="center" direction="row" gap="8px">
-            <TextField
-              disabled={!websocketStatus.v6Address}
-              label="Websocket Address (IPv6)"
-              size="small"
-              style={{ flexGrow: 1 }}
-              value={websocketStatus.v6Address}
-              variant="standard"
-            />
-            <Button
-              disabled={v6Copied || !websocketStatus.v6Address}
-              endIcon={v6Copied ? undefined : <ContentCopy />}
-              onClick={async () => {
-                await window.electron.copy(websocketStatus.v6Address);
-                setV6Copied(true);
-                setTimeout(() => setV6Copied(false), 5000);
-              }}
-              variant="contained"
-            >
-              {v6Copied ? 'Copied!' : 'Copy'}
-            </Button>
-          </Stack>
-          <Stack alignItems="center" direction="row" gap="8px">
-            <TextField
-              disabled={!websocketStatus.v4Address}
-              label="Websocket Address (IPv4)"
-              size="small"
-              style={{ flexGrow: 1 }}
-              value={websocketStatus.v4Address}
-              variant="standard"
-            />
-            <Button
-              disabled={v4Copied || !websocketStatus.v4Address}
-              endIcon={v4Copied ? undefined : <ContentCopy />}
-              onClick={async () => {
-                await window.electron.copy(websocketStatus.v4Address);
-                setV4Copied(true);
-                setTimeout(() => setV4Copied(false), 5000);
-              }}
-              variant="contained"
-            >
-              {v4Copied ? 'Copied!' : 'Copy'}
-            </Button>
-          </Stack>
+          {websocketStatus.host && (
+            <Stack alignItems="center" direction="row" gap="8px">
+              <TextField
+                label="Hostname"
+                size="small"
+                style={{ flexGrow: 1 }}
+                value={websocketStatus.host}
+                variant="standard"
+              />
+              <Button
+                disabled={hostCopied}
+                endIcon={hostCopied ? undefined : <ContentCopy />}
+                onClick={async () => {
+                  await window.electron.copy(websocketStatus.host);
+                  setHostCopied(true);
+                  setTimeout(() => setHostCopied(false), 5000);
+                }}
+                variant="contained"
+              >
+                {hostCopied ? 'Copied!' : 'Copy'}
+              </Button>
+            </Stack>
+          )}
+          {websocketStatus.v6Address && (
+            <Stack alignItems="center" direction="row" gap="8px">
+              <TextField
+                label="Websocket Address (IPv6)"
+                size="small"
+                style={{ flexGrow: 1 }}
+                value={websocketStatus.v6Address}
+                variant="standard"
+              />
+              <Button
+                disabled={v6Copied}
+                endIcon={v6Copied ? undefined : <ContentCopy />}
+                onClick={async () => {
+                  await window.electron.copy(websocketStatus.v6Address);
+                  setV6Copied(true);
+                  setTimeout(() => setV6Copied(false), 5000);
+                }}
+                variant="contained"
+              >
+                {v6Copied ? 'Copied!' : 'Copy'}
+              </Button>
+            </Stack>
+          )}
+          {websocketStatus.v4Address && (
+            <Stack alignItems="center" direction="row" gap="8px">
+              <TextField
+                label="Websocket Address (IPv4)"
+                size="small"
+                style={{ flexGrow: 1 }}
+                value={websocketStatus.v4Address}
+                variant="standard"
+              />
+              <Button
+                disabled={v4Copied}
+                endIcon={v4Copied ? undefined : <ContentCopy />}
+                onClick={async () => {
+                  await window.electron.copy(websocketStatus.v4Address);
+                  setV4Copied(true);
+                  setTimeout(() => setV4Copied(false), 5000);
+                }}
+                variant="contained"
+              >
+                {v4Copied ? 'Copied!' : 'Copy'}
+              </Button>
+            </Stack>
+          )}
           {websocketEnabled &&
             websocketStatus.port !== 0 &&
             websocketStatus.connections.length > 0 && (

@@ -297,75 +297,81 @@ export default function Reporters({
       >
         <DialogTitle>Reporters</DialogTitle>
         <DialogContent>
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap="8px"
-            marginLeft="-24px"
-            marginRight="-24px"
-          >
-            <ListItemButton
-              onClick={() => {
-                setCreateOpen((oldCreateOpen) => !oldCreateOpen);
-              }}
-            >
-              {createOpen ? <KeyboardArrowDown /> : <KeyboardArrowRight />}
-              <ListItemText>New Reporter</ListItemText>
-            </ListItemButton>
-          </Stack>
-          <Collapse in={createOpen}>
-            <Stack
-              direction="row"
-              flexWrap="wrap"
-              columnGap="32px"
-              rowGap="16px"
-            >
-              {waves.map((wave) => (
-                <List key={wave.id} disablePadding>
-                  {wave.pools.map((pool) => (
-                    <ListItem key={pool.id} disablePadding>
-                      <ListItemButton
-                        onClick={() => {
-                          const newSelectedPoolIds = new Set(selectedPoolIds);
-                          if (newSelectedPoolIds.has(pool.id)) {
-                            newSelectedPoolIds.delete(pool.id);
-                          } else {
-                            newSelectedPoolIds.add(pool.id);
-                          }
-                          setSelectedPoolIds(newSelectedPoolIds);
-                        }}
-                        style={{ padding: 0 }}
-                      >
-                        <Checkbox checked={selectedPoolIds.has(pool.id)} />
-                        <ListItemText>{pool.name}</ListItemText>
-                      </ListItemButton>
-                    </ListItem>
-                  ))}
-                </List>
-              ))}
-            </Stack>
-            <Stack direction="row" justifyContent="end">
-              <Button
-                disabled={selectedPoolIds.size === 0}
-                onClick={async () => {
-                  try {
-                    const poolIds = waves
-                      .flatMap((wave) => wave.pools)
-                      .map((pool) => pool.id)
-                      .filter((poolId) => selectedPoolIds.has(poolId));
-                    await window.electron.createReporter(poolIds);
-                    setSelectedPoolIds(new Set());
-                  } catch {
-                    // just catch
-                  }
-                }}
-                variant="contained"
+          {waves.length > 0 && (
+            <>
+              <Stack
+                direction="row"
+                alignItems="center"
+                gap="8px"
+                marginLeft="-24px"
+                marginRight="-24px"
               >
-                Create!
-              </Button>
-            </Stack>
-            <Divider style={{ margin: '16px -24px 0' }} />
-          </Collapse>
+                <ListItemButton
+                  onClick={() => {
+                    setCreateOpen((oldCreateOpen) => !oldCreateOpen);
+                  }}
+                >
+                  {createOpen ? <KeyboardArrowDown /> : <KeyboardArrowRight />}
+                  <ListItemText>New Reporter</ListItemText>
+                </ListItemButton>
+              </Stack>
+              <Collapse in={createOpen}>
+                <Stack
+                  direction="row"
+                  flexWrap="wrap"
+                  columnGap="32px"
+                  rowGap="16px"
+                >
+                  {waves.map((wave) => (
+                    <List key={wave.id} disablePadding>
+                      {wave.pools.map((pool) => (
+                        <ListItem key={pool.id} disablePadding>
+                          <ListItemButton
+                            onClick={() => {
+                              const newSelectedPoolIds = new Set(
+                                selectedPoolIds,
+                              );
+                              if (newSelectedPoolIds.has(pool.id)) {
+                                newSelectedPoolIds.delete(pool.id);
+                              } else {
+                                newSelectedPoolIds.add(pool.id);
+                              }
+                              setSelectedPoolIds(newSelectedPoolIds);
+                            }}
+                            style={{ padding: 0 }}
+                          >
+                            <Checkbox checked={selectedPoolIds.has(pool.id)} />
+                            <ListItemText>{pool.name}</ListItemText>
+                          </ListItemButton>
+                        </ListItem>
+                      ))}
+                    </List>
+                  ))}
+                </Stack>
+                <Stack direction="row" justifyContent="end">
+                  <Button
+                    disabled={selectedPoolIds.size === 0}
+                    onClick={async () => {
+                      try {
+                        const poolIds = waves
+                          .flatMap((wave) => wave.pools)
+                          .map((pool) => pool.id)
+                          .filter((poolId) => selectedPoolIds.has(poolId));
+                        await window.electron.createReporter(poolIds);
+                        setSelectedPoolIds(new Set());
+                      } catch {
+                        // just catch
+                      }
+                    }}
+                    variant="contained"
+                  >
+                    Create!
+                  </Button>
+                </Stack>
+                <Divider style={{ margin: '16px -24px 0' }} />
+              </Collapse>
+            </>
+          )}
           {Boolean(
             websocketStatus.host ||
               websocketStatus.v6Address ||

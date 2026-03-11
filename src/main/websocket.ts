@@ -9,7 +9,14 @@ import AsyncLock from 'async-lock';
 import { hostname } from 'os';
 import express from 'express';
 import path from 'path';
-import { getLastSubscriberTournament } from './db';
+import { Socket } from 'net';
+import {
+  getLastSubscriberTournament,
+  getReporterPools,
+  getTournamentReporterPools,
+  getTournamentReporters,
+  reporterHasPermission,
+} from './db';
 import {
   assignSetStationTransaction,
   assignSetStreamTransaction,
@@ -20,7 +27,9 @@ import {
 } from './transaction';
 import {
   ApiGameData,
+  DbReporter,
   Protocol,
+  RendererEvent,
   RendererSet,
   SubscriberTournament,
   WebsocketStatus,
@@ -73,6 +82,33 @@ type Response = {
   };
 };
 
+function getResponseOp(
+  requestOp:
+    | 'reset-set-request'
+    | 'call-set-request'
+    | 'start-set-request'
+    | 'assign-set-station-request'
+    | 'assign-set-stream-request'
+    | 'report-set-request',
+) {
+  switch (requestOp) {
+    case 'reset-set-request':
+      return 'reset-set-response';
+    case 'call-set-request':
+      return 'call-set-response';
+    case 'start-set-request':
+      return 'start-set-response';
+    case 'assign-set-station-request':
+      return 'assign-set-station-response';
+    case 'assign-set-stream-request':
+      return 'assign-set-stream-response';
+    case 'report-set-request':
+      return 'report-set-response';
+    default:
+      throw new Error('unreachable');
+  }
+}
+
 type Event =
   | {
       op: 'auth-success-event';
@@ -96,6 +132,7 @@ type AuthIdentify = {
 const HTTP_PORT = 80;
 const ADMIN_PROTOCOL = 'admin-protocol';
 const BRACKET_PROTOCOL = 'bracket-protocol';
+const REPORTER_PROTOCOL = 'reporter-protocol';
 const UNAUTH_CODE = 4009;
 
 let err = '';
@@ -114,26 +151,60 @@ const fullyConnectedWebSockets = new Map<
     remotePort?: number;
   }
 >();
+const fullyConnectedReporterWebSockets = new Map<
+  WebSocket,
+  {
+    protocol: Protocol.REPORTER;
+    computerName: string;
+    clientName: string;
+    remoteAddress?: string;
+    remotePort?: number;
+    reporterId: string;
+  }
+>();
 let mainWindow: BrowserWindow | null = null;
 export function getWebsocketStatus(): WebsocketStatus {
   return {
     err,
-    host: `http://${host}`,
-    v4Address: `http://${v4Address}`,
-    v6Address: `http://[${v6Address}]`,
+    host: host ? `http://${host}` : '',
+    v4Address: v4Address ? `http://${v4Address}` : '',
+    v6Address: v6Address ? `http://[${v6Address}]` : '',
     port,
-    connections: Array.from(fullyConnectedWebSockets.values())
-      .filter(
-        (webSocketInfo) =>
-          webSocketInfo.remoteAddress && webSocketInfo.remotePort,
-      )
-      .sort((a, b) => a.protocol - b.protocol)
-      .map((webSocketInfo) => ({
-        addressPort: `${webSocketInfo.remoteAddress}:${webSocketInfo.remotePort}`,
-        protocol: webSocketInfo.protocol,
-        computerName: webSocketInfo.computerName,
-        clientName: webSocketInfo.clientName,
-      })),
+    connections: [
+      ...Array.from(fullyConnectedWebSockets.values())
+        .filter(
+          (webSocketInfo) =>
+            webSocketInfo.remoteAddress && webSocketInfo.remotePort,
+        )
+        .map((webSocketInfo) => ({
+          addressPort: `${webSocketInfo.remoteAddress}:${webSocketInfo.remotePort}`,
+          protocol: webSocketInfo.protocol,
+          computerName: webSocketInfo.computerName,
+          clientName: webSocketInfo.clientName,
+        })),
+      ...Array.from(fullyConnectedReporterWebSockets.values())
+        .filter(
+          (webSocketInfo) =>
+            webSocketInfo.remoteAddress && webSocketInfo.remotePort,
+        )
+        .map((webSocketInfo) => ({
+          addressPort: `${webSocketInfo.remoteAddress}:${webSocketInfo.remotePort}`,
+          protocol: webSocketInfo.protocol,
+          computerName: webSocketInfo.computerName,
+          clientName: webSocketInfo.clientName,
+        })),
+    ].sort((a, b) => {
+      if (a.protocol !== b.protocol) {
+        return a.protocol - b.protocol;
+      }
+      if (a.clientName !== b.clientName) {
+        return a.clientName.localeCompare(b.clientName);
+      }
+      if (a.computerName !== b.computerName) {
+        return a.computerName.localeCompare(b.computerName);
+      }
+      return a.addressPort.localeCompare(b.addressPort);
+    }),
   };
 }
 function sendStatus() {
@@ -171,16 +242,108 @@ function handleClientIdRequest(json: Request, newWebSocket: WebSocket) {
     return;
   }
 
-  const webSocketInfo = fullyConnectedWebSockets.get(newWebSocket);
+  const webSocketInfo =
+    fullyConnectedWebSockets.get(newWebSocket) ??
+    fullyConnectedReporterWebSockets.get(newWebSocket);
   if (webSocketInfo) {
-    webSocketInfo.computerName = json.computerName;
-    webSocketInfo.clientName = json.clientName;
+    if (json.computerName) {
+      webSocketInfo.computerName = json.computerName;
+    }
+    if (json.clientName) {
+      webSocketInfo.clientName = json.clientName;
+    }
   }
   sendStatus();
   newWebSocket.send(JSON.stringify(response));
 }
 
-async function afterAdminAuthentication(newWebSocket: WebSocket) {
+function handleSetRequest(
+  newWebSocket: WebSocket,
+  json: Request,
+  response: Response,
+) {
+  if (json.op === 'reset-set-request') {
+    try {
+      response.data = resetSetTransaction(json.id!);
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  } else if (json.op === 'call-set-request') {
+    try {
+      response.data = callSetTransaction(json.id!);
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  } else if (json.op === 'start-set-request') {
+    try {
+      response.data = startSetTransaction(json.id!);
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  } else if (json.op === 'assign-set-station-request') {
+    if (json.stationId === undefined || !Number.isInteger(json.stationId)) {
+      response.err = 'stationId must be integer';
+      newWebSocket.send(JSON.stringify(response));
+      return;
+    }
+    try {
+      response.data = assignSetStationTransaction(json.id!, json.stationId);
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  } else if (json.op === 'assign-set-stream-request') {
+    if (json.streamId === undefined || !Number.isInteger(json.streamId)) {
+      response.err = 'streamId must be integer';
+      newWebSocket.send(JSON.stringify(response));
+      return;
+    }
+    try {
+      response.data = assignSetStreamTransaction(json.id!, json.streamId);
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  } else if (json.op === 'report-set-request') {
+    if (json.winnerId === undefined || !Number.isInteger(json.winnerId)) {
+      response.err = 'winnerId must be integer';
+      newWebSocket.send(JSON.stringify(response));
+      return;
+    }
+    if (typeof json.isDQ !== 'boolean') {
+      response.err = 'isDQ must be boolean';
+      newWebSocket.send(JSON.stringify(response));
+      return;
+    }
+    if (!Array.isArray(json.gameData)) {
+      response.err = 'gameData must be array';
+      newWebSocket.send(JSON.stringify(response));
+      return;
+    }
+    try {
+      response.data = reportSetTransaction(
+        json.id!,
+        json.winnerId,
+        json.isDQ,
+        json.gameData,
+      );
+      newWebSocket.send(JSON.stringify(response));
+    } catch (e: any) {
+      response.err = e instanceof Error ? e.message : e.toString();
+      newWebSocket.send(JSON.stringify(response));
+    }
+  }
+}
+
+function afterAdminAuthentication(newWebSocket: WebSocket, socket: Socket) {
   const authSuccessEvent: Event = {
     op: 'auth-success-event',
   };
@@ -200,146 +363,129 @@ async function afterAdminAuthentication(newWebSocket: WebSocket) {
 
     if (json.op === 'client-id-request') {
       handleClientIdRequest(json, newWebSocket);
-    } else if (json.op === 'reset-set-request') {
+    } else if (
+      json.op === 'reset-set-request' ||
+      json.op === 'call-set-request' ||
+      json.op === 'start-set-request' ||
+      json.op === 'assign-set-station-request' ||
+      json.op === 'assign-set-stream-request' ||
+      json.op === 'report-set-request'
+    ) {
       const response: Response = {
         num: json.num,
-        op: 'reset-set-response',
+        op: getResponseOp(json.op),
       };
       if (json.id === undefined || !Number.isInteger(json.id)) {
         response.err = 'id must be integer';
         newWebSocket.send(JSON.stringify(response));
         return;
       }
-      try {
-        response.data = resetSetTransaction(json.id);
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
-    } else if (json.op === 'call-set-request') {
-      const response: Response = {
-        num: json.num,
-        op: 'call-set-response',
-      };
-      if (json.id === undefined || !Number.isInteger(json.id)) {
-        response.err = 'id must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      try {
-        response.data = callSetTransaction(json.id);
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
-    } else if (json.op === 'start-set-request') {
-      const response: Response = {
-        num: json.num,
-        op: 'start-set-response',
-      };
-      if (json.id === undefined || !Number.isInteger(json.id)) {
-        response.err = 'id must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      try {
-        response.data = startSetTransaction(json.id);
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
-    } else if (json.op === 'assign-set-station-request') {
-      const response: Response = {
-        num: json.num,
-        op: 'assign-set-station-response',
-      };
-      if (json.id === undefined || !Number.isInteger(json.id)) {
-        response.err = 'id must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      if (json.stationId === undefined || !Number.isInteger(json.stationId)) {
-        response.err = 'stationId must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      try {
-        response.data = assignSetStationTransaction(json.id, json.stationId);
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
-    } else if (json.op === 'assign-set-stream-request') {
-      const response: Response = {
-        num: json.num,
-        op: 'assign-set-stream-response',
-      };
-      if (json.id === undefined || !Number.isInteger(json.id)) {
-        response.err = 'id must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      if (json.streamId === undefined || !Number.isInteger(json.streamId)) {
-        response.err = 'streamId must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      try {
-        response.data = assignSetStreamTransaction(json.id, json.streamId);
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
-    } else if (json.op === 'report-set-request') {
-      const response: Response = {
-        num: json.num,
-        op: 'report-set-response',
-      };
-      if (json.id === undefined || !Number.isInteger(json.id)) {
-        response.err = 'id must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      if (json.winnerId === undefined || !Number.isInteger(json.winnerId)) {
-        response.err = 'winnerId must be integer';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      if (typeof json.isDQ !== 'boolean') {
-        response.err = 'isDQ must be boolean';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      if (!Array.isArray(json.gameData)) {
-        response.err = 'gameData must be array';
-        newWebSocket.send(JSON.stringify(response));
-        return;
-      }
-      try {
-        response.data = reportSetTransaction(
-          json.id,
-          json.winnerId,
-          json.isDQ,
-          json.gameData,
-        );
-        newWebSocket.send(JSON.stringify(response));
-      } catch (e: any) {
-        response.err = e instanceof Error ? e.message : e.toString();
-        newWebSocket.send(JSON.stringify(response));
-      }
+      handleSetRequest(newWebSocket, json, response);
     }
   });
   newWebSocket.on('close', () => {
-    newWebSocket.removeAllListeners();
     fullyConnectedWebSockets.delete(newWebSocket);
-    allWebsockets.delete(newWebSocket);
     sendStatus();
   });
+  fullyConnectedWebSockets.set(newWebSocket, {
+    protocol: Protocol.ADMIN,
+    computerName: '',
+    clientName: '',
+    remoteAddress: socket.remoteAddress,
+    remotePort: socket.remotePort,
+  });
+  sendStatus();
+}
+function afterReporterAuthentication(
+  newWebSocket: WebSocket,
+  socket: Socket,
+  dbReporter: DbReporter,
+) {
+  const authSuccessEvent: Event = {
+    op: 'auth-success-event',
+  };
+  const poolIds = new Set(
+    getReporterPools(dbReporter.id).map(
+      (dbReporterPool) => dbReporterPool.poolId,
+    ),
+  );
+  if (poolIds.size === 0) {
+    newWebSocket.close(UNAUTH_CODE);
+    return;
+  }
+
+  newWebSocket.send(JSON.stringify(authSuccessEvent));
+  const lastSubscriberTournament = getLastSubscriberTournament();
+  if (lastSubscriberTournament) {
+    const events = lastSubscriberTournament.events
+      .map((event) => ({
+        ...event,
+        phases: event.phases
+          .map((phase) => ({
+            ...phase,
+            pools: phase.pools.filter((pool) => poolIds.has(pool.id)),
+          }))
+          .filter((phase) => phase.pools.length > 0),
+      }))
+      .filter((event) => event.phases.length > 0);
+    sendTournamentUpdateEvent(newWebSocket, {
+      ...lastSubscriberTournament,
+      events,
+    });
+  }
+
+  newWebSocket.on('message', (data, isBinary) => {
+    if (isBinary) {
+      return;
+    }
+
+    let json: Request | undefined;
+    try {
+      json = JSON.parse(data.toString()) as Request;
+    } catch {
+      return;
+    }
+
+    if (json.op === 'client-id-request') {
+      handleClientIdRequest(json, newWebSocket);
+    } else if (
+      json.op === 'reset-set-request' ||
+      json.op === 'call-set-request' ||
+      json.op === 'start-set-request' ||
+      json.op === 'assign-set-station-request' ||
+      json.op === 'assign-set-stream-request' ||
+      json.op === 'report-set-request'
+    ) {
+      const response: Response = {
+        num: json.num,
+        op: getResponseOp(json.op),
+      };
+      if (json.id === undefined || !Number.isInteger(json.id)) {
+        response.err = 'id must be integer';
+        newWebSocket.send(JSON.stringify(response));
+        return;
+      }
+      if (!reporterHasPermission(dbReporter.id, json.id)) {
+        response.err = 'unauthorized';
+        newWebSocket.send(JSON.stringify(response));
+        return;
+      }
+      handleSetRequest(newWebSocket, json, response);
+    }
+  });
+  newWebSocket.on('close', () => {
+    fullyConnectedReporterWebSockets.delete(newWebSocket);
+    sendStatus();
+  });
+  fullyConnectedReporterWebSockets.set(newWebSocket, {
+    protocol: Protocol.REPORTER,
+    computerName: dbReporter.name ?? '',
+    clientName: '',
+    remoteAddress: socket.remoteAddress,
+    remotePort: socket.remotePort,
+    reporterId: dbReporter.id,
+  });
+  sendStatus();
 }
 
 let websocketPassword = '';
@@ -352,6 +498,26 @@ export function setWebsocketPassword(newWebsocketPassword: string) {
   }
 
   websocketPassword = newWebsocketPassword;
+}
+
+function getSaltChallenge() {
+  return {
+    salt: Buffer.from(randomBytes(32)).toString('base64url'),
+    challenge: Buffer.from(randomBytes(32)).toString('base64url'),
+  };
+}
+
+function getAuthentication(password: string, salt: string, challenge: string) {
+  const secret = createHash('sha256')
+    .update(password)
+    .update(salt)
+    .digest()
+    .toString('base64url');
+  return createHash('sha256')
+    .update(secret)
+    .update(challenge)
+    .digest()
+    .toString('base64url');
 }
 
 let resourcesPath = '';
@@ -444,24 +610,27 @@ export function startWebsocketServer() {
       });
       websocketServer.on('connection', (newWebSocket, request) => {
         allWebsockets.add(newWebSocket);
+        newWebSocket.on('close', () => {
+          newWebSocket.removeAllListeners();
+          allWebsockets.delete(newWebSocket);
+        });
+
         if (newWebSocket.protocol === ADMIN_PROTOCOL) {
-          const salt = Buffer.from(randomBytes(32)).toString('base64url');
-          const secret = createHash('sha256')
-            .update(websocketPassword)
-            .update(salt)
-            .digest()
-            .toString('base64url');
-          const challenge = Buffer.from(randomBytes(32)).toString('base64url');
-          const authentication = createHash('sha256')
-            .update(secret)
-            .update(challenge)
-            .digest()
-            .toString('base64url');
+          const { salt, challenge } = getSaltChallenge();
+          const authentication = getAuthentication(
+            websocketPassword,
+            salt,
+            challenge,
+          );
           const authHello: AuthHello = {
             op: 'auth-hello',
             salt,
             challenge,
           };
+
+          const timeout = setTimeout(() => {
+            newWebSocket.close(UNAUTH_CODE);
+          }, 2000);
           const identifyCb = (data: RawData, isBinary: boolean) => {
             if (isBinary) {
               newWebSocket.close(UNAUTH_CODE);
@@ -472,16 +641,59 @@ export function startWebsocketServer() {
               const json = JSON.parse(data.toString()) as AuthIdentify;
               if (json.op === 'auth-identify') {
                 if (json.authentication === authentication) {
+                  clearTimeout(timeout);
                   newWebSocket.removeListener('message', identifyCb);
-                  fullyConnectedWebSockets.set(newWebSocket, {
-                    protocol: Protocol.ADMIN,
-                    computerName: '',
-                    clientName: '',
-                    remoteAddress: request.socket.remoteAddress,
-                    remotePort: request.socket.remotePort,
-                  });
-                  sendStatus();
-                  afterAdminAuthentication(newWebSocket);
+                  afterAdminAuthentication(newWebSocket, request.socket);
+                  return;
+                }
+              }
+            } catch {
+              // just catch
+            }
+            newWebSocket.close(UNAUTH_CODE);
+          };
+          newWebSocket.on('message', identifyCb);
+          newWebSocket.send(JSON.stringify(authHello));
+          return;
+        }
+
+        if (newWebSocket.protocol === REPORTER_PROTOCOL) {
+          const { salt, challenge } = getSaltChallenge();
+          const authenticationToDbReporter = new Map(
+            getTournamentReporters().map((dbReporter) => [
+              getAuthentication(dbReporter.id, salt, challenge),
+              dbReporter,
+            ]),
+          );
+          const authHello: AuthHello = {
+            op: 'auth-hello',
+            salt,
+            challenge,
+          };
+
+          const timeout = setTimeout(() => {
+            newWebSocket.close(UNAUTH_CODE);
+          }, 2000);
+          const identifyCb = (data: RawData, isBinary: boolean) => {
+            if (isBinary) {
+              newWebSocket.close(UNAUTH_CODE);
+              return;
+            }
+
+            try {
+              const json = JSON.parse(data.toString()) as AuthIdentify;
+              if (json.op === 'auth-identify') {
+                const dbReporter = authenticationToDbReporter.get(
+                  json.authentication,
+                );
+                if (dbReporter) {
+                  clearTimeout(timeout);
+                  newWebSocket.removeListener('message', identifyCb);
+                  afterReporterAuthentication(
+                    newWebSocket,
+                    request.socket,
+                    dbReporter,
+                  );
                   return;
                 }
               }
@@ -519,9 +731,7 @@ export function startWebsocketServer() {
           }
         });
         newWebSocket.on('close', () => {
-          newWebSocket.removeAllListeners();
           fullyConnectedWebSockets.delete(newWebSocket);
-          allWebsockets.delete(newWebSocket);
           sendStatus();
         });
         sendStatus();
@@ -627,6 +837,7 @@ export function stopWebsocketServer() {
     await ciaoPromise;
 
     fullyConnectedWebSockets.clear();
+    fullyConnectedReporterWebSockets.clear();
     allWebsockets.clear();
     err = '';
     host = '';
@@ -653,9 +864,46 @@ export function initWebsocket(
 export function updateSubscribers(
   subscriberTournament: SubscriberTournament | undefined,
 ) {
-  Array.from(fullyConnectedWebSockets.keys()).forEach((connection) => {
-    sendTournamentUpdateEvent(connection, subscriberTournament);
-  });
+  if (subscriberTournament) {
+    Array.from(fullyConnectedWebSockets.keys()).forEach((connection) => {
+      sendTournamentUpdateEvent(connection, subscriberTournament);
+    });
+
+    const reporterIdToPoolIds = new Map<string, Set<number>>();
+    getTournamentReporterPools().forEach((dbReporterPool) => {
+      let poolIds = reporterIdToPoolIds.get(dbReporterPool.reporterId);
+      if (poolIds === undefined) {
+        poolIds = new Set();
+        reporterIdToPoolIds.set(dbReporterPool.reporterId, poolIds);
+      }
+      poolIds.add(dbReporterPool.poolId);
+    });
+    Array.from(fullyConnectedReporterWebSockets).forEach(
+      ([connection, { reporterId }]) => {
+        const poolIds = reporterIdToPoolIds.get(reporterId);
+        if (!poolIds) {
+          connection.close(UNAUTH_CODE);
+          return;
+        }
+
+        const events: RendererEvent[] = subscriberTournament.events
+          .map((event) => ({
+            ...event,
+            phases: event.phases
+              .map((phase) => ({
+                ...phase,
+                pools: phase.pools.filter((pool) => poolIds.has(pool.id)),
+              }))
+              .filter((phase) => phase.pools.length > 0),
+          }))
+          .filter((event) => event.phases.length > 0);
+        sendTournamentUpdateEvent(connection, {
+          ...subscriberTournament,
+          events,
+        });
+      },
+    );
+  }
 }
 
 export function isBroadcasting() {

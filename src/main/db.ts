@@ -4087,6 +4087,40 @@ export function setReporterName(id: string, name: string) {
   });
 }
 
+export function getTournamentReporters() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  return db
+    .prepare(
+      'SELECT * FROM reporters WHERE tournamentId = @currentTournamentId',
+    )
+    .all({ currentTournamentId }) as DbReporter[];
+}
+
+export function getTournamentReporterPools() {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  return db
+    .prepare(
+      'SELECT * FROM reporterPools WHERE tournamentId = @currentTournamentId',
+    )
+    .all({ currentTournamentId }) as DbReporterPool[];
+}
+
+export function getReporterPools(reporterId: string) {
+  if (!db) {
+    throw new Error('not init');
+  }
+
+  return db
+    .prepare('SELECT * FROM reporterPools WHERE reporterId = @reporterId')
+    .all({ reporterId }) as DbReporterPool[];
+}
+
 export function reporterHasPermission(reporterId: string, setId: number) {
   if (!db) {
     throw new Error('not init');
