@@ -605,6 +605,9 @@ export function startWebsocketServer() {
           if (protocols.has(ADMIN_PROTOCOL)) {
             return ADMIN_PROTOCOL;
           }
+          if (protocols.has(REPORTER_PROTOCOL)) {
+            return REPORTER_PROTOCOL;
+          }
           return BRACKET_PROTOCOL;
         },
       });
