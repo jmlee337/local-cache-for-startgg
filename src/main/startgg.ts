@@ -1446,6 +1446,16 @@ export function startRefreshingTournament(id: number, slug: string) {
   });
 }
 
+export function stopRefreshingTournament() {
+  lock.acquire(KEY, (release) => {
+    if (timeout) {
+      clearTimeout(timeout);
+      timeout = null;
+    }
+    release();
+  });
+}
+
 export async function upgradePreviewSets(previewSetIds: string[]) {
   if (!apiKey) {
     throw new Error('Please set API key.');

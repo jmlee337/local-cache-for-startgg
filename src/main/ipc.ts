@@ -12,6 +12,7 @@ import {
   maybeTryNow,
   upgradePreviewSets,
   waitAndTry,
+  stopRefreshingTournament,
 } from './startgg';
 import {
   dbInit,
@@ -178,6 +179,10 @@ export default function setupIPCs(
   ipcMain.removeHandler('deleteLocalTournament');
   ipcMain.handle('deleteLocalTournament', (event, id: number) => {
     const currentId = getTournamentId();
+    if (id === currentId) {
+      stopRefreshingTournament();
+    }
+
     deleteTournament(id);
     if (id === currentId) {
       setTournamentId(0);
