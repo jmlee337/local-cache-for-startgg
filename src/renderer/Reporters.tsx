@@ -25,7 +25,7 @@ import {
   KeyboardArrowRight,
   VerifiedUser,
 } from '@mui/icons-material';
-import { Cuer } from 'cuer';
+import QRCode from 'react-qr-code';
 import {
   RendererEvent,
   RendererReporter,
@@ -492,7 +492,7 @@ export default function Reporters({
                   </Stack>
                 )}
                 <Stack direction="row" justifyContent="center" marginTop="8px">
-                  {qrAddress && <Cuer value={qrAddress} size="250px" />}
+                  {qrAddress && <QRCode value={qrAddress} size={250} />}
                 </Stack>
                 <Divider style={{ margin: '16px -24px 0' }} />
               </Collapse>
