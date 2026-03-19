@@ -561,17 +561,17 @@ export function startWebsocketServer() {
       const udp4Socket = createSocket('udp4');
       try {
         await new Promise<void>((resolve, reject) => {
-          udp4Socket.connect(53, '8.8.8.8', () => {
-            try {
-              v4Address = udp4Socket.address().address;
-              udp4Socket.close();
-              resolve();
-            } catch {
-              v4Address = '';
-              udp4Socket.close();
-              reject();
-            }
+          udp4Socket.on('connect', () => {
+            v4Address = udp4Socket.address().address;
+            udp4Socket.close();
+            resolve();
           });
+          udp4Socket.on('error', (udp4err) => {
+            v4Address = '';
+            udp4Socket.close();
+            reject(udp4err);
+          });
+          udp4Socket.connect(53, '8.8.8.8');
         });
       } catch {
         // just catch
@@ -580,17 +580,17 @@ export function startWebsocketServer() {
       const udp6Socket = createSocket('udp6');
       try {
         await new Promise<void>((resolve, reject) => {
-          udp6Socket.connect(53, '2001:4860:4860::8888', () => {
-            try {
-              v6Address = udp6Socket.address().address;
-              udp6Socket.close();
-              resolve();
-            } catch {
-              v6Address = '';
-              udp6Socket.close();
-              reject();
-            }
+          udp6Socket.on('connect', () => {
+            v6Address = udp6Socket.address().address;
+            udp6Socket.close();
+            resolve();
           });
+          udp6Socket.on('error', (udp6Err) => {
+            v6Address = '';
+            udp6Socket.close();
+            reject(udp6Err);
+          });
+          udp6Socket.connect(53, '2001:4860:4860::8888');
         });
       } catch {
         // just catch
