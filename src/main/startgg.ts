@@ -1361,7 +1361,9 @@ function tryNextTransaction(id: number, slug: string) {
           } else {
             throw new Error('unreachable');
           }
-          finalizeTransaction(transaction.transactionNum, updatedAt);
+          if (updatedAt !== 0) {
+            finalizeTransaction(transaction.transactionNum, updatedAt);
+          }
           if (
             transaction.type === TransactionType.RESET &&
             transaction.isRecursive
