@@ -142,7 +142,7 @@ export default function Websocket({
         <DialogContent style={{ paddingTop: '8px' }}>
           <Stack alignItems="center" direction="row" gap="8px">
             <TextField
-              label="Websocket Password"
+              label="Admin Password"
               size="small"
               style={{ flexGrow: 1 }}
               type="password"
