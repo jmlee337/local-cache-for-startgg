@@ -4203,6 +4203,10 @@ export function getTournament(): RendererTournament | undefined {
   const dbPhases = db
     .prepare('SELECT * FROM phases WHERE tournamentId = @id')
     .all({ id: currentTournamentId }) as DbPhase[];
+  const idToPhase = new Map<number, DbPhase>();
+  dbPhases.forEach((dbPhase) => {
+    idToPhase.set(dbPhase.id, dbPhase);
+  });
   const dbPools = (
     db
       .prepare('SELECT * FROM pools WHERE tournamentId = @id')
@@ -4279,12 +4283,15 @@ export function getTournament(): RendererTournament | undefined {
   ).forEach((dbReporterPool) => {
     const dbPool = idToPool.get(dbReporterPool.poolId);
     if (dbPool) {
-      let pools = reporterIdToPools.get(dbReporterPool.reporterId);
-      if (pools === undefined) {
-        pools = [];
-        reporterIdToPools.set(dbReporterPool.reporterId, pools);
+      const dbPhase = idToPhase.get(dbPool.phaseId);
+      if (dbPhase) {
+        let pools = reporterIdToPools.get(dbReporterPool.reporterId);
+        if (pools === undefined) {
+          pools = [];
+          reporterIdToPools.set(dbReporterPool.reporterId, pools);
+        }
+        pools.push({ id: dbPool.id, name: `${dbPhase.name}, ${dbPool.name}` });
       }
-      pools.push({ id: dbPool.id, name: dbPool.name });
     }
   });
   Array.from(reporterIdToPools.values()).forEach((pools) => {
