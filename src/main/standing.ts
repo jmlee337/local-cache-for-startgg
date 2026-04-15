@@ -184,7 +184,7 @@ export default function getPlacementToSortableEntrant(
     throw new Error(`no tiebreak methods for pool: ${dbPool.id}`);
   }
   if (dbSeeds.some((dbSeed) => dbSeed.entrantId === null)) {
-    throw new Error(`missing entrant seeds for pool: ${dbPool.id}`);
+    return new Map();
   }
 
   const sortFunctions = [toSortFunction(dbPool.tiebreakMethod1)];
