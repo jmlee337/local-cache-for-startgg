@@ -378,7 +378,7 @@ export async function getApiTournament(inSlug: string) {
               gamerTag: participant.gamerTag,
               prefix: participant.prefix ?? '',
               pronouns: participant.user?.genderPronoun ?? '',
-              userSlug: participant.user?.slug.slice(5) ?? '',
+              userSlug: participant.user?.slug?.slice(5) ?? '',
             };
           }),
         );
