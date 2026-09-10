@@ -272,7 +272,7 @@ export async function getAdminedTournaments(): Promise<AdminedTournament[]> {
 const TOURNAMENT_PARTICIPANTS_QUERY = `
   query TournamentPlayersQuery($slug: String, $eventIds: [ID], $page: Int) {
     tournament(slug: $slug) {
-      participants(query: {page: $page, perPage: 512, filter: {eventIds: $eventIds}}) {
+      participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
         pageInfo {
           totalPages
         }
@@ -683,7 +683,7 @@ function dbSetsFromApiSets(
 const PHASE_SEEDS_QUERY = `
   query phaseSeeds($phaseId: ID, $page: Int) {
     phase(id: $phaseId) {
-      seeds(query: {page: $page, perPage: 512}) {
+      seeds(query: {page: $page, perPage: 249}) {
         pageInfo {
           totalPages
         }
