@@ -20,6 +20,7 @@ import {
   ConflictReason,
   DbSeed,
   DbSetGame,
+  DbParticipant,
 } from '../common/types';
 import {
   upsertTournament,
@@ -274,6 +275,7 @@ const TOURNAMENT_PARTICIPANTS_QUERY = `
     tournament(slug: $slug) {
       participants(query: {page: $page, perPage: 499, filter: {eventIds: $eventIds}}) {
         pageInfo {
+          total
           totalPages
         }
         nodes {
@@ -300,105 +302,109 @@ export async function getApiTournament(inSlug: string) {
     throw new Error('Please set API key.');
   }
 
-  try {
-    const json = await wrappedFetch(
-      `https://api.start.gg/tournament/${inSlug}?expand[]=event&expand[]=station&expand[]=stream`,
-    );
-    const { id, slug: apiSlug } = json.entities.tournament;
-    const slug = apiSlug.slice(11);
-    const tournament: DbTournament = {
-      id,
-      slug,
-      name: json.entities.tournament.name,
-      startAt: json.entities.tournament.startAt,
-      location: json.entities.tournament.locationDisplayName,
-    };
-    const events: DbEvent[] = (json.entities.event as any[]).map((event) => ({
-      id: event.id,
-      tournamentId: id,
-      name: event.name,
-      slug: event.slug,
-      isOnline: event.isOnline ? 1 : 0,
-      videogameId: event.videogameId,
+  const json = await wrappedFetch(
+    `https://api.start.gg/tournament/${inSlug}?expand[]=event&expand[]=station&expand[]=stream`,
+  );
+  const { id, slug: apiSlug } = json.entities.tournament;
+  const slug = apiSlug.slice(11);
+  const tournament: DbTournament = {
+    id,
+    slug,
+    name: json.entities.tournament.name,
+    startAt: json.entities.tournament.startAt,
+    location: json.entities.tournament.locationDisplayName,
+  };
+  const events: DbEvent[] = (json.entities.event as any[]).map((event) => ({
+    id: event.id,
+    tournamentId: id,
+    name: event.name,
+    slug: event.slug,
+    isOnline: event.isOnline ? 1 : 0,
+    videogameId: event.videogameId,
+  }));
+  let stations: DbStation[] = [];
+  if (Array.isArray(json.entities.station)) {
+    stations = (json.entities.station as any[]).map((station) => ({
+      id: station.id,
+      tournamentId: station.tournamentId,
+      number: station.number,
+      streamId: station.streamId,
     }));
-    let stations: DbStation[] = [];
-    if (Array.isArray(json.entities.station)) {
-      stations = (json.entities.station as any[]).map((station) => ({
-        id: station.id,
-        tournamentId: station.tournamentId,
-        number: station.number,
-        streamId: station.streamId,
-      }));
-    }
-    let streams: DbStream[] = [];
-    if (Array.isArray(json.entities.stream)) {
-      streams = (json.entities.stream as any[]).map((stream) => ({
-        id: stream.id,
-        tournamentId: stream.tournamentId,
-        streamName: stream.streamName,
-        streamSource: toStreamSource(stream.streamSource),
-      }));
-    }
-    upsertTournament(tournament, events, stations, streams);
-
-    let page = 1;
-    const eventIds = getLoadedEventIds(id);
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      // eslint-disable-next-line no-await-in-loop
-      const nextData = await unauthenticatedFetchGql(
-        TOURNAMENT_PARTICIPANTS_QUERY,
-        {
-          page,
-          slug,
-          eventIds,
-        },
-      );
-      const { nodes } = nextData.tournament.participants;
-      if (Array.isArray(nodes)) {
-        replaceParticipants(
-          nodes.map((participant) => {
-            let discordId = '';
-            let discordUsername = '';
-            if (participant.requiredConnections) {
-              const discord = (participant.requiredConnections as any[]).find(
-                (rc) => rc.type === 'DISCORD',
-              );
-              if (discord) {
-                discordId = discord.externalId;
-                discordUsername = discord.externalUsername;
-              }
-            }
-            return {
-              id: participant.id,
-              tournamentId: id,
-              connectCode: participant.connectedAccounts?.slippi?.value ?? '',
-              discordId,
-              discordUsername,
-              gamerTag: participant.gamerTag,
-              prefix: participant.prefix ?? '',
-              pronouns: participant.user?.genderPronoun ?? '',
-              userSlug: participant.user?.slug?.slice(5) ?? '',
-            };
-          }),
-        );
-      }
-      page += 1;
-      if (page > nextData.tournament.participants.pageInfo.totalPages) {
-        break;
-      }
-    }
-
-    updateSyncResultWithSuccess();
-    return id;
-  } catch (e: any) {
-    if (isRetryableApiError(e)) {
-      updateSyncResultWithError(e);
-    } else {
-      updateWithFatalError(e);
-    }
-    throw e;
   }
+  let streams: DbStream[] = [];
+  if (Array.isArray(json.entities.stream)) {
+    streams = (json.entities.stream as any[]).map((stream) => ({
+      id: stream.id,
+      tournamentId: stream.tournamentId,
+      streamName: stream.streamName,
+      streamSource: toStreamSource(stream.streamSource),
+    }));
+  }
+  upsertTournament(tournament, events, stations, streams);
+
+  let page = 1;
+  const eventIds = getLoadedEventIds(id);
+  let expectedTotal = 0;
+  const participants: DbParticipant[] = [];
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const nextData = await unauthenticatedFetchGql(
+      TOURNAMENT_PARTICIPANTS_QUERY,
+      {
+        page,
+        slug,
+        eventIds,
+      },
+    );
+    const { nodes } = nextData.tournament.participants;
+    if (Array.isArray(nodes)) {
+      participants.push(
+        ...nodes.map((participant) => {
+          let discordId = '';
+          let discordUsername = '';
+          if (participant.requiredConnections) {
+            const discord = (participant.requiredConnections as any[]).find(
+              (rc) => rc.type === 'DISCORD',
+            );
+            if (discord) {
+              discordId = discord.externalId;
+              discordUsername = discord.externalUsername;
+            }
+          }
+          return {
+            id: participant.id,
+            tournamentId: id,
+            connectCode: participant.connectedAccounts?.slippi?.value ?? '',
+            discordId,
+            discordUsername,
+            gamerTag: participant.gamerTag,
+            prefix: participant.prefix ?? '',
+            pronouns: participant.user?.genderPronoun ?? '',
+            userSlug: participant.user?.slug?.slice(5) ?? '',
+          };
+        }),
+      );
+    }
+
+    expectedTotal = nextData.tournament.participants.pageInfo.total;
+    page += 1;
+    if (page > nextData.tournament.participants.pageInfo.totalPages) {
+      break;
+    }
+  }
+  replaceParticipants(participants);
+
+  const actualTotal = new Set(participants.map((participant) => participant.id))
+    .size;
+  if (actualTotal !== expectedTotal) {
+    throw new ApiError({
+      message: `Participants mismatch. Expected: ${expectedTotal}, actual: ${actualTotal}`,
+      status: 503,
+    });
+  }
+
+  return id;
 }
 
 function coalescePrereq(set: DbSet, setIdToDbSet: Map<number | string, DbSet>) {
@@ -758,107 +764,87 @@ async function refreshEvent(tournamentId: number, eventId: number) {
   const pools: DbPool[] = [];
   const entrants: DbEntrant[] = [];
   const entrantIdToParticipantIds = new Map<number, number[]>();
-  try {
-    const json = await wrappedFetch(
-      `https://api.start.gg/event/${eventId}?expand[]=phase&expand[]=groups&expand[]=entrants`,
-    );
-    json.entities.phase.forEach((phase: any) => {
-      phases.push({
-        id: phase.id,
-        eventId,
-        tournamentId,
-        name: phase.name,
-        phaseOrder: phase.phaseOrder,
-      });
+  const eventJson = await wrappedFetch(
+    `https://api.start.gg/event/${eventId}?expand[]=phase&expand[]=groups&expand[]=entrants`,
+  );
+  eventJson.entities.phase.forEach((phase: any) => {
+    phases.push({
+      id: phase.id,
+      eventId,
+      tournamentId,
+      name: phase.name,
+      phaseOrder: phase.phaseOrder,
     });
-    json.entities.groups.forEach((group: any) => {
-      const tiebreakOrder = Array.isArray(group.tiebreakOrder)
-        ? (group.tiebreakOrder as any[])
-        : [];
-      pools.push({
-        id: group.id,
-        waveId: group.waveId,
-        phaseId: group.phaseId,
-        eventId,
-        tournamentId,
-        name: group.displayIdentifier,
-        bracketType: group.groupTypeId,
-        state: group.state,
-        winnersTargetPhaseId: group.winnersTargetPhaseId,
-        tiebreakMethod1: tiebreakOrder[0] ? tiebreakOrder[0].type : null,
-        tiebreakMethod2: tiebreakOrder[1] ? tiebreakOrder[1].type : null,
-        tiebreakMethod3: tiebreakOrder[2] ? tiebreakOrder[2].type : null,
-      });
+  });
+  eventJson.entities.groups.forEach((group: any) => {
+    const tiebreakOrder = Array.isArray(group.tiebreakOrder)
+      ? (group.tiebreakOrder as any[])
+      : [];
+    pools.push({
+      id: group.id,
+      waveId: group.waveId,
+      phaseId: group.phaseId,
+      eventId,
+      tournamentId,
+      name: group.displayIdentifier,
+      bracketType: group.groupTypeId,
+      state: group.state,
+      winnersTargetPhaseId: group.winnersTargetPhaseId,
+      tiebreakMethod1: tiebreakOrder[0] ? tiebreakOrder[0].type : null,
+      tiebreakMethod2: tiebreakOrder[1] ? tiebreakOrder[1].type : null,
+      tiebreakMethod3: tiebreakOrder[2] ? tiebreakOrder[2].type : null,
     });
-    if (Array.isArray(json.entities.entrants)) {
-      json.entities.entrants.forEach((entrant: any) => {
-        entrants.push({
-          id: entrant.id,
-          tournamentId,
-          eventId: entrant.eventId,
-          name: entrant.name,
-        });
-        entrantIdToParticipantIds.set(entrant.id, entrant.participantIds);
+  });
+  if (Array.isArray(eventJson.entities.entrants)) {
+    eventJson.entities.entrants.forEach((entrant: any) => {
+      entrants.push({
+        id: entrant.id,
+        tournamentId,
+        eventId: entrant.eventId,
+        name: entrant.name,
       });
-    }
-    updateSyncResultWithSuccess();
-  } catch (e: any) {
-    if (isRetryableApiError(e)) {
-      updateSyncResultWithError(e);
-    } else {
-      updateWithFatalError(e);
-    }
-    throw e;
+      entrantIdToParticipantIds.set(entrant.id, entrant.participantIds);
+    });
   }
 
-  try {
-    const sets: DbSet[] = [];
-    const games: DbSetGame[] = [];
-    const seeds = (
-      await Promise.all([
-        getSeeds(
-          phases.map((phase) => phase.id),
-          eventId,
-          tournamentId,
-        ),
-        ...pools
-          .map((pool) => pool.id)
-          .map(async (id) => {
-            const json = await wrappedFetch(
-              `https://api.start.gg/phase_group/${id}?expand[]=sets&bustCache=true`,
+  const sets: DbSet[] = [];
+  const games: DbSetGame[] = [];
+  const seeds = (
+    await Promise.all([
+      getSeeds(
+        phases.map((phase) => phase.id),
+        eventId,
+        tournamentId,
+      ),
+      ...pools
+        .map((pool) => pool.id)
+        .map(async (id) => {
+          const poolJson = await wrappedFetch(
+            `https://api.start.gg/phase_group/${id}?expand[]=sets&bustCache=true`,
+          );
+          if (poolJson.entities.sets instanceof Array) {
+            const setsAndGames = dbSetsFromApiSets(
+              poolJson.entities.sets,
+              tournamentId,
+              poolJson.entities.groups.groupTypeId,
             );
-            if (json.entities.sets instanceof Array) {
-              const setsAndGames = dbSetsFromApiSets(
-                json.entities.sets,
-                tournamentId,
-                json.entities.groups.groupTypeId,
-              );
-              sets.push(...setsAndGames.sets);
-              games.push(...setsAndGames.games);
-            }
-          }),
-      ])
-    )[0];
-    updateSyncResultWithSuccess();
-    updateEvent(
-      tournamentId,
-      eventId,
-      phases,
-      pools,
-      entrants,
-      entrantIdToParticipantIds,
-      seeds,
-      sets,
-      games,
-    );
-  } catch (e: any) {
-    if (isRetryableApiError(e)) {
-      updateSyncResultWithError(e);
-    } else {
-      updateWithFatalError(e);
-    }
-    throw e;
-  }
+            sets.push(...setsAndGames.sets);
+            games.push(...setsAndGames.games);
+          }
+        }),
+    ])
+  )[0];
+  updateEvent(
+    tournamentId,
+    eventId,
+    phases,
+    pools,
+    entrants,
+    entrantIdToParticipantIds,
+    seeds,
+    sets,
+    games,
+  );
 }
 
 const UPDATE_SET_INNER = `
@@ -1065,6 +1051,7 @@ function tryNextTransaction(id: number, slug: string) {
         getLoadedEventIds().map((eventId) => refreshEvent(id, eventId)),
       );
       emitter.emit('transaction');
+      updateSyncResultWithSuccess();
 
       let transaction = getNextTransaction();
       if (transaction) {

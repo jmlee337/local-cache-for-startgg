@@ -233,6 +233,7 @@ export type DbParticipant = {
 };
 
 export type DbParticipantToEntrant = {
+  tournamentId: number;
   participantId: number;
   entrantId: number;
 };

@@ -227,6 +227,7 @@ export default function setupIPCs(
   ipcMain.removeHandler('loadEvent');
   ipcMain.handle('loadEvent', async (event, eventId: number) => {
     const tournamentId = getTournamentId();
+    stopRefreshingTournament();
     await loadEvent(eventId, tournamentId);
     await waitAndTry(tournamentId);
     updateClients();
