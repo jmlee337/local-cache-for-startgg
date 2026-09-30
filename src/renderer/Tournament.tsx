@@ -1150,10 +1150,6 @@ export default function Tournament() {
               `Failed to get tournaments from start.gg: ${apiError.status}, ${apiError.message}`,
             );
           }
-        } else if (apiError.fetch) {
-          setAdminedTournamentsError(
-            '***You may be offline*** - failed to get tournaments from start.gg.',
-          );
         } else {
           setAdminedTournamentsError(
             `Failed to get tournaments from start.gg: ${apiError.message}`,

@@ -73,9 +73,13 @@ async function wrappedFetch(
     response = await fetch(input, init);
     json = await response.json();
   } catch (e: any) {
+    let message = '***You may not be connected to the internet***';
+    if (e instanceof Error) {
+      message = `${message}: ${e.message}`;
+    }
     throw new ApiError({
       cause: e,
-      message: '***You may not be connected to the internet***',
+      message,
       fetch: true,
     });
   }
