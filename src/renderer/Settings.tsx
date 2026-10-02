@@ -94,6 +94,25 @@ export default function Settings({
           </Typography>
         </Stack>
         <DialogContent style={{ paddingTop: '8px' }}>
+          {appVersion && versionLatest && lt(appVersion, versionLatest) && (
+            <Alert
+              severity="warning"
+              style={{ marginBottom: '8px' }}
+              action={
+                <Button
+                  endIcon={<CloudDownload />}
+                  variant="contained"
+                  onClick={() => {
+                    window.electron.update();
+                  }}
+                >
+                  Quit and download
+                </Button>
+              }
+            >
+              Update available! v{versionLatest}
+            </Alert>
+          )}
           <DialogContentText>
             Get your start.gg API key by clicking “Create new token” in the
             <br />
@@ -150,25 +169,6 @@ export default function Settings({
               />
             }
           />
-          {appVersion && versionLatest && lt(appVersion, versionLatest) && (
-            <Alert
-              severity="warning"
-              style={{ marginTop: '8px' }}
-              action={
-                <Button
-                  endIcon={<CloudDownload />}
-                  variant="contained"
-                  onClick={() => {
-                    window.electron.update();
-                  }}
-                >
-                  Quit and download
-                </Button>
-              }
-            >
-              Update available! v{versionLatest}
-            </Alert>
-          )}
         </DialogContent>
         <DialogActions>
           <Button
