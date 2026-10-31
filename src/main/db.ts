@@ -646,6 +646,35 @@ function getRendererStream(id: number): RendererStream | null {
   return maybeStream;
 }
 
+function getLosers(dbSet: DbSet): {
+  entrant1Losers: boolean;
+  entrant2Losers: boolean;
+} {
+  if (
+    dbSet.entrant1PrereqType !== 'set' ||
+    dbSet.entrant2PrereqType !== 'set' ||
+    !dbSet.fullRoundText.startsWith('Grand Final')
+  ) {
+    return {
+      entrant1Losers: false,
+      entrant2Losers: false,
+    };
+  }
+
+  if (dbSet.entrant1PrereqId === dbSet.entrant2PrereqId) {
+    // Grand Finals Reset
+    return {
+      entrant1Losers: true,
+      entrant2Losers: true,
+    };
+  }
+
+  return {
+    entrant1Losers: false,
+    entrant2Losers: true,
+  };
+}
+
 const shortRoundTextRegex = /([A-Z]|[0-9])/g;
 function dbSetToRendererSet(
   dbSet: DbSet,
@@ -676,6 +705,7 @@ function dbSetToRendererSet(
       entrant2 = getRendererEntrant(dbSet.entrant2Id);
     }
   }
+  const { entrant1Losers, entrant2Losers } = getLosers(dbSet);
   return {
     id: dbSet.id,
     setId: dbSet.setId,
@@ -694,11 +724,13 @@ function dbSetToRendererSet(
     entrant1Participants: entrant1?.participants ?? [],
     entrant1PrereqStr: dbSet.entrant1PrereqStr,
     entrant1Score: dbSet.entrant1Score,
+    entrant1Losers,
     entrant2Id: dbSet.entrant2Id,
     entrant2Name: entrant2?.name ?? null,
     entrant2Participants: entrant2?.participants ?? [],
     entrant2PrereqStr: dbSet.entrant2PrereqStr,
     entrant2Score: dbSet.entrant2Score,
+    entrant2Losers,
     games: dbSetGames.map((dbGame) => ({
       entrant1Score: dbGame.entrant1Score,
       entrant2Score: dbGame.entrant2Score,

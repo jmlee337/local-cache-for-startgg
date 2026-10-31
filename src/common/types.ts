@@ -74,11 +74,13 @@ export type RendererSet = {
   entrant1Participants: RendererParticipant[];
   entrant1PrereqStr: string | null;
   entrant1Score: number | null;
+  entrant1Losers: boolean;
   entrant2Id: number | null;
   entrant2Name: string | null;
   entrant2Participants: RendererParticipant[];
   entrant2PrereqStr: string | null;
   entrant2Score: number | null;
+  entrant2Losers: boolean;
   games: RendererGame[];
   winnerId: number | null;
   updatedAt: number;
