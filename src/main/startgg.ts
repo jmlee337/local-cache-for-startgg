@@ -98,6 +98,7 @@ async function wrappedFetch(
   return json;
 }
 
+/*
 async function unauthenticatedFetchGql(query: string, variables: any) {
   const json = await wrappedFetch('https://www.start.gg/api/-/gql', {
     method: 'POST',
@@ -116,6 +117,7 @@ async function unauthenticatedFetchGql(query: string, variables: any) {
 
   return json.data;
 }
+*/
 
 async function authenticatedFetchGql(
   key: string,
@@ -353,7 +355,8 @@ export async function getApiTournament(inSlug: string) {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     // eslint-disable-next-line no-await-in-loop
-    const nextData = await unauthenticatedFetchGql(
+    const nextData = await authenticatedFetchGql(
+      apiKey,
       TOURNAMENT_PARTICIPANTS_QUERY,
       {
         page,
@@ -724,13 +727,17 @@ async function getSeeds(
   eventId: number,
   tournamentId: number,
 ): Promise<DbSeed[]> {
+  if (!apiKey) {
+    throw new Error('Please set API key.');
+  }
+
   const seeds: DbSeed[] = [];
   for (const phaseId of phaseIds) {
     let page = 1;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // eslint-disable-next-line no-await-in-loop
-      const nextData = await unauthenticatedFetchGql(PHASE_SEEDS_QUERY, {
+      const nextData = await authenticatedFetchGql(apiKey, PHASE_SEEDS_QUERY, {
         phaseId,
         page,
       });
