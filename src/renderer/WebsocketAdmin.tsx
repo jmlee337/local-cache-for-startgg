@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ContentCopy } from '@mui/icons-material';
-import { Button, Tooltip, Stack, TextField } from '@mui/material';
+import {
+  Button,
+  Tooltip,
+  Stack,
+  TextField,
+  DialogContentText,
+} from '@mui/material';
 import { WebsocketStatus } from '../common/types';
 import WebsocketAddresses from './WebsocketAddresses';
 
@@ -42,6 +48,9 @@ export default function WebsocketAdmin({
 
   return (
     <>
+      <DialogContentText marginBottom="8px">
+        Admins can report sets in any pool
+      </DialogContentText>
       <WebsocketAddresses websocketStatus={websocketStatus} path="admin" />
       <Stack alignItems="center" direction="row" gap="8px">
         <TextField

@@ -258,6 +258,11 @@ export default function WebsocketReporters({
 
   return (
     <>
+      {waves.length === 0 && (
+        <DialogContentText marginBottom="8px">
+          Load at least one event to set up pool captains
+        </DialogContentText>
+      )}
       {waves.length > 0 && (
         <>
           <Stack
@@ -273,7 +278,7 @@ export default function WebsocketReporters({
               }}
             >
               {createOpen ? <KeyboardArrowDown /> : <KeyboardArrowRight />}
-              <ListItemText>New Reporter</ListItemText>
+              <ListItemText>New Pool Captain</ListItemText>
             </ListItemButton>
           </Stack>
           <Collapse in={createOpen}>

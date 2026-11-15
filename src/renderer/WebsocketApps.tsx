@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
 import { ContentCopy } from '@mui/icons-material';
-import { Button, Tooltip, Stack, TextField } from '@mui/material';
+import {
+  Button,
+  Tooltip,
+  Stack,
+  TextField,
+  DialogContentText,
+} from '@mui/material';
 import { WebsocketStatus } from '../common/types';
 import WebsocketAddresses from './WebsocketAddresses';
 
@@ -42,6 +48,9 @@ export default function WebsocketApps({
 
   return (
     <>
+      <DialogContentText marginBottom="8px">
+        For Replay Reporter, Auto Stream, etc.
+      </DialogContentText>
       <WebsocketAddresses websocketStatus={websocketStatus} path="" hide />
       <Stack alignItems="center" direction="row" gap="8px">
         <TextField

@@ -3,6 +3,7 @@ import {
   Alert,
   Dialog,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   FormControlLabel,
   IconButton,
@@ -138,7 +139,7 @@ export default function Websocket({
               aria-controls="tabpanel-3"
             />
             <Tab
-              label="Reporters"
+              label="Pool Captains"
               value={2}
               id="tab-2"
               aria-controls="tabpanel-2"
@@ -192,6 +193,7 @@ export default function Websocket({
             id="tabpanel-4"
             aria-labelledby="tab-4"
           >
+            <DialogContentText marginBottom="8px">View-only</DialogContentText>
             <WebsocketAddresses websocketStatus={websocketStatus} path="" />
           </div>
           {websocketEnabled &&
