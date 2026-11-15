@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
-  Button,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -12,11 +11,16 @@ import {
   ListItemText,
   Stack,
   Switch,
-  TextField,
+  Tab,
+  Tabs,
   Tooltip,
 } from '@mui/material';
-import { ContentCopy, LeakAdd, LeakRemove } from '@mui/icons-material';
-import { Protocol, WebsocketStatus } from '../common/types';
+import { VerifiedUser } from '@mui/icons-material';
+import { Protocol, RendererTournament, WebsocketStatus } from '../common/types';
+import WebsocketReporters from './WebsocketReporters';
+import WebsocketApps from './WebsocketApps';
+import WebsocketAdmin from './WebsocketAdmin';
+import WebsocketAddresses from './WebsocketAddresses';
 
 function protocolToDesc(protocol: Protocol) {
   switch (protocol) {
@@ -32,18 +36,16 @@ function protocolToDesc(protocol: Protocol) {
 }
 
 export default function Websocket({
+  tournament,
   websocketStatus,
 }: {
+  tournament: RendererTournament | undefined;
   websocketStatus: WebsocketStatus;
 }) {
   const [open, setOpen] = useState(false);
   const [websocketEnabled, setWebsocketEnabled] = useState(false);
   const [websocketPassword, setWebsocketPassword] = useState('');
-  const [passwordCopied, setPasswordCopied] = useState(false);
-  const [generated, setGenerated] = useState(false);
-  const [hostCopied, setHostCopied] = useState(false);
-  const [v4Copied, setV4Copied] = useState(false);
-  const [v6Copied, setV6Copied] = useState(false);
+  const [tabId, setTabId] = useState(1);
 
   useEffect(() => {
     const inner = async () => {
@@ -56,11 +58,11 @@ export default function Websocket({
   }, []);
 
   const websocketTitle = useMemo(() => {
-    let title = 'Websocket disabled';
+    let title = 'Remote access disabled';
     if (websocketStatus.err) {
-      title = 'Websocket error!';
+      title = 'Remote access error!';
     } else if (websocketStatus.port) {
-      title = 'Websocket running';
+      title = 'Remote access enabled';
     }
     return title;
   }, [websocketStatus]);
@@ -69,44 +71,17 @@ export default function Websocket({
     return (
       <Tooltip title={websocketTitle}>
         <IconButton
-          color={websocketStatus.err ? 'error' : 'primary'}
+          color={websocketStatus.err ? 'error' : 'default'}
           onClick={() => {
             setOpen(true);
           }}
         >
-          {websocketStatus.err || websocketStatus.port ? (
-            <LeakAdd />
-          ) : (
-            <LeakRemove />
-          )}
+          <VerifiedUser />
         </IconButton>
       </Tooltip>
     );
   }, [websocketStatus, websocketTitle]);
 
-  const generateButton = useMemo(() => {
-    const buttonInner = (
-      <Button
-        disabled={websocketStatus.port > 0}
-        onClick={async () => {
-          setWebsocketPassword(await window.electron.resetWebsocketPassword());
-          setGenerated(true);
-          setTimeout(() => setGenerated(false), 5000);
-        }}
-        variant="contained"
-      >
-        {generated ? 'New!' : 'New'}
-      </Button>
-    );
-    if (websocketStatus.port) {
-      return (
-        <Tooltip title="Must stop websocket server to generate new password">
-          <div>{buttonInner}</div>
-        </Tooltip>
-      );
-    }
-    return buttonInner;
-  }, [generated, websocketStatus.port]);
   return (
     <>
       {websocketButton}
@@ -139,99 +114,86 @@ export default function Websocket({
             }
           />
         </Stack>
-        <DialogContent style={{ paddingTop: '8px' }}>
-          <Stack alignItems="center" direction="row" gap="8px">
-            <TextField
-              label="Admin Password"
-              size="small"
-              style={{ flexGrow: 1 }}
-              type="password"
-              value={websocketPassword}
-              variant="standard"
+        <DialogContent style={{ paddingTop: 0 }}>
+          {websocketStatus.err && (
+            <Alert severity="error" style={{ marginTop: '8px' }}>
+              {websocketStatus.err}
+            </Alert>
+          )}
+          <Tabs
+            value={tabId}
+            variant="fullWidth"
+            style={{ marginBottom: '8px' }}
+            onChange={(event, value: any) => {
+              if (Number.isInteger(value)) {
+                setTabId(value);
+              }
+            }}
+          >
+            <Tab label="Apps" value={1} id="tab-1" aria-controls="tabpanel-1" />
+            <Tab
+              label="Admin"
+              value={3}
+              id="tab-3"
+              aria-controls="tabpanel-3"
             />
-            {generateButton}
-            <Button
-              disabled={passwordCopied}
-              endIcon={passwordCopied ? undefined : <ContentCopy />}
-              onClick={async () => {
-                await window.electron.copy(websocketPassword);
-                setPasswordCopied(true);
-                setTimeout(() => setPasswordCopied(false), 5000);
-              }}
-              variant="contained"
-            >
-              {passwordCopied ? 'Copied!' : 'Copy'}
-            </Button>
-          </Stack>
-          {websocketStatus.host && (
-            <Stack alignItems="center" direction="row" gap="8px">
-              <TextField
-                label="Hostname"
-                size="small"
-                style={{ flexGrow: 1 }}
-                value={websocketStatus.host}
-                variant="standard"
-              />
-              <Button
-                disabled={hostCopied}
-                endIcon={hostCopied ? undefined : <ContentCopy />}
-                onClick={async () => {
-                  await window.electron.copy(websocketStatus.host);
-                  setHostCopied(true);
-                  setTimeout(() => setHostCopied(false), 5000);
-                }}
-                variant="contained"
-              >
-                {hostCopied ? 'Copied!' : 'Copy'}
-              </Button>
-            </Stack>
-          )}
-          {websocketStatus.v6Address && (
-            <Stack alignItems="center" direction="row" gap="8px">
-              <TextField
-                label="Websocket Address (IPv6)"
-                size="small"
-                style={{ flexGrow: 1 }}
-                value={websocketStatus.v6Address}
-                variant="standard"
-              />
-              <Button
-                disabled={v6Copied}
-                endIcon={v6Copied ? undefined : <ContentCopy />}
-                onClick={async () => {
-                  await window.electron.copy(websocketStatus.v6Address);
-                  setV6Copied(true);
-                  setTimeout(() => setV6Copied(false), 5000);
-                }}
-                variant="contained"
-              >
-                {v6Copied ? 'Copied!' : 'Copy'}
-              </Button>
-            </Stack>
-          )}
-          {websocketStatus.v4Address && (
-            <Stack alignItems="center" direction="row" gap="8px">
-              <TextField
-                label="Websocket Address (IPv4)"
-                size="small"
-                style={{ flexGrow: 1 }}
-                value={websocketStatus.v4Address}
-                variant="standard"
-              />
-              <Button
-                disabled={v4Copied}
-                endIcon={v4Copied ? undefined : <ContentCopy />}
-                onClick={async () => {
-                  await window.electron.copy(websocketStatus.v4Address);
-                  setV4Copied(true);
-                  setTimeout(() => setV4Copied(false), 5000);
-                }}
-                variant="contained"
-              >
-                {v4Copied ? 'Copied!' : 'Copy'}
-              </Button>
-            </Stack>
-          )}
+            <Tab
+              label="Reporters"
+              value={2}
+              id="tab-2"
+              aria-controls="tabpanel-2"
+            />
+            <Tab
+              label="Public"
+              value={4}
+              id="tab-4"
+              aria-controls="tabpanel-4"
+            />
+          </Tabs>
+          <div
+            role="tabpanel"
+            hidden={tabId !== 1}
+            id="tabpanel-1"
+            aria-labelledby="tab-1"
+          >
+            <WebsocketApps
+              websocketPassword={websocketPassword}
+              setWebsocketPassword={setWebsocketPassword}
+              websocketStatus={websocketStatus}
+            />
+          </div>
+          <div
+            role="tabpanel"
+            hidden={tabId !== 3}
+            id="tabpanel-3"
+            aria-labelledby="tab-3"
+          >
+            <WebsocketAdmin
+              websocketPassword={websocketPassword}
+              setWebsocketPassword={setWebsocketPassword}
+              websocketStatus={websocketStatus}
+            />
+          </div>
+          <div
+            role="tabpanel"
+            hidden={tabId !== 2}
+            id="tabpanel-2"
+            aria-labelledby="tab-2"
+          >
+            <WebsocketReporters
+              events={tournament?.events ?? []}
+              reporters={tournament?.reporters ?? []}
+              websocketStatus={websocketStatus}
+            />
+          </div>
+          <div
+            role="tabpanel"
+            hidden={tabId !== 4}
+            id="tabpanel-4"
+            aria-labelledby="tab-4"
+          >
+            <WebsocketAddresses websocketStatus={websocketStatus} path="" />
+          </div>
           {websocketEnabled &&
             websocketStatus.port !== 0 &&
             websocketStatus.connections.length > 0 && (
@@ -252,11 +214,6 @@ export default function Websocket({
                 ))}
               </List>
             )}
-          {websocketStatus.err && (
-            <Alert severity="error" style={{ marginTop: '8px' }}>
-              {websocketStatus.err}
-            </Alert>
-          )}
         </DialogContent>
       </Dialog>
     </>

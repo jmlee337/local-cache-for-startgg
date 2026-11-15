@@ -85,7 +85,6 @@ import FatalError from './FatalError';
 import UpgradeDialog from './UpgradeDialog';
 import Discords from './Discords';
 import ConnectCodes from './ConnectCodes';
-import Reporters from './Reporters';
 
 const LIST_ITEM_HEIGHT = '34px';
 const SET_FIXED_WIDTH = '162px';
@@ -1613,18 +1612,14 @@ export default function Tournament() {
                   tournamentId={tournament?.id}
                   tournamentSlug={tournament?.slug}
                 />
-                <Websocket websocketStatus={websocketStatus} />
               </Stack>
               <Stack direction="row" alignItems="center">
                 <ConnectCodes participants={tournament?.participants ?? []} />
                 <Discords participants={tournament?.participants ?? []} />
-                {tournament && (
-                  <Reporters
-                    events={tournament.events}
-                    reporters={tournament.reporters}
-                    websocketStatus={websocketStatus}
-                  />
-                )}
+                <Websocket
+                  tournament={tournament}
+                  websocketStatus={websocketStatus}
+                />
                 {unloadedOpen ? (
                   <Tooltip title="Hide unloaded events">
                     <IconButton
