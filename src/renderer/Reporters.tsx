@@ -405,13 +405,17 @@ export default function Reporters({
                       variant="standard"
                     />
                     <Button
-                      disabled={qrAddress === hostAddress}
                       onClick={() => {
-                        setQrAddress(hostAddress);
+                        if (qrAddress === hostAddress) {
+                          setQrAddress('');
+                        } else {
+                          setQrAddress(hostAddress);
+                        }
                       }}
+                      style={{ width: '74px' }}
                       variant="contained"
                     >
-                      Show
+                      {qrAddress === hostAddress ? 'Hide' : 'Show'}
                     </Button>
                     <Button
                       disabled={hostCopied}
@@ -437,13 +441,17 @@ export default function Reporters({
                       variant="standard"
                     />
                     <Button
-                      disabled={qrAddress === v6Address}
                       onClick={() => {
-                        setQrAddress(v6Address);
+                        if (qrAddress === v6Address) {
+                          setQrAddress('');
+                        } else {
+                          setQrAddress(v6Address);
+                        }
                       }}
+                      style={{ width: '74px' }}
                       variant="contained"
                     >
-                      Show
+                      {qrAddress === v6Address ? 'Hide' : 'Show'}
                     </Button>
                     <Button
                       disabled={v6Copied}
@@ -469,13 +477,17 @@ export default function Reporters({
                       variant="standard"
                     />
                     <Button
-                      disabled={qrAddress === v4Address}
                       onClick={() => {
-                        setQrAddress(v4Address);
+                        if (qrAddress === v4Address) {
+                          setQrAddress('');
+                        } else {
+                          setQrAddress(v4Address);
+                        }
                       }}
+                      style={{ width: '74px' }}
                       variant="contained"
                     >
-                      Show
+                      {qrAddress === v4Address ? 'Hide' : 'Show'}
                     </Button>
                     <Button
                       disabled={v4Copied}
